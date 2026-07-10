@@ -2,14 +2,16 @@
 // Compact broker/account selector anchored to the journal dashboard broker button.
 
 import { useCallback, useMemo, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Lock, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSubscription } from '@/hooks/useSubscription';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { statusBadge, connectionNeedsAttention } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
+import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
@@ -380,6 +382,12 @@ function PopoverBody({
   onAddConnection?: () => void;
   onManage?: () => void;
 }) {
+  // FREE-plan users may not connect a broker at all; an existing connection
+  // (from before the lockdown) stays visible but locked — reconnect actions
+  // open the upgrade dialog instead of running.
+  const { isFreeJournal } = useSubscription();
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
   const {
     connections: activeConnections,
     isLoading: loadingActive,
@@ -415,6 +423,16 @@ function PopoverBody({
   const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
   // Groups default collapsed — tames the long prop-firm account list.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Gate: FREE-plan users see the same "Reconnect" affordances, but clicking
+  // opens the upgrade dialog instead of the real reconnect flow.
+  const requestReconnect = useCallback((conn: BrokerConnection) => {
+    if (isFreeJournal) {
+      setShowUpgrade(true);
+      return;
+    }
+    setReconnectFor(conn);
+  }, [isFreeJournal]);
 
   const groups = useMemo<PortfolioGroup[]>(
     () =>
@@ -499,11 +517,24 @@ function PopoverBody({
 
   return (
     <div className="flex flex-col gap-2.5" role="listbox" aria-multiselectable="true">
-      <div className="px-1">
-        <h3 className="text-sm font-semibold text-[#F4F4F4]">Broker Connections</h3>
-        <p className="mt-0.5 text-[10px] font-light text-[#A0A0A0]">
-          Choose which connected portfolios power this dashboard.
-        </p>
+      <div className="flex items-start justify-between gap-2 px-1">
+        <div>
+          <h3 className="text-sm font-semibold text-[#F4F4F4]">Broker Connections</h3>
+          <p className="mt-0.5 text-[10px] font-light text-[#A0A0A0]">
+            Choose which connected portfolios power this dashboard.
+          </p>
+        </div>
+        {isFreeJournal && allConnections.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowUpgrade(true)}
+            className="flex shrink-0 items-center gap-1 rounded-[8px] border border-[#C9A646]/40 bg-[#C9A646]/10 px-2 py-1 text-[9px] font-medium text-[#E8C766] transition-colors hover:border-[#C9A646]/60 hover:bg-[#C9A646]/15"
+            aria-label="Broker sync locked — upgrade to resume"
+          >
+            <Lock className="h-2.5 w-2.5" />
+            Locked
+          </button>
+        )}
       </div>
 
       {showLoading ? (
@@ -562,7 +593,7 @@ function PopoverBody({
                       checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
                       onToggle={togglePortfolioSelection}
                       connection={conn}
-                      onReconnect={setReconnectFor}
+                      onReconnect={requestReconnect}
                     />
                   );
                 }
@@ -623,7 +654,7 @@ function PopoverBody({
                           type="button"
                           onClick={e => {
                             e.stopPropagation();
-                            setReconnectFor(groupConn);
+                            requestReconnect(groupConn);
                           }}
                           className="flex h-5 shrink-0 items-center gap-1 rounded border border-[#C9A646]/25 px-1.5 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
                           aria-label={`Reconnect ${group.label}`}
@@ -656,7 +687,7 @@ function PopoverBody({
                         onToggle={togglePortfolioSelection}
                         indent
                         connection={connectionForPortfolio(p)}
-                        onReconnect={setReconnectFor}
+                        onReconnect={requestReconnect}
                       />
                     ))}
                   </div>
@@ -707,6 +738,8 @@ function PopoverBody({
           }}
         />
       )}
+
+      <UpgradeLimitDialog open={showUpgrade} onOpenChange={setShowUpgrade} reason="broker-free-locked" />
     </div>
   );
 }

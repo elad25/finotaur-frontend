@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { FinotaurTrade } from '@/utils/importUtils';
 import { buildCSVIdempotencyKey } from '@/lib/trades/idempotencyKey';
 import { getAssetMultiplier } from '@/utils/tradeCalculations';
+import { useSubscription, FREE_TRADE_LIMIT } from '@/hooks/useSubscription';
 
 // ================================================
 // TYPES
@@ -22,6 +23,8 @@ export interface ImportTradesResult {
   imported: number;
   duplicates: number;
   errors: string[];
+  /** Present when the Free plan's lifetime trade cap blocked or partially blocked this import. */
+  limitMessage?: string;
 }
 
 export interface UseImportTradesReturn {
@@ -45,8 +48,9 @@ export function useImportTrades(): UseImportTradesReturn {
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  
+
   const queryClient = useQueryClient();
+  const { isFreeJournal, limits: subscriptionLimits } = useSubscription();
 
   const importTrades = useCallback(async (trades: FinotaurTrade[]): Promise<ImportTradesResult> => {
     setIsImporting(true);
@@ -106,10 +110,35 @@ export function useImportTrades(): UseImportTradesReturn {
       }
 
       // ================================================
+      // STEP 1.5: Enforce FREE plan lifetime trade cap
+      // ================================================
+
+      let tradesToImport = newTrades;
+      let cappedByFreeLimit = false;
+
+      if (isFreeJournal) {
+        const currentTradeCount = subscriptionLimits?.trade_count ?? 0;
+        const remaining = Math.max(0, FREE_TRADE_LIMIT - currentTradeCount);
+
+        if (remaining === 0) {
+          const message = `You've reached the Free plan's ${FREE_TRADE_LIMIT}-trade limit. Upgrade to import more trades.`;
+          result.errors.push(message);
+          result.limitMessage = message;
+          setError(message);
+          return result;
+        }
+
+        if (remaining < newTrades.length) {
+          tradesToImport = newTrades.slice(0, remaining);
+          cappedByFreeLimit = true;
+        }
+      }
+
+      // ================================================
       // STEP 2: Prepare trades for insertion
       // ================================================
-      
-      const tradesToInsert = await Promise.all(newTrades.map(async (trade) => ({
+
+      const tradesToInsert = await Promise.all(tradesToImport.map(async (trade) => ({
         user_id: trade.user_id,
         symbol: trade.symbol,
         side: trade.side,
@@ -176,16 +205,21 @@ export function useImportTrades(): UseImportTradesReturn {
         setProgress(Math.round(((i + 1) / totalBatches) * 100));
       }
 
+      if (cappedByFreeLimit) {
+        result.limitMessage = `Imported ${result.imported} of ${newTrades.length} trades — your Free plan includes ${FREE_TRADE_LIMIT} trades. Upgrade to import them all.`;
+      }
+
       // ================================================
       // STEP 4: Invalidate queries to refresh UI
       // ================================================
-      
+
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       await queryClient.invalidateQueries({ queryKey: ['analytics'] });
-      
+      await queryClient.invalidateQueries({ queryKey: ['subscription'] });
+
       result.success = result.imported > 0;
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       result.errors.push(errorMessage);
@@ -196,7 +230,7 @@ export function useImportTrades(): UseImportTradesReturn {
     }
 
     return result;
-  }, [queryClient]);
+  }, [queryClient, isFreeJournal, subscriptionLimits]);
 
   return {
     importTrades,

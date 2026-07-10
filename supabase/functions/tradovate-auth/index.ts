@@ -665,6 +665,26 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Missing required fields: userId, environment, username, password' }, 400);
     }
 
+    // Free-tier lockdown: FREE-plan users may not connect a broker. Checked
+    // before the real Tradovate login attempt below to avoid wasting that
+    // call. Reconnect (stored-credential re-login, mode='reconnect') and
+    // refresh (mode='refresh') are existing-connection paths and are NOT
+    // gated — this only covers new/re-entered-credential connects.
+    // Fail-open on a lookup error — a transient profiles read hiccup must
+    // not lock out paying users.
+    {
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('account_type')
+        .eq('id', userId)
+        .maybeSingle();
+      if (profileError) {
+        console.error('[tradovate-auth] profile lookup failed:', profileError.message);
+      } else if (profile?.account_type === 'free') {
+        return json({ error: 'upgrade_required', message: 'Broker connections require a paid plan.' }, 403);
+      }
+    }
+
     const purpose: 'journal' | 'copier' = body.purpose === 'copier' ? 'copier' : 'journal';
     if (body.purpose !== undefined && body.purpose !== 'journal' && body.purpose !== 'copier') {
       return json({ error: `Invalid purpose '${body.purpose}': must be 'journal' or 'copier'`, code: 'bad_request' }, 400);

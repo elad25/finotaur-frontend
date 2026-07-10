@@ -19,6 +19,7 @@ import { Suspense, memo, useEffect } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { JournalRoute } from "@/components/routes/JournalRoute";
+import { JournalFeatureGate } from "@/components/routes/JournalFeatureGate";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -172,7 +173,7 @@ const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
-const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
+const IntroOffer = lazy(() => import("@/components/onboarding/IntroOffer"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
 const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
@@ -465,7 +466,7 @@ function AppContent() {
       <CookieConsentBanner />
       {FEATURES.AFFILIATE_TRACKING && <Suspense fallback={null}><AffiliateTracker /></Suspense>}
       <Suspense fallback={null}>
-        <WelcomeOffer />
+        <IntroOffer />
       </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
@@ -779,8 +780,8 @@ function AppContent() {
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* journal/mentor → floor/mentor (legacy redirect) */}
 <Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
-<Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
-<Route path="journal/revenge-radar" element={<JournalRoute><RevengeRadar /></JournalRoute>} />
+<Route path="journal/trade-compare" element={<JournalRoute><JournalFeatureGate feature="shadow"><TradeCompare /></JournalFeatureGate></JournalRoute>} />
+<Route path="journal/revenge-radar" element={<JournalRoute><JournalFeatureGate feature="revenge-radar"><RevengeRadar /></JournalFeatureGate></JournalRoute>} />
 <Route path="journal/refer" element={<JournalRoute><ReferFriendPage /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
@@ -843,13 +844,13 @@ function AppContent() {
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
           {/* TRADE COPIER — four-tab page (Connections / Trade Copier / Manage Risk / FINOTAUR Agent) */}
-          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Prop Risk stays beta-only while the copier itself is GA */}
-          <Route path="copy-trade/prop-risk"    element={<BetaRoute><PropRiskPage /></BetaRoute>} />
-          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/prop-risk"    element={<BetaRoute><JournalFeatureGate feature="risk-management"><PropRiskPage /></JournalFeatureGate></BetaRoute>} />
+          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="risk-management"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           <Route path="copy-trade/agent"        element={<Navigate to="/app/copy-trade/install" replace />} />
-          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Legacy aliases — redirect to overview */}
           <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies"   element={<Navigate to="/app/copy-trade/overview" replace />} />

@@ -35,7 +35,7 @@ const plans: Plan[] = [
     features: [
       'Automatic broker sync — leading brokers supported',
       '1 broker connection',
-      '15 trades to uncover your first leak',
+      '10 trades to uncover your first leak',
       'Trade journal (manual + auto-import)',
       'Core performance stats',
       'Trading calendar',
@@ -181,10 +181,10 @@ export default function JournalPricingPage() {
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                  Start free — 15 trades
+                  Start free — 10 trades
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  If Finotaur doesn't show a pattern that's hurting you within 15 trades, don't upgrade.
+                  If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
                 </p>
               </div>
             </div>

@@ -54,3 +54,34 @@ export function isMarketsResearchPath(pathname: string): boolean {
   if (MARKETS_ALLMARKETS_PAGES.some((pg) => p === pg || p.startsWith(pg + '/'))) return true;
   return false;
 }
+
+// =====================================================
+// Search-surface leak fix: a blocked (non-beta) user must not even SEE
+// Markets-locked assets (ETF/crypto/fx/futures/bond) in search suggestions —
+// not just be blocked from navigating to them. The route gate in
+// tickerRouting.ts (routeForSuggest) is the second line of defense for a
+// user who somehow still ends up with a locked item; this filter is the
+// first line, applied before results ever render.
+// =====================================================
+
+/** Asset types that belong to the beta-gated Markets area. Keep in sync with
+ * the `marketsLockedAsset` set in tickerRouting.ts. */
+export const MARKETS_LOCKED_ASSET_TYPES = ['etf', 'crypto', 'fx', 'futures', 'bond'] as const;
+
+/** True when the given assetType is one of the Markets-locked asset types. */
+export function isMarketsLockedAssetType(assetType: string | undefined): boolean {
+  return !!assetType && (MARKETS_LOCKED_ASSET_TYPES as readonly string[]).includes(assetType);
+}
+
+/**
+ * Strips Markets-locked assets (ETF/crypto/fx/futures/bond) out of a list of
+ * search suggestions when the current user is blocked from the Markets area.
+ * No-op (returns `items` untouched) when the user has access.
+ */
+export function filterMarketsLockedSuggestions<T extends { assetType?: string }>(
+  items: T[],
+  hasBetaAccess: boolean,
+): T[] {
+  if (!isMarketsBlocked(hasBetaAccess)) return items;
+  return items.filter((item) => !isMarketsLockedAssetType(item.assetType));
+}

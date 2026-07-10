@@ -8,7 +8,7 @@ import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 
 // 🔥 OPTIMIZED HOOKS
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscription, FREE_TRADE_LIMIT } from "@/hooks/useSubscription";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useTrades, type Trade } from "@/hooks/useTradesData";
@@ -1548,7 +1548,7 @@ const rPerformance = useMemo(() => {
                 </label>
                 <p className="text-xs text-zinc-500 mt-1">
                   {isFreeJournal
-                    ? 'Free tier: 15 trades total (never resets)'
+                    ? `Free tier: ${FREE_TRADE_LIMIT} trades total (never resets)`
                     : isUnlimitedUser
                       ? 'Unlimited trades with your plan'
                       : 'Resets each billing cycle'
@@ -1558,7 +1558,7 @@ const rPerformance = useMemo(() => {
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-zinc-300">
                   {isFreeJournal
-                    ? `${limits?.trade_count || 0} / 15`
+                    ? `${limits?.trade_count || 0} / ${FREE_TRADE_LIMIT}`
                     : isUnlimitedUser
                       ? '∞ / ∞'
                       : `${limits?.current_month_trades_count || 0} / ${limits?.max_trades || 25}`
@@ -1572,7 +1572,7 @@ const rPerformance = useMemo(() => {
                       const used = isFreeJournal
                         ? (limits?.trade_count || 0)
                         : (limits?.current_month_trades_count || 0);
-                      const max = isFreeJournal ? 15 : (limits?.max_trades || 25);
+                      const max = isFreeJournal ? FREE_TRADE_LIMIT : (limits?.max_trades || 25);
                       const pct = max > 0 ? (used / max) * 100 : 0;
                       return pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
                     })()}`}
@@ -1581,7 +1581,7 @@ const rPerformance = useMemo(() => {
                         const used = isFreeJournal
                           ? (limits?.trade_count || 0)
                           : (limits?.current_month_trades_count || 0);
-                        const max = isFreeJournal ? 15 : (limits?.max_trades || 25);
+                        const max = isFreeJournal ? FREE_TRADE_LIMIT : (limits?.max_trades || 25);
                         return max > 0 ? (used / max) * 100 : 0;
                       })())}%`
                     }}

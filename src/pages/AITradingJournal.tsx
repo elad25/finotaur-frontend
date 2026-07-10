@@ -63,7 +63,7 @@ const FAQS = [
   {
     question: "Is the AI coach included in every plan?",
     answer:
-      "The AI trading coach (FINO) is part of the Trader plan ($44.99/month, 14-day free trial). The free tier includes a 15-trade demo portfolio and 3 AI stock analyses a day.",
+      "The AI trading coach (FINO) is part of the Trader plan ($44.99/month, 14-day free trial). The free tier includes a 10-trade demo portfolio and 3 AI stock analyses a day.",
   },
   {
     question: "Is there a free trial?",
@@ -367,7 +367,7 @@ export default function AITradingJournal() {
             <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$0/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>No card required</li>
-              <li>Demo portfolio — 15 trades</li>
+              <li>Demo portfolio — 10 trades</li>
               <li>AI Stock Analyzer — 3 analyses/day</li>
               <li>Full analytics, strategies & Academy</li>
             </ul>

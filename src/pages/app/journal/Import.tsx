@@ -444,6 +444,7 @@ function Step3Import({
     imported: number;
     duplicates: number;
     errors: string[];
+    limitMessage?: string;
   } | null>(null);
 
   const handleImport = async () => {
@@ -468,16 +469,23 @@ function Step3Import({
       return;
     }
 
-    // 2. Insert via hook (handles dedup + idempotency)
+    // 2. Insert via hook (handles dedup + idempotency + Free plan trade cap)
     const insertResult = await importTrades(parseResult.trades);
 
     setResult({
       imported: insertResult.imported,
       duplicates: insertResult.duplicates,
       errors: insertResult.errors,
+      limitMessage: insertResult.limitMessage,
     });
 
-    if (insertResult.imported > 0) {
+    if (insertResult.limitMessage) {
+      if (insertResult.imported > 0) {
+        toast.success(insertResult.limitMessage, { duration: 6000 });
+      } else {
+        toast.error(insertResult.limitMessage, { duration: 6000 });
+      }
+    } else if (insertResult.imported > 0) {
       toast.success(`Imported ${insertResult.imported} trade${insertResult.imported !== 1 ? 's' : ''}`);
     }
   };
@@ -486,6 +494,12 @@ function Step3Import({
     // Result summary screen
     return (
       <div className="space-y-6">
+        {result.limitMessage && (
+          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-4 flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-yellow-200">{result.limitMessage}</p>
+          </div>
+        )}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
           {/* Counts */}
           <div className="grid grid-cols-3 gap-4">

@@ -12,6 +12,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
 // ================================================
+// CONSTANTS
+// ================================================
+
+/** Lifetime trade cap for the FREE journal plan. */
+export const FREE_TRADE_LIMIT = 10;
+
+// ================================================
 // TYPES
 // ================================================
 
@@ -391,12 +398,12 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   // Core tier removed 2026-06 (zero subscribers) — hasJournalFromCore is always false
   const hasJournalFromCore = false;
 
-  // 🔥 v8.5.0: FREE platform users get 15 lifetime trades in Journal
-  const hasJournalFromFree = 
+  // 🔥 v8.5.0: FREE platform users get FREE_TRADE_LIMIT lifetime trades in Journal
+  const hasJournalFromFree =
     !isAdmin && !isLifetimeUser &&
     !hasDirectJournalSubscription && !hasJournalTrial && !hasJournalFromBundle && !hasJournalFromCore;
 
-  // 🔥 v8.5.0: All users now have journal access (FREE gets 15 lifetime trades)
+  // 🔥 v8.5.0: All users now have journal access (FREE gets FREE_TRADE_LIMIT lifetime trades)
   const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle || hasJournalFromCore || hasJournalFromFree;
   
   const effectiveJournalPlan = (() => {
@@ -424,19 +431,19 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   
   // 🔥 v8.5.0: FREE users use lifetime trade count (trade_count), not monthly (remaining)
   const tradesRemaining = isAdmin || isLifetimeUser
-    ? Infinity 
-    : isUnlimitedUser 
-      ? Infinity 
+    ? Infinity
+    : isUnlimitedUser
+      ? Infinity
       : isFreeJournal
-        ? Math.max(0, 15 - (limits?.trade_count ?? 0))
+        ? Math.max(0, FREE_TRADE_LIMIT - (limits?.trade_count ?? 0))
         : limits?.remaining ?? 0;
-  
-  const canAddTrade = isAdmin || isLifetimeUser || (isUnlimitedUser) || 
-    (isFreeJournal && (limits?.trade_count ?? 0) < 15) ||
+
+  const canAddTrade = isAdmin || isLifetimeUser || (isUnlimitedUser) ||
+    (isFreeJournal && (limits?.trade_count ?? 0) < FREE_TRADE_LIMIT) ||
     (hasJournalAccess && !isFreeJournal && (limits?.remaining ?? 0) > 0);
-  
-  const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser && 
-    (isFreeJournal ? (limits?.trade_count ?? 0) >= 15 : (limits?.remaining ?? 0) <= 0);
+
+  const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser &&
+    (isFreeJournal ? (limits?.trade_count ?? 0) >= FREE_TRADE_LIMIT : (limits?.remaining ?? 0) <= 0);
   
   const isExpiringSoon = (() => {
     if (isAdmin || isLifetimeUser) return false;

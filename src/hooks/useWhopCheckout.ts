@@ -114,6 +114,12 @@ export interface CheckoutParams {
   discountCode?: string;
   /** Set true after the user confirms forfeiting prepaid annual time on an upgrade. */
   acknowledgeForfeit?: boolean;
+  /**
+   * When set, checkout uses THIS Whop plan ID instead of the one resolved from
+   * (planName, billingInterval) — e.g. a hidden discounted plan (Intro Offer).
+   * Entitlements/redirects still resolve from (planName, billingInterval) as normal.
+   */
+  overrideWhopPlanId?: string;
 }
 
 export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
@@ -207,7 +213,7 @@ const createCheckoutSession = useCallback(async (params: {
    * 🔥 v4.1.0: Now passes email and userId to Edge Function
    */
   const initiateCheckout = useCallback(async (params: CheckoutParams) => {
-    const { planName, billingInterval, discountCode } = params;
+    const { planName, billingInterval, discountCode, overrideWhopPlanId } = params;
 
     // 📊 Funnel start — fire before any async work so we capture every attempt,
     // even ones that fail plan resolution below.
@@ -228,7 +234,10 @@ const createCheckoutSession = useCallback(async (params: {
       // Get plan info
       const planId = getPlanId(planName, billingInterval);
       const plan = PLANS[planId];
-      const whopPlanId = getWhopPlanId(planName, billingInterval);
+      // Entitlements/redirects resolve from (planName, billingInterval) as normal —
+      // only the Whop plan ID sent to checkout is swapped when an override is given
+      // (e.g. a hidden discounted plan like the Intro Offer).
+      const whopPlanId = overrideWhopPlanId || getWhopPlanId(planName, billingInterval);
 
       if (!plan || !whopPlanId) {
         throw new Error(`Invalid plan: ${planName} ${billingInterval}`);
@@ -346,6 +355,25 @@ const checkoutSession = await createCheckoutSession({
         // ✅ Edge Function succeeded - metadata will be in webhook!
         checkoutUrl = checkoutSession.checkout_url;
         console.log('✅ Using Edge Function checkout URL (metadata + email included)');
+      } else if (overrideWhopPlanId) {
+        // ⚠️ Fallback to direct URL for an overridden (hidden) plan — buildWhopCheckoutUrl
+        // only knows PLANS[planId].whopPlanId, so build the override URL by hand here.
+        console.warn('⚠️ Falling back to direct URL for overridden plan (metadata may not be passed)');
+        const overrideUrl = new URL(`https://whop.com/checkout/${overrideWhopPlanId}`);
+        if (user?.email) {
+          overrideUrl.searchParams.set('email', user.email);
+          overrideUrl.searchParams.set('lock_email', 'true');
+        }
+        if (user?.id) {
+          overrideUrl.searchParams.set('metadata[finotaur_user_id]', user.id);
+          overrideUrl.searchParams.set('metadata[finotaur_email]', user.email || '');
+          overrideUrl.searchParams.set('metadata[subscription_category]', plan.category);
+          overrideUrl.searchParams.set('metadata[billing_interval]', plan.period);
+        }
+        if (affiliateCode) overrideUrl.searchParams.set('d', affiliateCode);
+        if (clickId) overrideUrl.searchParams.set('ref', clickId);
+        overrideUrl.searchParams.set('redirect_url', 'https://www.finotaur.com');
+        checkoutUrl = overrideUrl.toString();
       } else {
         // ⚠️ Fallback to direct URL (metadata may not work)
         console.warn('⚠️ Falling back to direct URL (metadata may not be passed)');

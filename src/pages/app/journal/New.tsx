@@ -42,7 +42,7 @@ const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectMo
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
-import { useSubscription } from '@/hooks/useSubscription';
+import { useSubscription, FREE_TRADE_LIMIT } from '@/hooks/useSubscription';
 import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 import { UsageWarningModal } from '@/components/subscription/UsageWarningModal';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
@@ -166,11 +166,11 @@ function TradeLimitModal({
         <div className="px-5 pt-5 pb-3 text-center">
           <div className="text-2xl mb-1">🔥</div>
           <h3 className="text-base font-bold text-white">
-            {isFree ? "Free Limit Reached" : "Monthly Limit Reached"}
+            {isFree ? "Great Progress!" : "Monthly Limit Reached"}
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5">
             {isFree
-              ? `You've used all ${maxTrades} lifetime trades on the Free plan`
+              ? `You've logged all ${maxTrades} free trades — nice work building the habit. Upgrade to keep your journal growing with unlimited trades and broker sync.`
               : `You've used all ${maxTrades} trades this month`}
           </p>
         </div>
@@ -1295,7 +1295,7 @@ const {
         toast.error("Loading subscription info, please try again");
         return;
       }
-      // BASIC = 25/month, FREE = 15 lifetime
+      // BASIC = 25/month, FREE = FREE_TRADE_LIMIT lifetime
       if (limits.max_trades === 25) {
         setShowBasicLimitModal(true);
       } else {
@@ -1818,7 +1818,7 @@ if (hasResult && directRiskUSD > 0) {
       
       if (error?.message?.includes('limit') || error?.message?.includes('policy') || error?.message?.includes('row-level security') || error?.code === '42501') {
         // Determine plan from limits or fallback to isPremium check
-        const isBasicPlan = limits?.max_trades === 50 || (!isPremium && !isUnlimitedUser && limits?.max_trades !== 15);
+        const isBasicPlan = limits?.max_trades === 50 || (!isPremium && !isUnlimitedUser && limits?.max_trades !== FREE_TRADE_LIMIT);
         if (isBasicPlan) {
           setShowBasicLimitModal(true);
         } else {
@@ -2608,7 +2608,23 @@ if (hasResult && directRiskUSD > 0) {
                       <p className="text-xs text-yellow-400 uppercase tracking-wider">Options Details</p>
                       <button
                         type="button"
-                        onClick={() => setShowMultiLeg((v) => !v)}
+                        onClick={() => {
+                          // Opening the multi-leg builder is a trade-creation entry point
+                          // that bypasses handleSubmit's canAddTrade check — gate it here too.
+                          if (!showMultiLeg && !isEditMode && !canAddTrade) {
+                            if (!limits) {
+                              toast.error("Loading subscription info, please try again");
+                              return;
+                            }
+                            if (limits.max_trades === 25) {
+                              setShowBasicLimitModal(true);
+                            } else {
+                              setShowLimitModal(true);
+                            }
+                            return;
+                          }
+                          setShowMultiLeg((v) => !v);
+                        }}
                         className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
                           showMultiLeg
                             ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
@@ -3533,7 +3549,7 @@ if (hasResult && directRiskUSD > 0) {
         onOpenChange={setShowLimitModal}
         reason="free-trade-limit"
         used={limits?.trade_count ?? 0}
-        max={15}
+        max={FREE_TRADE_LIMIT}
       />
       <TradeLimitModal
         open={showBasicLimitModal}
