@@ -261,6 +261,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       'Broker sync — leading brokers supported',
       'Unlimited trades',
+      'Trade Copier',
+      'Leak Detector — finds your most expensive pattern',
+      'Shadow — what-if analysis',
+      'Revenge Radar',
+      'Prop-firm Risk Management',
       'Full performance analytics',
       'AI-powered insights & coach',
       'Advanced AI analysis',
@@ -288,6 +293,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       'Broker sync — leading brokers supported',
       'Unlimited trades',
+      'Trade Copier',
+      'Leak Detector — finds your most expensive pattern',
+      'Shadow — what-if analysis',
+      'Revenge Radar',
+      'Prop-firm Risk Management',
       'Full performance analytics',
       'AI-powered insights & coach',
       'Advanced AI analysis',
