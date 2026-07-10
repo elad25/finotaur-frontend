@@ -45,7 +45,7 @@ export function TradeCountGate({
         type="button"
         onClick={() => (onClose ? onClose() : navigate('/app/home'))}
         aria-label="Back to home"
-        className="absolute right-ds-5 top-ds-4 flex h-9 w-9 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle text-ink-secondary transition-colors duration-base ease-out hover:border-border-ds-default hover:text-ink-primary"
+        className="absolute right-6 top-4 flex h-9 w-9 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle text-ink-secondary transition-colors duration-base ease-out hover:border-border-ds-default hover:text-ink-primary"
       >
         <span aria-hidden="true">×</span>
       </button>

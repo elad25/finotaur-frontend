@@ -27,13 +27,14 @@ async function fetchPortfolioStats(userId: string): Promise<PortfolioStats> {
     throw error;
   }
   
-  // ה-function מחזיר אובייקט אחד עם כל הסטטיסטיקות
+  // ה-function מוגדרת RETURNS TABLE — PostgREST מחזיר מערך של שורה אחת
+  const row = (Array.isArray(data) ? data[0] : data) ?? {};
   return {
-    initialPortfolio: data.initial_portfolio || 10000,
-    currentPortfolio: data.current_portfolio || 10000,
-    totalPnL: data.total_pnl || 0,
-    growth: data.growth || 0,
-    tradeCount: data.trade_count || 0,
+    initialPortfolio: row.initial_portfolio || 10000,
+    currentPortfolio: row.current_portfolio || 10000,
+    totalPnL: row.total_pnl || 0,
+    growth: row.growth || 0,
+    tradeCount: row.trade_count || 0,
   };
 }
 
