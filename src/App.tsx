@@ -200,13 +200,10 @@ const JournalReportsLayout = lazy(() => import("@/pages/app/journal/reports/Repo
 const JournalReportsAISummary = lazy(() => import("@/pages/app/journal/reports/AISummary"));
 const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
 const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
-const JournalReportsRecaps = lazy(() => import("@/pages/app/journal/reports/AIRecaps"));
 const JournalReportsBreakdowns = lazy(() => import("@/pages/app/journal/reports/Breakdowns"));
 const JournalReportsAnnualCalendar = lazy(() => import("@/pages/app/journal/reports/AnnualCalendar"));
 const JournalReportsCompare = lazy(() => import("@/pages/app/journal/reports/CompareReports"));
-const JournalReportsScores = lazy(() => import("@/pages/app/journal/reports/Scores"));
 const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Overview"));
-const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
 const JournalReportsPerformance = lazy(() => import("@/pages/app/journal/reports/Performance"));
 const JournalReportsOptions = lazy(() => import("@/pages/app/journal/reports/OptionsAnalytics"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
@@ -767,9 +764,9 @@ function AppContent() {
   <Route path="options" element={<JournalReportsOptions />} />
   <Route path="calendar" element={<JournalReportsAnnualCalendar />} />
   <Route path="compare" element={<JournalReportsCompare />} />
-  <Route path="scores" element={<JournalReportsScores />} />
-  <Route path="summary" element={<JournalReportsSummary />} />
-  <Route path="recaps" element={<JournalReportsRecaps />} />
+  <Route path="scores" element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
+  <Route path="summary" element={<Navigate to="/app/journal/reports/overview" replace />} />
+  <Route path="recaps" element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
   <Route path="performance" element={<JournalReportsPerformance />} />
 </Route>
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
