@@ -43,6 +43,16 @@ const STORAGE_KEYS = {
 };
 
 // ============================================
+// STORAGE KEY - Checkout-pending flag
+// ============================================
+// Written right before the redirect to Whop; read by usePostCheckoutSync to
+// know whether a returning-focus/visible tab should revalidate the
+// subscription state (covers checkout opened in a new tab, or a webhook that
+// completes after the user already tabbed away). Must match
+// usePostCheckoutSync.ts!
+export const CHECKOUT_PENDING_STORAGE_KEY = 'finotaur_checkout_pending';
+
+// ============================================
 // HELPER: Get stored affiliate data
 // ============================================
 
@@ -400,6 +410,15 @@ const checkoutSession = await createCheckoutSession({
         touches: getTouches().slice(-10),
         ...getTouchSummary(),
       });
+
+      // 🔥 Mark a checkout as pending BEFORE redirecting, so usePostCheckoutSync
+      // can revalidate the subscription state when this tab regains focus —
+      // covers checkout completed in a new tab (this tab never navigates away).
+      try {
+        localStorage.setItem(CHECKOUT_PENDING_STORAGE_KEY, String(Date.now()));
+      } catch {
+        // localStorage unavailable (private mode / quota) — best-effort only.
+      }
 
       // Redirect to Whop checkout
       setTimeout(() => {

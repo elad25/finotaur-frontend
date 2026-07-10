@@ -18,6 +18,7 @@ import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
 import WelcomeIntro from '@/components/onboarding/WelcomeIntro';
 import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
+import { usePostCheckoutSync } from '@/hooks/usePostCheckoutSync';
 import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 import { DemoBanner } from '@/components/journal/DemoBanner';
 import { DemoSyncOverlay } from '@/components/journal/DemoSyncOverlay';
@@ -75,6 +76,12 @@ export const ProtectedAppLayout = () => {
   // Redirect after OAuth if the flow was started from a non-journal page
   // (e.g. the Trade Copier). When no key is set in sessionStorage this is a no-op.
   useOAuthReturnRedirect();
+
+  // Keeps subscription/profile state (TopNav plan badge, JournalFeatureGate,
+  // broker-sync gates) from going stale right after a Whop checkout — polls on
+  // `?payment=success` return and on tab focus/visible when a checkout was
+  // started in another tab. No-op when neither condition applies.
+  usePostCheckoutSync();
 
   const { isDemo: isJournalDemo } = useJournalDemoMode();
 
