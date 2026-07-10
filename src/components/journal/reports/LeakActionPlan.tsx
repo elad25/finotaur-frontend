@@ -17,10 +17,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Sparkles, RefreshCw, Check } from 'lucide-react';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { Card } from '@/components/ds/Card';
 import type { Leak } from '@/lib/journal/leakDetector';
+
+/**
+ * Fixed 3-bullet plan shown for demo-mode journals (zero-trade users and
+ * free-tier preview) instead of firing a real edge-function call. Written
+ * to match the demo journal's dominant leak — three scripted revenge-trading
+ * sequences (see src/utils/demoJournalData.ts, `isRevengeDay`), which the
+ * Leak Detector engine surfaces as the "revenge_reentry" family.
+ */
+const DEMO_ACTION_PLAN_BULLETS: string[] = [
+  'Set a hard 30-minute cooldown after any losing trade — no new entries until the timer clears, even if the next setup looks perfect.',
+  'Cap size at your normal quantity for the first trade after a loss; only scale back up once you have booked a winner at standard size.',
+  'If you take 3 or more losses in a session, stop trading for the day and log the pattern instead of chasing it back.',
+];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -180,9 +194,12 @@ export function AddRuleButton({ rule }: AddRuleButtonProps) {
 
 interface LeakActionPlanProps {
   verdict: Leak;
+  /** Demo-mode journal (zero-trade user or free-tier preview): render a
+   *  fixed sample plan, never query settings, never call the edge function. */
+  demo?: boolean;
 }
 
-export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
+export default function LeakActionPlan({ verdict, demo = false }: LeakActionPlanProps) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
@@ -194,7 +211,7 @@ export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
   const { data: settingsQuery, isLoading: settingsLoading } = useQuery({
     queryKey: ['leakActionPlan', userId],
     queryFn: () => fetchRiskSettings(userId as string),
-    enabled: !!userId,
+    enabled: !demo && !!userId,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -221,7 +238,18 @@ export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          let body: { error?: string } | null = null;
+          try {
+            body = await error.context.json();
+          } catch {
+            body = null;
+          }
+          throw new Error(body?.error ?? 'invoke_failed');
+        }
+        throw error;
+      }
       if (data?.error) throw new Error(String(data.error));
       return {
         bullets: sanitizeBullets(data?.data?.bullets),
@@ -269,7 +297,9 @@ export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
   const hasFreshCache = !!cachedPlan && cachedPlan.input_hash === inputHash;
 
   // Auto-generate once when there's no fresh cache for the current input.
+  // Demo mode never auto-generates — no real edge-function call for sample data.
   useEffect(() => {
+    if (demo) return;
     if (autoTriggeredRef.current) return;
     if (!userId || settingsLoading) return;
     if (hasFreshCache) return;
@@ -277,7 +307,7 @@ export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
     autoTriggeredRef.current = true;
     generateMutation.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, settingsLoading, hasFreshCache]);
+  }, [demo, userId, settingsLoading, hasFreshCache]);
 
   const displayed: { bullets: string[]; generated_at: string } | null =
     liveResult ?? (hasFreshCache && cachedPlan ? { bullets: cachedPlan.bullets, generated_at: cachedPlan.generated_at } : null);
@@ -287,6 +317,31 @@ export default function LeakActionPlan({ verdict }: LeakActionPlanProps) {
   };
 
   // ── Render states ──────────────────────────────────────────────────────────
+
+  if (demo) {
+    return (
+      <Card padding="default" className="flex flex-col gap-4">
+        <div>
+          <h3 className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary">
+            Your action plan
+          </h3>
+          <p className="mt-1 text-[11px] text-ink-tertiary">
+            Sample plan — connect your trades to get yours
+          </p>
+        </div>
+        <div className="flex flex-col gap-3">
+          {DEMO_ACTION_PLAN_BULLETS.map((bullet, idx) => (
+            <div key={idx} className="flex items-start gap-3">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-primary/10 text-[11px] font-bold text-gold-primary">
+                {idx + 1}
+              </span>
+              <p className="text-sm text-ink-primary leading-relaxed">{bullet}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
 
   if (upgradeRequired) return null;
 

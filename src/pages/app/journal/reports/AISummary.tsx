@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ShieldCheck, Search, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
+import { useJournalPreview } from '@/contexts/JournalPreviewContext';
 import { Card } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
 import { buildLeakReport } from '@/lib/journal/leakDetector';
@@ -216,7 +218,7 @@ function QuickStatsStrip({ trades }: { trades: Trade[] }) {
 // AI Recaps section — reused as-is from AIRecaps.tsx (weekly + monthly only)
 // ---------------------------------------------------------------------------
 
-function AIRecapsSection() {
+function AIRecapsSection({ demo = false }: { demo?: boolean }) {
   return (
     <section className="space-y-4">
       <div>
@@ -229,8 +231,8 @@ function AIRecapsSection() {
       </div>
       <CreditsBanner />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecapCard period="weekly" />
-        <RecapCard period="monthly" />
+        <RecapCard period="weekly" demo={demo} />
+        <RecapCard period="monthly" demo={demo} />
       </div>
     </section>
   );
@@ -259,6 +261,15 @@ function SkeletonState() {
 export default function AISummary() {
   const { data: trades = [], isLoading } = useTrades();
   const [showAllEvidence, setShowAllEvidence] = useState(false);
+
+  // Demo-mode journal: mirrors the two conditions useTrades() itself checks
+  // (src/hooks/useTradesData.ts ~L430-438) before substituting sample data on
+  // this /app/journal surface — free-tier preview (JournalFeatureGate) and
+  // zero-real-trade users. Either one means `trades` above is sample data, so
+  // no real AI call (edge function / recap generation) should fire on it.
+  const { isPreview } = useJournalPreview();
+  const { isDemo } = useJournalDemoMode();
+  const demoActive = isPreview || isDemo;
 
   const report = useMemo(() => buildLeakReport(trades), [trades]);
 
@@ -341,7 +352,7 @@ export default function AISummary() {
           <QuickStatsStrip trades={trades} />
         </section>
 
-        <AIRecapsSection />
+        <AIRecapsSection demo={demoActive} />
       </div>
     );
   }
@@ -404,7 +415,7 @@ export default function AISummary() {
         <LeakCounterfactualChart trades={trades} verdict={verdict} />
 
         {/* AI action plan */}
-        <LeakActionPlan verdict={verdict} />
+        <LeakActionPlan verdict={verdict} demo={demoActive} />
 
         {/* Evidence */}
         <section>
@@ -445,7 +456,7 @@ export default function AISummary() {
           </section>
         )}
 
-        <AIRecapsSection />
+        <AIRecapsSection demo={demoActive} />
       </div>
     );
   }
@@ -471,7 +482,7 @@ export default function AISummary() {
         </p>
       </Card>
 
-      <AIRecapsSection />
+      <AIRecapsSection demo={demoActive} />
     </div>
   );
 }
