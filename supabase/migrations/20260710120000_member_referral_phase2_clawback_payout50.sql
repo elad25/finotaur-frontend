@@ -61,7 +61,10 @@ BEGIN
     FROM affiliates a
     WHERE a.status = 'active'
       AND a.commission_enabled = TRUE
-      AND a.affiliate_type = 'regular'
+      -- 'member' added (Phase 2): the original predates member-type
+      -- affiliates — without this, member referrers would never be queued
+      -- for payout. 'admin' rows stay excluded.
+      AND a.affiliate_type IN ('regular', 'member')
   LOOP
     -- Sum confirmed commissions
     SELECT COALESCE(SUM(commission_amount_usd), 0) INTO pending_commissions
@@ -216,10 +219,10 @@ BEGIN
 
   -- Mark the referral dead for future commissions. verification_pending ->
   -- verification_failed (never made it past the 7-day window); anything
-  -- further along (qualified, or already churned/refunded) -> churned.
+  -- further along -> refunded (live enum has a dedicated value for this).
   v_new_status := CASE
     WHEN v_referral.status = 'verification_pending' THEN 'verification_failed'::referral_status
-    ELSE 'churned'::referral_status
+    ELSE 'refunded'::referral_status
   END;
 
   v_note_line := '[' || NOW()::TEXT || '] ' || p_reason || ' — reversed ' ||
