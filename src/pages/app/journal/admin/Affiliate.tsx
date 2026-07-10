@@ -92,7 +92,9 @@ export default function AdminAffiliate() {
 
       {/* Tab Content */}
       <Suspense fallback={<TabLoader />}>
-        {activeTab === 'overview' && <AffiliateAdminOverview />}
+        {activeTab === 'overview' && (
+          <AffiliateAdminOverview onReviewApplications={() => setActiveTab('applications')} />
+        )}
         {activeTab === 'applications' && (
           <AffiliateAdminApplications onPendingCountChange={setPendingApplications} />
         )}
