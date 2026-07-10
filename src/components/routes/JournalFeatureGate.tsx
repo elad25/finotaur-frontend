@@ -36,7 +36,7 @@ interface FeatureCopy {
 
 const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
   shadow: {
-    title: 'Shadow — What-If Analysis',
+    title: 'Shadow',
   },
   'revenge-radar': {
     title: 'Revenge Radar',
@@ -48,7 +48,7 @@ const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
     title: 'Risk Management',
   },
   'ai-summary': {
-    title: 'AI Summary — Leak Detector',
+    title: 'Leak Detector',
   },
 };
 
@@ -60,7 +60,7 @@ function PreviewBanner({ feature }: { feature: GatedFeature }) {
     <div className="w-full border-b border-gold-primary/20 bg-gold-primary/10 px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 text-center">
       <p className="text-xs md:text-sm text-ink-secondary">
         <span className="font-semibold text-gold-primary">{copy.title} — Preview</span>
-        {" · You're viewing sample data. This is a paid feature — live data requires a broker connection."}
+        {' · Sample data. Upgrade and connect your broker for live data.'}
       </p>
       <Button variant="gold" size="sm" onClick={() => navigate('/app/upgrade')}>
         Upgrade to unlock

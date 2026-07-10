@@ -22,6 +22,8 @@ import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 import { DemoBanner } from '@/components/journal/DemoBanner';
 import { DemoSyncOverlay } from '@/components/journal/DemoSyncOverlay';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { useSubscription } from '@/hooks/useSubscription';
+import { isFreePreviewJournalPath } from '@/contexts/JournalPreviewContext';
 import { isMarketsBlocked, isMarketsResearchPath } from '@/lib/marketsAccess';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
@@ -75,6 +77,16 @@ export const ProtectedAppLayout = () => {
   useOAuthReturnRedirect();
 
   const { isDemo: isJournalDemo } = useJournalDemoMode();
+
+  // JournalFeatureGate (mounted inside the route tree) already renders its
+  // own "Preview" banner for free-tier users on the gated journal pages
+  // (Shadow / Revenge Radar). This layout sits ABOVE the route tree, so it
+  // can't read JournalPreviewContext — fall back to a path + tier check.
+  // Default to isSubLoading === true meaning "don't suppress" so the
+  // DemoBanner never flickers away while tier is still resolving.
+  const { isFreeJournal, isLoading: isSubLoading } = useSubscription();
+  const suppressDemoBannerForGatedPreview =
+    !isSubLoading && isFreeJournal && isFreePreviewJournalPath(location.pathname);
 
   // Each top banner (admin impersonation / mentor view) is a fixed 52px bar.
   // In-flow chrome (TopNav/SubNav/main) is already pushed by each banner's
@@ -164,12 +176,12 @@ export const ProtectedAppLayout = () => {
             )}
           >
             <div className={hideSidebar ? "p-0" : "w-full"}>
-              {isJournalRoute && isJournalDemo && <DemoBanner />}
+              {isJournalRoute && isJournalDemo && !suppressDemoBannerForGatedPreview && <DemoBanner />}
               <Outlet />
             </div>
           </main>
         </div>
-        {isJournalRoute && isJournalDemo && <DemoSyncOverlay />}
+        {isJournalRoute && isJournalDemo && !suppressDemoBannerForGatedPreview && <DemoSyncOverlay />}
         <ComplianceFooterBar />
         {/* Spotlight onboarding tour — renders null when tour is not active */}
         <SpotlightTour />
