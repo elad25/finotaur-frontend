@@ -11,7 +11,7 @@ TradeZella-class full-screen report carousels. Shipped 2026-07-10 (FE #1338/#134
 
 | Concern | File |
 |---|---|
-| Entry buttons (3 gold, all tiers) | `src/pages/app/home/HomePage.tsx` (Ask Fino card, under the chips) |
+| Entry buttons (gold, all tiers) | `src/pages/app/home/HomePage.tsx` (Ask Fino card, under the chips). **My Portfolio button is HIDDEN** behind `SHOW_PORTFOLIO_REPORT_BUTTON=false` (Elad 2026-07-10, until wired to INVESTOR tier) — page/route/gate stay built; flip the flag to reconnect |
 | Routes `/app/reports/{journal,portfolio,markets}` | `src/App.tsx` (lazy) + `src/layouts/ProtectedAppLayout.tsx` HIDE_CHROME_ROUTES has `/app/reports` |
 | Shell: dots, arrows, close, slide frame, locked overlay | `src/components/reports/ReportShell.tsx` |
 | Key Takeaway box (AI text / skeleton / fallback) | `src/components/reports/KeyTakeaway.tsx` |

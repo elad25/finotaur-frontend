@@ -49,6 +49,12 @@ const PRODUCT_CARD: Record<string, { icon: LucideIcon; blurb: string }> = {
 // Composed per user in the component via getFinoHomeChips().
 // ---------------------------------------------------------------------------
 
+// Portfolio Report entry button — hidden per Elad (2026-07-10) until the
+// report is wired to its tier plan (planned: INVESTOR). The page, route
+// (/app/reports/portfolio) and 60-trade gate stay fully built and reachable;
+// flip this to true to reconnect the button.
+const SHOW_PORTFOLIO_REPORT_BUTTON = false;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -247,15 +253,17 @@ export default function HomePage() {
                 <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
                 Analyze Journal
               </Button>
-              <Button
-                variant="gold"
-                size="compact"
-                showArrow={false}
-                onClick={() => navigate('/app/reports/portfolio')}
-              >
-                <PieChart className="h-3.5 w-3.5" aria-hidden="true" />
-                My Portfolio
-              </Button>
+              {SHOW_PORTFOLIO_REPORT_BUTTON && (
+                <Button
+                  variant="gold"
+                  size="compact"
+                  showArrow={false}
+                  onClick={() => navigate('/app/reports/portfolio')}
+                >
+                  <PieChart className="h-3.5 w-3.5" aria-hidden="true" />
+                  My Portfolio
+                </Button>
+              )}
               <Button
                 variant="gold"
                 size="compact"
