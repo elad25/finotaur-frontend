@@ -1,24 +1,29 @@
 // src/components/routes/JournalFeatureGate.tsx
 // =====================================================
-// 🔒 JOURNAL FEATURE GATE — Free-tier lockdown
+// 🔒 JOURNAL FEATURE GATE — Free-tier PREVIEW mode
 // =====================================================
-// Blocks FREE-plan journal users from specific premium journal features
-// (Shadow / Revenge Radar) with a full-page upsell rendered IN PLACE of
-// the feature. The route itself stays reachable and the sidebar entry
-// stays visible — this is a content-level gate, not a route-level one
-// (that's what JournalRoute already handles for premiumOnly routes).
+// FREE-plan journal users get the real premium feature (Shadow / Revenge
+// Radar / Trade Copier / Risk Management) filled with sample/demo data,
+// under a persistent gold banner explaining it's a preview. The route
+// stays reachable and the sidebar entry stays visible — this is a
+// content-level gate, not a route-level one (that's what JournalRoute
+// already handles for premiumOnly routes).
 //
-// Paid / basic / trial / admin users pass straight through to children.
+// Data hooks (useTradesData, useCopierDemoMode, PropRiskPage, ...) read
+// isPreview via useJournalPreview() and substitute demo data accordingly.
+//
+// Paid / basic / trial / admin users pass straight through to children —
+// completely unchanged, no banner, no context flip.
 // =====================================================
 
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, GitCompare, Flame, Check, Sparkles } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Button } from '@/components/ds/Button';
+import { JournalPreviewContext } from '@/contexts/JournalPreviewContext';
 
-type GatedFeature = 'shadow' | 'revenge-radar' | 'ai-summary';
+type GatedFeature = 'shadow' | 'revenge-radar' | 'trade-copier' | 'risk-management' | 'ai-summary';
 
 interface JournalFeatureGateProps {
   feature: GatedFeature;
@@ -26,51 +31,45 @@ interface JournalFeatureGateProps {
 }
 
 interface FeatureCopy {
-  icon: typeof GitCompare;
   title: string;
-  description: string;
-  bullets: string[];
-  cta: string;
 }
 
 const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
   shadow: {
-    icon: GitCompare,
     title: 'Shadow — What-If Analysis',
-    description: 'Replay your trades with different exits and sizing to see the true cost of your decisions.',
-    bullets: [
-      'Replay any closed trade with a different exit or position size',
-      'See the P&L you left on the table — or avoided losing',
-      'Turn hindsight into a repeatable rule for your next trade',
-    ],
-    cta: 'Upgrade to unlock Shadow',
   },
   'revenge-radar': {
-    icon: Flame,
     title: 'Revenge Radar',
-    description: 'Automatically detect revenge-trading patterns before they wreck your account.',
-    bullets: [
-      'Flags clusters of trades taken right after a loss',
-      'Shows exactly what revenge trading has cost you in real dollars',
-      'Builds the self-awareness to break the cycle',
-    ],
-    cta: 'Upgrade to unlock Revenge Radar',
+  },
+  'trade-copier': {
+    title: 'Trade Copier',
+  },
+  'risk-management': {
+    title: 'Risk Management',
   },
   'ai-summary': {
-    icon: Sparkles,
     title: 'AI Summary — Leak Detector',
-    description: 'FINOTAUR AI diagnoses your single most expensive trading pattern, backed by real evidence from your own trades.',
-    bullets: [
-      'Identifies your #1 leak — revenge trading, oversizing, holding losers, and more',
-      'Every diagnosis backed by real trade evidence, not guesswork',
-      'Weekly and monthly AI recaps included',
-    ],
-    cta: 'Upgrade to unlock AI Summary',
   },
 };
 
-export function JournalFeatureGate({ feature, children }: JournalFeatureGateProps) {
+function PreviewBanner({ feature }: { feature: GatedFeature }) {
   const navigate = useNavigate();
+  const copy = FEATURE_COPY[feature];
+
+  return (
+    <div className="w-full border-b border-gold-primary/20 bg-gold-primary/10 px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 text-center">
+      <p className="text-xs md:text-sm text-ink-secondary">
+        <span className="font-semibold text-gold-primary">{copy.title} — Preview</span>
+        {" · You're viewing sample data. This is a paid feature — live data requires a broker connection."}
+      </p>
+      <Button variant="gold" size="sm" onClick={() => navigate('/app/upgrade')}>
+        Upgrade to unlock
+      </Button>
+    </div>
+  );
+}
+
+export function JournalFeatureGate({ feature, children }: JournalFeatureGateProps) {
   const { isFreeJournal, isLoading } = useSubscription();
 
   // Loading — reuse the same fallback JournalRoute uses so the transition
@@ -83,55 +82,11 @@ export function JournalFeatureGate({ feature, children }: JournalFeatureGateProp
     return <>{children}</>;
   }
 
-  const copy = FEATURE_COPY[feature];
-  const Icon = copy.icon;
-
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
-      <div className="max-w-lg w-full text-center">
-        <div
-          className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-6 relative"
-          style={{
-            background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
-            border: '1px solid rgba(201,166,70,0.3)',
-          }}
-        >
-          <Icon className="w-8 h-8" style={{ color: '#C9A646' }} />
-          <div
-            className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center"
-            style={{
-              background: '#0A0A0A',
-              border: '1px solid rgba(201,166,70,0.4)',
-            }}
-          >
-            <Lock className="w-3 h-3" style={{ color: '#C9A646' }} />
-          </div>
-        </div>
-
-        <h2 className="text-2xl font-bold text-white mb-2">{copy.title}</h2>
-        <p className="text-[#8B8B8B] text-sm mb-6">{copy.description}</p>
-
-        <ul className="space-y-3 mb-8 text-left inline-block">
-          {copy.bullets.map((bullet, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <div
-                className="w-4 h-4 rounded-full bg-[#C9A646]/15 flex items-center justify-center shrink-0 mt-0.5"
-                style={{ border: '1px solid rgba(201,166,70,0.3)' }}
-              >
-                <Check className="h-2.5 w-2.5 text-[#C9A646]" />
-              </div>
-              <span className="text-sm text-[#D4C9A8] leading-tight">{bullet}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div>
-          <Button variant="gold" size="lg" onClick={() => navigate('/app/upgrade')}>
-            {copy.cta}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <JournalPreviewContext.Provider value={{ isPreview: true }}>
+      <PreviewBanner feature={feature} />
+      {children}
+    </JournalPreviewContext.Provider>
   );
 }
 

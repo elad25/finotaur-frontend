@@ -1,7 +1,17 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v7.0.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v7.2.0
 // =====================================================
-// 
+//
+// 🔥 v7.2.0 - Member-refers-friend enrollment: after a first-payment success
+// via activate_whop_subscription, fire-and-forget an invoke of create-whop-promo
+// (mode='member') so a new paying member gets their own referral coupon
+// provisioned automatically. Gated by affiliate_config.member_referral.enabled;
+// never blocks or throws into the payment path.
+//
+// 🔥 v7.1.0 - Affiliate attribution fallback via checkout metadata:
+// activate_whop_subscription/handle_whop_payment now fall back to the
+// metadata affiliate_code when no paid promo_code is present on the payment.
+//
 // 🔥 v7.0.0 - BUNDLE REMOVED: Finotaur Platform replaces Bundle
 // - Finotaur tier (prod_LtP5GbpPfp9bn/prod_CbWpZrn5P7wc9) includes Newsletter + Top Secret + Journal Premium
 // - Removed all bundle-specific logic, cross-discount pricing
@@ -108,11 +118,12 @@ function getBillingInterval(planId: string): 'monthly' | 'yearly' {
 }
 
 // Default commission rates (fallback if DB config not found)
+// 🔥 v7.1.0: Flat 0.20 across all tiers — synced with affiliate_config DB defaults
 const DEFAULT_COMMISSION_RATES = {
-  tier_1: 0.10,  // 10%
-  tier_2: 0.15,  // 15%
+  tier_1: 0.20,  // 20%
+  tier_2: 0.20,  // 20%
   tier_3: 0.20,  // 20%
-  annual: 0.15,  // 15% for annual
+  annual: 0.20,  // 20% for annual
 } as const;
 
 // ============================================
@@ -372,6 +383,26 @@ async function getCommissionConfig(supabase: SupabaseClient): Promise<Commission
 }
 
 // ============================================
+// HELPER: Get member-referral config from DB
+// 🔥 v7.2.0: used to gate the post-first-payment enrollment fire-and-forget
+// ============================================
+
+async function getMemberReferralConfig(supabase: SupabaseClient): Promise<{ enabled: boolean }> {
+  try {
+    const { data } = await supabase
+      .from("affiliate_config")
+      .select("config_value")
+      .eq("config_key", "member_referral")
+      .single();
+
+    return { enabled: data?.config_value?.enabled === true };
+  } catch (error) {
+    console.warn("⚠️ Failed to load member_referral config, defaulting to disabled:", error);
+    return { enabled: false };
+  }
+}
+
+// ============================================
 // HELPER: Get commission rate for affiliate
 // ============================================
 
@@ -501,6 +532,27 @@ function extractClickId(data: WhopPaymentData | WhopMembershipData): string | nu
     if (clickId && typeof clickId === 'string' && clickId.length > 0) {
       console.log("✅ Found click_id in metadata:", clickId);
       return clickId;
+    }
+  }
+
+  return null;
+}
+
+// ============================================
+// 🔥 v7.1.0: Extract affiliate_code from metadata
+// ============================================
+
+function extractAffiliateCode(data: WhopPaymentData | WhopMembershipData): string | null {
+  const possibleLocations = [
+    data.metadata?.affiliate_code,
+    data.checkout_session?.metadata?.affiliate_code,
+    data.custom_metadata?.affiliate_code,
+  ];
+
+  for (const affiliateCode of possibleLocations) {
+    if (affiliateCode && typeof affiliateCode === 'string' && affiliateCode.length > 0) {
+      console.log("✅ Found affiliate_code in metadata:", affiliateCode);
+      return affiliateCode;
     }
   }
 
@@ -1714,6 +1766,10 @@ async function handlePaymentSucceeded(
     const productId = data.product?.id || '';
     const membershipId = data.membership?.id || '';
     const promoCode = extractPromoCode(data);
+    // 🔥 v7.1.0: Attribution fallback — a paid promo code always wins; if the
+    // customer didn't apply one, fall back to the metadata affiliate_code set
+    // by create-whop-checkout (member-referral / affiliate-link attribution).
+    const metadataAffiliateCode = extractAffiliateCode(data);
     const isFirstPayment = data.billing_reason === "subscription_create";
     
     let paymentAmount = data.subtotal || data.total || data.usd_total || 0;
@@ -2398,7 +2454,7 @@ const { error: updateError } = await supabase
         p_whop_membership_id: membershipId,
         p_whop_product_id: productId,
         p_finotaur_user_id: resolvedJournalUserId || null,  // 🔥 v7.5.0: Use resolved user ID
-        p_affiliate_code: promoCode || null,
+        p_affiliate_code: promoCode || metadataAffiliateCode || null,  // 🔥 v7.1.0: fallback to metadata affiliate code
         p_click_id: clickId || null,
       });
 
@@ -2414,6 +2470,38 @@ const { error: updateError } = await supabase
           success: false,
           message: result?.error || 'Subscription activation failed'
         };
+      }
+
+      // 🔥 v7.2.0: Member-refers-friend enrollment — fire-and-forget provisioning
+      // of the new paying member's own referral coupon via create-whop-promo.
+      // Mirrors the payment-failed-notify pattern above: own try/catch,
+      // .catch() on the promise, never awaited into the payment path, gated
+      // by its own kill-switch (member_referral.enabled).
+      if (result?.user_id) {
+        try {
+          const memberReferralConfig = await getMemberReferralConfig(supabase);
+          if (memberReferralConfig.enabled) {
+            void supabase.functions
+              .invoke('create-whop-promo', {
+                body: { mode: 'member', user_id: result.user_id },
+              })
+              .then(({ error: promoError }) => {
+                if (promoError) {
+                  console.warn('[whop-webhook] create-whop-promo (member enrollment) failed:', promoError.message ?? promoError);
+                } else {
+                  console.info('[whop-webhook] create-whop-promo (member enrollment) queued for user:', result.user_id);
+                }
+              })
+              .catch((err) => {
+                console.warn('[whop-webhook] create-whop-promo invoke failed:', err?.message ?? err);
+              });
+          } else {
+            console.info('[whop-webhook] member-referral enrollment skipped — member_referral.enabled=false');
+          }
+        } catch (memberReferralErr) {
+          console.warn('[whop-webhook] member-referral enrollment wiring error (non-fatal):',
+            memberReferralErr instanceof Error ? memberReferralErr.message : String(memberReferralErr));
+        }
       }
 
       // 🔥 Intro Offer — mark the one-time-ever offer as used once activation
@@ -2447,7 +2535,7 @@ const { error: updateError } = await supabase
         p_whop_membership_id: membershipId,
         p_payment_amount: paymentAmount,
         p_is_first_payment: false,
-        p_promo_code: promoCode || null,
+        p_promo_code: promoCode || metadataAffiliateCode || null,  // 🔥 v7.1.0: fallback to metadata affiliate code
       });
 
       if (error) {

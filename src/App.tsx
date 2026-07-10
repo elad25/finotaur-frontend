@@ -173,6 +173,9 @@ const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
+const JournalReportPage = lazy(() => import("@/pages/app/reports/JournalReportPage"));
+const PortfolioReportPage = lazy(() => import("@/pages/app/reports/PortfolioReportPage"));
+const MarketsReportPage = lazy(() => import("@/pages/app/reports/MarketsReportPage"));
 const IntroOffer = lazy(() => import("@/components/onboarding/IntroOffer"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
@@ -230,6 +233,7 @@ const JournalSettings = lazy(async () => {
 const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 const RevengeRadar = lazy(() => import("@/pages/app/journal/RevengeRadar"));
+const ReferFriendPage = lazy(() => import("@/pages/app/journal/refer/ReferFriendPage"));
 // Floor page removed — competition lives in GlobalLeaderboard (Community › Leaderboard tab)
 
 // Mentorship
@@ -530,6 +534,12 @@ function AppContent() {
           <Route index element={<Navigate to="/app/home" replace />} />
           <Route path="home" element={<SuspenseRoute><HomePage /></SuspenseRoute>} />
 
+          {/* FINO Reports — full-screen report surfaces (own chrome, see
+              HIDE_CHROME_ROUTES in ProtectedAppLayout). */}
+          <Route path="reports/journal" element={<SuspenseRoute><JournalReportPage /></SuspenseRoute>} />
+          <Route path="reports/portfolio" element={<SuspenseRoute><PortfolioReportPage /></SuspenseRoute>} />
+          <Route path="reports/markets" element={<SuspenseRoute><MarketsReportPage /></SuspenseRoute>} />
+
           {/* ALL MARKETS */}
           <Route path="all-markets/overview" element={<SuspenseRoute><AdminBetaGate><AllMarketsOverview /></AdminBetaGate></SuspenseRoute>} />
           <Route path="all-markets/chart" element={<SuspenseRoute><AllMarketsChart /></SuspenseRoute>} />
@@ -780,6 +790,7 @@ function AppContent() {
 <Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><JournalFeatureGate feature="shadow"><TradeCompare /></JournalFeatureGate></JournalRoute>} />
 <Route path="journal/revenge-radar" element={<JournalRoute><JournalFeatureGate feature="revenge-radar"><RevengeRadar /></JournalFeatureGate></JournalRoute>} />
+<Route path="journal/refer" element={<JournalRoute><ReferFriendPage /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
         {/* THE FLOOR — Feed / Leaderboard / DM (open to all logged-in users) */}
@@ -841,13 +852,13 @@ function AppContent() {
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
           {/* TRADE COPIER — four-tab page (Connections / Trade Copier / Manage Risk / FINOTAUR Agent) */}
-          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Prop Risk stays beta-only while the copier itself is GA */}
-          <Route path="copy-trade/prop-risk"    element={<BetaRoute><PropRiskPage /></BetaRoute>} />
-          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/prop-risk"    element={<BetaRoute><JournalFeatureGate feature="risk-management"><PropRiskPage /></JournalFeatureGate></BetaRoute>} />
+          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="risk-management"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           <Route path="copy-trade/agent"        element={<Navigate to="/app/copy-trade/install" replace />} />
-          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Legacy aliases — redirect to overview */}
           <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies"   element={<Navigate to="/app/copy-trade/overview" replace />} />
