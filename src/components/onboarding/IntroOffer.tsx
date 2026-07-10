@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Gift, Clock, ArrowRight, Crown } from 'lucide-react';
+import { X, Gift, Clock, ArrowRight, Crown, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 import { supabase } from '@/lib/supabase';
@@ -125,6 +125,7 @@ export default function IntroOffer() {
   const [isMinimized, setIsMinimized] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [pulseGift, setPulseGift] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const expiredHandledRef = useRef(false);
   const shownTrackedRef = useRef(false);
 
@@ -316,6 +317,16 @@ export default function IntroOffer() {
   const handleMinimize = () => setIsMinimized(true);
   const handleReopen = () => setIsMinimized(false);
 
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(INTRO_OFFER.promoCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy code');
+    }
+  };
+
   const handleClaim = async () => {
     await initiateCheckout({
       planName: 'premium',
@@ -458,9 +469,29 @@ export default function IntroOffer() {
               </span>
             </h2>
 
-            <p className="text-zinc-400 text-sm leading-relaxed mb-4 max-w-sm mx-auto">
-              As a new member, this offer is applied automatically at checkout — no code needed.
-            </p>
+            {/* Promo code */}
+            <div className="mb-6">
+              <div
+                className="inline-flex items-center gap-3 px-5 py-3 rounded-xl"
+                style={{ background: 'rgba(201,166,70,0.08)', border: '1px dashed rgba(201,166,70,0.4)' }}
+              >
+                <span className="text-lg font-sans font-semibold tracking-widest" style={{ color: '#F4D97B' }}>
+                  {INTRO_OFFER.promoCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="flex items-center justify-center w-7 h-7 rounded-md transition-colors hover:bg-white/5"
+                  style={{ color: codeCopied ? '#4ade80' : '#C9A646' }}
+                  aria-label="Copy promo code"
+                >
+                  {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-zinc-500 text-xs mt-2">
+                {codeCopied ? 'Copied!' : 'Applied automatically at checkout'}
+              </p>
+            </div>
 
             {/* Price */}
             <div
