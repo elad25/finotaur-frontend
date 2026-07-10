@@ -17,6 +17,7 @@ import {
   Library,
   Zap,
   Send,
+  PieChart,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -228,6 +229,42 @@ export default function HomePage() {
                   {chip.label}
                 </button>
               ))}
+            </div>
+
+            {/* FINO Reports — 3 gold entry points into the full-screen report
+                surfaces (/app/reports/*). Elad explicitly asked for three gold
+                buttons here — an intentional, one-time override of the DS
+                "max one gold CTA per viewport" rule (see DESIGN_SYSTEM.md §8).
+                Visible to every tier; gating (journal access / 60-trade
+                unlock) happens inside each report page, not here. */}
+            <div className="flex flex-wrap gap-2 mt-ds-3">
+              <Button
+                variant="gold"
+                size="compact"
+                showArrow={false}
+                onClick={() => navigate('/app/reports/journal')}
+              >
+                <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                Analyze Journal
+              </Button>
+              <Button
+                variant="gold"
+                size="compact"
+                showArrow={false}
+                onClick={() => navigate('/app/reports/portfolio')}
+              >
+                <PieChart className="h-3.5 w-3.5" aria-hidden="true" />
+                My Portfolio
+              </Button>
+              <Button
+                variant="gold"
+                size="compact"
+                showArrow={false}
+                onClick={() => navigate('/app/reports/markets')}
+              >
+                <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+                Markets
+              </Button>
             </div>
           </div>
         </div>

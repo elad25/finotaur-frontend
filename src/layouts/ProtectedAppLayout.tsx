@@ -60,6 +60,7 @@ const NO_SUBNAV_ROUTES = [
 const HIDE_CHROME_ROUTES = [
   '/app/admin',
   '/app/trading-arena', // Trading Arena: full-screen, renders own top bar
+  '/app/reports',       // FINO Reports: full-screen report shell, renders own close/nav chrome
 ];
 
 export const ProtectedAppLayout = () => {
