@@ -15,11 +15,22 @@
       (function () {
         try {
           var KEY = '__finotaur_chunk_reload_at';
-          function recover() {
+          function recover(badUrl) {
             var last = parseInt(sessionStorage.getItem(KEY) || '0', 10);
             if (Date.now() - last < 12000) return; // reloaded very recently — don't loop
             sessionStorage.setItem(KEY, String(Date.now()));
-            location.reload();
+            // A plain reload cannot evict an `immutable`-cached entry, so if the
+            // failing /assets/*.js URL was poisoned (text/html cached under it),
+            // force-revalidate it first with { cache: 'reload' } — that overwrites
+            // the cache entry with what the edge now returns (the real chunk once
+            // propagation completes, or a clean 404 from functions/assets), which
+            // breaks the poison loop. Then reload. Best-effort; never block.
+            function go() { location.reload(); }
+            if (badUrl && window.fetch) {
+              fetch(badUrl, { cache: 'reload' }).then(go, go);
+            } else {
+              go();
+            }
           }
           // Resource load errors (script/link) don't bubble — listen in the capture phase.
           window.addEventListener('error', function (e) {
@@ -28,11 +39,14 @@
             var tag = (t.tagName || '').toUpperCase();
             var url = t.src || t.href || '';
             if ((tag === 'SCRIPT' || tag === 'LINK') && url.indexOf('/assets/') !== -1) {
-              recover();
+              recover(url);
             }
           }, true);
-          // Vite raises this for failed lazy dynamic imports.
-          window.addEventListener('vite:preloadError', function () { recover(); });
+          // Vite raises this for failed lazy dynamic imports (payload.href = failed URL).
+          window.addEventListener('vite:preloadError', function (e) {
+            var u = (e && e.payload && (e.payload.href || e.payload.url)) || '';
+            recover(u);
+          }, true);
         } catch (_) { /* never block boot */ }
       })();
     </script>
