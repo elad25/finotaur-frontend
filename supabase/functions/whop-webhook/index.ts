@@ -1,6 +1,12 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v7.1.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v7.2.0
 // =====================================================
+//
+// 🔥 v7.2.0 - Member-refers-friend enrollment: after a first-payment success
+// via activate_whop_subscription, fire-and-forget an invoke of create-whop-promo
+// (mode='member') so a new paying member gets their own referral coupon
+// provisioned automatically. Gated by affiliate_config.member_referral.enabled;
+// never blocks or throws into the payment path.
 //
 // 🔥 v7.1.0 - Affiliate attribution fallback via checkout metadata:
 // activate_whop_subscription/handle_whop_payment now fall back to the
@@ -371,6 +377,26 @@ async function getCommissionConfig(supabase: SupabaseClient): Promise<Commission
   } catch (error) {
     console.warn("⚠️ Failed to load commission config, using defaults:", error);
     return DEFAULT_COMMISSION_RATES;
+  }
+}
+
+// ============================================
+// HELPER: Get member-referral config from DB
+// 🔥 v7.2.0: used to gate the post-first-payment enrollment fire-and-forget
+// ============================================
+
+async function getMemberReferralConfig(supabase: SupabaseClient): Promise<{ enabled: boolean }> {
+  try {
+    const { data } = await supabase
+      .from("affiliate_config")
+      .select("config_value")
+      .eq("config_key", "member_referral")
+      .single();
+
+    return { enabled: data?.config_value?.enabled === true };
+  } catch (error) {
+    console.warn("⚠️ Failed to load member_referral config, defaulting to disabled:", error);
+    return { enabled: false };
   }
 }
 
@@ -2332,15 +2358,47 @@ const { error: updateError } = await supabase
       console.log("✅ activate_whop_subscription RPC result:", result);
 
       if (!result?.success) {
-        return { 
-          success: false, 
-          message: result?.error || 'Subscription activation failed' 
+        return {
+          success: false,
+          message: result?.error || 'Subscription activation failed'
         };
       }
 
-      return { 
-        success: true, 
-        message: `Subscription activated: ${result?.plan} (${result?.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}${emailMismatch ? ' [email mismatch resolved]' : ''}` 
+      // 🔥 v7.2.0: Member-refers-friend enrollment — fire-and-forget provisioning
+      // of the new paying member's own referral coupon via create-whop-promo.
+      // Mirrors the payment-failed-notify pattern above: own try/catch,
+      // .catch() on the promise, never awaited into the payment path, gated
+      // by its own kill-switch (member_referral.enabled).
+      if (result?.user_id) {
+        try {
+          const memberReferralConfig = await getMemberReferralConfig(supabase);
+          if (memberReferralConfig.enabled) {
+            void supabase.functions
+              .invoke('create-whop-promo', {
+                body: { mode: 'member', user_id: result.user_id },
+              })
+              .then(({ error: promoError }) => {
+                if (promoError) {
+                  console.warn('[whop-webhook] create-whop-promo (member enrollment) failed:', promoError.message ?? promoError);
+                } else {
+                  console.info('[whop-webhook] create-whop-promo (member enrollment) queued for user:', result.user_id);
+                }
+              })
+              .catch((err) => {
+                console.warn('[whop-webhook] create-whop-promo invoke failed:', err?.message ?? err);
+              });
+          } else {
+            console.info('[whop-webhook] member-referral enrollment skipped — member_referral.enabled=false');
+          }
+        } catch (memberReferralErr) {
+          console.warn('[whop-webhook] member-referral enrollment wiring error (non-fatal):',
+            memberReferralErr instanceof Error ? memberReferralErr.message : String(memberReferralErr));
+        }
+      }
+
+      return {
+        success: true,
+        message: `Subscription activated: ${result?.plan} (${result?.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}${emailMismatch ? ' [email mismatch resolved]' : ''}`
       };
 
     } else {

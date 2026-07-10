@@ -231,6 +231,7 @@ const JournalSettings = lazy(async () => {
 const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 const RevengeRadar = lazy(() => import("@/pages/app/journal/RevengeRadar"));
+const ReferFriendPage = lazy(() => import("@/pages/app/journal/refer/ReferFriendPage"));
 // Floor page removed — competition lives in GlobalLeaderboard (Community › Leaderboard tab)
 
 // Mentorship
@@ -780,6 +781,7 @@ function AppContent() {
 <Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/revenge-radar" element={<JournalRoute><RevengeRadar /></JournalRoute>} />
+<Route path="journal/refer" element={<JournalRoute><ReferFriendPage /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
         {/* THE FLOOR — Feed / Leaderboard / DM (open to all logged-in users) */}
