@@ -46,11 +46,14 @@ export interface Leak {
 }
 
 export interface LeakReport {
-  status: 'ok' | 'collecting';
+  status: 'ok' | 'early' | 'collecting';
   tradesAnalyzed: number;
   minTradesRequired: number;
   verdict: Leak | null;
   leaks: Leak[];
+  /** Top (up to 3) relaxed-gate insights for the 'early' status (10-29 trades).
+   *  Always [] for 'ok' and 'collecting' — existing consumers are unaffected. */
+  earlyInsights: Leak[];
   cleanBill: boolean;
 }
 
@@ -65,6 +68,54 @@ const TOXIC_BUCKET_MIN_TRADES = 5;
 const TOXIC_BUCKET_DEVIATION_THRESHOLD = 150;
 const HIGH_CONFIDENCE_SAMPLE = 10;
 const HIGH_CONFIDENCE_COVERAGE = 15; // families 4, 5
+
+/** "Early Read" mode (10-29 closed trades) — same 7 families, relaxed gates,
+ *  confidence capped at 'medium', top 3 candidates surfaced as earlyInsights. */
+const EARLY_MIN_TRADES = 10;
+const EARLY_MIN_SAMPLE = 3;
+const EARLY_MIN_COST_USD = 50;
+/** loss_shape's 10-loss floor is unreachable under 30 trades in most real
+ *  distributions — relax proportionally rather than disable the family. */
+const EARLY_LOSS_SHAPE_MIN_LOSSES = 5;
+const EARLY_INSIGHTS_CAP = 3;
+
+/** Per-mode gate configuration, threaded through all 7 family builders so
+ *  behaviour for >= 30 trades (FULL_GATES) stays bit-for-bit identical to
+ *  the pre-Early-Read implementation. */
+interface Gates {
+  /** General min-sample floor (families 1, 2, 3, 6; also toxic_bucket's final gate). */
+  minSample: number;
+  /** Bucket-eligibility floor for family 3 (toxic_bucket). */
+  toxicBucketMinTrades: number;
+  /** Min-loss floor for family 7 (loss_shape). */
+  lossShapeMinLosses: number;
+  minCostUsd: number;
+  minShareOfLosses: number | null;
+  /** When true, any 'high' confidence result is downgraded to 'medium'. */
+  capConfidence: boolean;
+}
+
+const FULL_GATES: Gates = {
+  minSample: DEFAULT_MIN_SAMPLE,
+  toxicBucketMinTrades: TOXIC_BUCKET_MIN_TRADES,
+  lossShapeMinLosses: LOSS_SHAPE_MIN_LOSSES,
+  minCostUsd: MIN_COST_USD,
+  minShareOfLosses: MIN_SHARE_OF_LOSSES,
+  capConfidence: false,
+};
+
+const EARLY_GATES: Gates = {
+  minSample: EARLY_MIN_SAMPLE,
+  toxicBucketMinTrades: EARLY_MIN_SAMPLE,
+  lossShapeMinLosses: EARLY_LOSS_SHAPE_MIN_LOSSES,
+  minCostUsd: EARLY_MIN_COST_USD,
+  minShareOfLosses: null, // no share-of-losses gate in early mode
+  capConfidence: true,
+};
+
+function applyConfidenceCap(confidence: Leak['confidence'], gates: Gates): Leak['confidence'] {
+  return gates.capConfidence && confidence === 'high' ? 'medium' : confidence;
+}
 
 /** Same-symbol re-entry / size-escalation constants — mirror revengeDetection.ts,
  *  so family 2 (size_escalation) uses the identical measurement, just looking
@@ -163,10 +214,13 @@ function passesThresholds(
   costUsd: number,
   shareOfLosses: number | null,
   minSample: number,
+  gates: Gates,
 ): boolean {
   if (sampleSize < minSample) return false;
-  if (costUsd < MIN_COST_USD) return false;
-  if (shareOfLosses !== null && shareOfLosses < MIN_SHARE_OF_LOSSES) return false;
+  if (costUsd < gates.minCostUsd) return false;
+  if (gates.minShareOfLosses !== null && shareOfLosses !== null && shareOfLosses < gates.minShareOfLosses) {
+    return false;
+  }
   return true;
 }
 
@@ -177,6 +231,7 @@ function passesThresholds(
 function buildRevengeLeak(
   closedTrades: Trade[],
   grossLosses: number,
+  gates: Gates,
 ): { leak: Leak | null; flaggedIds: Set<string> } {
   const analysis = detectRevenge(closedTrades);
   const flaggedIds = new Set(analysis.flags.keys());
@@ -185,11 +240,14 @@ function buildRevengeLeak(
   const sampleSize = analysis.revengeCount;
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) {
+  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, gates.minSample, gates)) {
     return { leak: null, flaggedIds };
   }
 
-  const confidence: Leak['confidence'] = sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium',
+    gates,
+  );
   const evidence: LeakEvidence[] = [...analysis.flags.values()]
     .slice(0, 20)
     .map((flag) => ({ tradeId: flag.tradeId, note: flag.reasons.join(', ') }));
@@ -219,6 +277,7 @@ function buildSizeEscalationLeak(
   sortedTrades: Trade[],
   revengeFlaggedIds: Set<string>,
   grossLosses: number,
+  gates: Gates,
 ): Leak | null {
   const found: { tradeId: string; excess: number }[] = [];
 
@@ -258,9 +317,12 @@ function buildSizeEscalationLeak(
   const sampleSize = found.length;
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) return null;
+  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, gates.minSample, gates)) return null;
 
-  const confidence: Leak['confidence'] = sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium',
+    gates,
+  );
   const evidence: LeakEvidence[] = [...found]
     .sort((a, b) => b.excess - a.excess)
     .slice(0, 20)
@@ -294,7 +356,7 @@ interface TimeBucket {
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number): Leak | null {
+function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak | null {
   const withDate = closedTrades.filter((t) => t.open_at && safeTime(t.open_at) != null);
   if (withDate.length === 0) return null;
 
@@ -347,7 +409,7 @@ function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number): Leak 
   let worst: TimeBucket | null = null;
   let worstDeviation = 0; // most negative wins
   for (const b of allBuckets) {
-    if (b.count < TOXIC_BUCKET_MIN_TRADES) continue;
+    if (b.count < gates.toxicBucketMinTrades) continue;
     if (b.netPnl >= 0) continue;
     const expected = b.count * overallAvg;
     const deviation = b.netPnl - expected;
@@ -363,9 +425,12 @@ function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number): Leak 
   const sampleSize = worst.count;
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) return null;
+  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, gates.minSample, gates)) return null;
 
-  const confidence: Leak['confidence'] = sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium',
+    gates,
+  );
   const evidence: LeakEvidence[] = worst.tradeIds.slice(0, 20).map((id) => ({ tradeId: id }));
   const windowLabel = worst.kind === 'hour' ? `${worst.label} hour` : worst.label;
 
@@ -387,17 +452,20 @@ function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number): Leak 
 // Reuses buildAggregate()/computePlannedScenarios() target-gap logic.
 // sampleSize = covered-trade count (trades with a recorded target).
 
-function buildEarlyExitLeak(closedTrades: Trade[], grossLosses: number): Leak | null {
+function buildEarlyExitLeak(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak | null {
   const agg = buildAggregate(closedTrades);
   const coveredCount = agg.coverage.withTarget;
-  if (coveredCount < DEFAULT_MIN_SAMPLE) return null;
+  if (coveredCount < gates.minSample) return null;
 
   const costUsd = Math.max(0, agg.totals.target - agg.totals.actual);
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(coveredCount, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) return null;
+  if (!passesThresholds(coveredCount, costUsd, shareOfLosses, gates.minSample, gates)) return null;
 
-  const confidence: Leak['confidence'] = coveredCount >= HIGH_CONFIDENCE_COVERAGE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    coveredCount >= HIGH_CONFIDENCE_COVERAGE ? 'high' : 'medium',
+    gates,
+  );
 
   const gaps: { tradeId: string; gap: number }[] = [];
   for (const t of closedTrades) {
@@ -433,10 +501,10 @@ function buildEarlyExitLeak(closedTrades: Trade[], grossLosses: number): Leak | 
 // Reuses computePlannedScenarios() stop-scenario cost.
 // sampleSize = covered-trade count (trades with a recorded stop).
 
-function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number): Leak | null {
+function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak | null {
   const agg = buildAggregate(closedTrades);
   const coveredCount = agg.coverage.withStop;
-  if (coveredCount < DEFAULT_MIN_SAMPLE) return null;
+  if (coveredCount < gates.minSample) return null;
 
   let costUsd = 0;
   const costs: { tradeId: string; cost: number }[] = [];
@@ -460,9 +528,12 @@ function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number): Leak | 
   }
 
   const shareOfLosses = shareOf(costUsd, grossLosses);
-  if (!passesThresholds(coveredCount, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) return null;
+  if (!passesThresholds(coveredCount, costUsd, shareOfLosses, gates.minSample, gates)) return null;
 
-  const confidence: Leak['confidence'] = coveredCount >= HIGH_CONFIDENCE_COVERAGE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    coveredCount >= HIGH_CONFIDENCE_COVERAGE ? 'high' : 'medium',
+    gates,
+  );
   costs.sort((a, b) => b.cost - a.cost);
   const evidence: LeakEvidence[] = costs
     .slice(0, 20)
@@ -486,7 +557,7 @@ function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number): Leak | 
 // Days with trade count > max(3, 2x median daily count); costUsd = sum of net
 // PnL of the trades beyond the median-count position on those days, when negative.
 
-function buildOvertradingLeak(closedTrades: Trade[], grossLosses: number): Leak | null {
+function buildOvertradingLeak(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak | null {
   const withDate = closedTrades.filter((t) => t.open_at && safeTime(t.open_at) != null);
   const byDay = new Map<string, Trade[]>();
   for (const t of withDate) {
@@ -525,9 +596,12 @@ function buildOvertradingLeak(closedTrades: Trade[], grossLosses: number): Leak 
   const sampleSize = overtradingDays.length;
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, DEFAULT_MIN_SAMPLE)) return null;
+  if (!passesThresholds(sampleSize, costUsd, shareOfLosses, gates.minSample, gates)) return null;
 
-  const confidence: Leak['confidence'] = sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium';
+  const confidence: Leak['confidence'] = applyConfidenceCap(
+    sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium',
+    gates,
+  );
   const evidence: LeakEvidence[] = overtradingDays.map((d) => ({
     tradeId: d.evidenceId,
     note: `${d.day}: ${d.excessCount} trades beyond your usual pace cost ${money(Math.abs(d.excessPnl))}`,
@@ -551,7 +625,7 @@ function buildOvertradingLeak(closedTrades: Trade[], grossLosses: number): Leak 
 // avgLoss > avgWin with >= 10 losses. Confidence capped at 'medium' (it's a
 // shape derived from an average, not a discrete flagged-event list).
 
-function buildLossShapeLeak(closedTrades: Trade[], grossLosses: number): Leak | null {
+function buildLossShapeLeak(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak | null {
   let winSum = 0;
   let winCount = 0;
   let lossSum = 0;
@@ -570,7 +644,7 @@ function buildLossShapeLeak(closedTrades: Trade[], grossLosses: number): Leak | 
     }
   }
 
-  if (lossCount < LOSS_SHAPE_MIN_LOSSES) return null;
+  if (lossCount < gates.lossShapeMinLosses) return null;
 
   const avgWin = winCount > 0 ? winSum / winCount : 0;
   const avgLossAbs = lossSum / lossCount;
@@ -579,9 +653,9 @@ function buildLossShapeLeak(closedTrades: Trade[], grossLosses: number): Leak | 
   const costUsd = (avgLossAbs - avgWin) * lossCount;
   const shareOfLosses = shareOf(costUsd, grossLosses);
 
-  if (!passesThresholds(lossCount, costUsd, shareOfLosses, LOSS_SHAPE_MIN_LOSSES)) return null;
+  if (!passesThresholds(lossCount, costUsd, shareOfLosses, gates.lossShapeMinLosses, gates)) return null;
 
-  const confidence: Leak['confidence'] = 'medium'; // capped — shape, not an event list
+  const confidence: Leak['confidence'] = applyConfidenceCap('medium', gates); // capped — shape, not an event list
   losers.sort((a, b) => a.pnl - b.pnl); // most negative first
   const evidence: LeakEvidence[] = losers.slice(0, 20).map((l) => ({ tradeId: l.tradeId }));
 
@@ -599,6 +673,42 @@ function buildLossShapeLeak(closedTrades: Trade[], grossLosses: number): Leak | 
   };
 }
 
+/** Runs all 7 leak families over one closed-trade set under a given gate
+ *  configuration. Shared by both 'ok' (FULL_GATES) and 'early' (EARLY_GATES)
+ *  report modes so the two never drift out of sync with each other. */
+function runFamilies(closedTrades: Trade[], grossLosses: number, gates: Gates): Leak[] {
+  const candidates: Leak[] = [];
+
+  const { leak: revengeLeak, flaggedIds: revengeFlaggedIds } = buildRevengeLeak(closedTrades, grossLosses, gates);
+  if (revengeLeak) candidates.push(revengeLeak);
+
+  const sizeEscalationLeak = buildSizeEscalationLeak(closedTrades, revengeFlaggedIds, grossLosses, gates);
+  if (sizeEscalationLeak) candidates.push(sizeEscalationLeak);
+
+  const toxicBucketLeak = buildToxicBucketLeak(closedTrades, grossLosses, gates);
+  if (toxicBucketLeak) candidates.push(toxicBucketLeak);
+
+  const earlyExitLeak = buildEarlyExitLeak(closedTrades, grossLosses, gates);
+  if (earlyExitLeak) candidates.push(earlyExitLeak);
+
+  const heldLoserLeak = buildHeldLoserLeak(closedTrades, grossLosses, gates);
+  if (heldLoserLeak) candidates.push(heldLoserLeak);
+
+  const overtradingLeak = buildOvertradingLeak(closedTrades, grossLosses, gates);
+  if (overtradingLeak) candidates.push(overtradingLeak);
+
+  const lossShapeLeak = buildLossShapeLeak(closedTrades, grossLosses, gates);
+  if (lossShapeLeak) candidates.push(lossShapeLeak);
+
+  return candidates;
+}
+
+function rankLeaks(candidates: Leak[]): Leak[] {
+  return [...candidates].sort(
+    (a, b) => b.costUsd * CONFIDENCE_WEIGHT[b.confidence] - a.costUsd * CONFIDENCE_WEIGHT[a.confidence],
+  );
+}
+
 // ─── Public entry point ────────────────────────────────────────────────────────
 
 export function buildLeakReport(trades: Trade[]): LeakReport {
@@ -608,44 +718,34 @@ export function buildLeakReport(trades: Trade[]): LeakReport {
 
   const tradesAnalyzed = closedTrades.length;
 
-  if (tradesAnalyzed < MIN_TRADES) {
+  if (tradesAnalyzed < EARLY_MIN_TRADES) {
     return {
       status: 'collecting',
       tradesAnalyzed,
       minTradesRequired: MIN_TRADES,
       verdict: null,
       leaks: [],
+      earlyInsights: [],
       cleanBill: false,
     };
   }
 
   const grossLosses = computeGrossLosses(closedTrades);
-  const candidates: Leak[] = [];
 
-  const { leak: revengeLeak, flaggedIds: revengeFlaggedIds } = buildRevengeLeak(closedTrades, grossLosses);
-  if (revengeLeak) candidates.push(revengeLeak);
+  if (tradesAnalyzed < MIN_TRADES) {
+    const ranked = rankLeaks(runFamilies(closedTrades, grossLosses, EARLY_GATES));
+    return {
+      status: 'early',
+      tradesAnalyzed,
+      minTradesRequired: MIN_TRADES,
+      verdict: null,
+      leaks: [],
+      earlyInsights: ranked.slice(0, EARLY_INSIGHTS_CAP),
+      cleanBill: false,
+    };
+  }
 
-  const sizeEscalationLeak = buildSizeEscalationLeak(closedTrades, revengeFlaggedIds, grossLosses);
-  if (sizeEscalationLeak) candidates.push(sizeEscalationLeak);
-
-  const toxicBucketLeak = buildToxicBucketLeak(closedTrades, grossLosses);
-  if (toxicBucketLeak) candidates.push(toxicBucketLeak);
-
-  const earlyExitLeak = buildEarlyExitLeak(closedTrades, grossLosses);
-  if (earlyExitLeak) candidates.push(earlyExitLeak);
-
-  const heldLoserLeak = buildHeldLoserLeak(closedTrades, grossLosses);
-  if (heldLoserLeak) candidates.push(heldLoserLeak);
-
-  const overtradingLeak = buildOvertradingLeak(closedTrades, grossLosses);
-  if (overtradingLeak) candidates.push(overtradingLeak);
-
-  const lossShapeLeak = buildLossShapeLeak(closedTrades, grossLosses);
-  if (lossShapeLeak) candidates.push(lossShapeLeak);
-
-  const ranked = [...candidates].sort(
-    (a, b) => b.costUsd * CONFIDENCE_WEIGHT[b.confidence] - a.costUsd * CONFIDENCE_WEIGHT[a.confidence],
-  );
+  const ranked = rankLeaks(runFamilies(closedTrades, grossLosses, FULL_GATES));
 
   return {
     status: 'ok',
@@ -653,6 +753,7 @@ export function buildLeakReport(trades: Trade[]): LeakReport {
     minTradesRequired: MIN_TRADES,
     verdict: ranked[0] ?? null,
     leaks: ranked,
+    earlyInsights: [],
     cleanBill: ranked.length === 0,
   };
 }
