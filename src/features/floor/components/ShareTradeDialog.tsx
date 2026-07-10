@@ -306,7 +306,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          'w-full max-w-2xl',
+          'w-full max-w-6xl',
           'bg-[#111111] border-[0.5px] border-border-ds-subtle',
           'rounded-[16px] p-0 overflow-hidden',
           'max-h-[90vh] flex flex-col',
