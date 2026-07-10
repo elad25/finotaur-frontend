@@ -13,14 +13,13 @@
 //   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
+import { Settings, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
-import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
@@ -39,7 +38,6 @@ export const TopNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { hasBetaAccess } = useAdminAuth();
   const { open: openFino } = useFinoChat();
   const { toggle: toggleDrawer } = useProductDrawer();
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
@@ -250,19 +248,6 @@ export const TopNav = () => {
                   <p className="text-sm font-medium text-white truncate">
                     {user?.email || 'User'}
                   </p>
-                  {hasBetaAccess ? (
-                    <p className="text-xs text-orange-400 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      Beta Access
-                    </p>
-                  ) : platformPlan && platformPlan !== 'free' ? (
-                    <p className="text-xs text-[#C9A646] flex items-center gap-1">
-                      <Crown className="w-3 h-3" />
-                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Plan
-                    </p>
-                  ) : (
-                    <p className="text-xs text-zinc-500">Free Plan</p>
-                  )}
                 </div>
               </DropdownMenuLabel>
 
