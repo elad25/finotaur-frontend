@@ -106,7 +106,14 @@ export default function MarketsReportPage() {
                     </span>
                     <h2 className="text-base font-semibold text-ink-primary">{section.title}</h2>
                   </div>
-                  <p className="text-sm leading-[1.6] text-ink-secondary">{section.text}</p>
+                  <ul className="space-y-2 text-sm leading-[1.6] text-ink-secondary">
+                    {(section.bullets ?? (section.text ? [section.text] : [])).map((bullet, i) => (
+                      <li key={i} className="flex gap-ds-3">
+                        <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-gold-primary" aria-hidden="true" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               );
             })}
