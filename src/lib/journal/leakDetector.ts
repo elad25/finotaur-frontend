@@ -471,11 +471,18 @@ function buildToxicBucketLeak(closedTrades: Trade[], grossLosses: number, gates:
   );
   const evidence: LeakEvidence[] = worst.tradeIds.slice(0, 20).map((id) => ({ tradeId: id }));
   const windowLabel = worst.kind === 'hour' ? `${worst.label} hour` : worst.label;
+  // Title subject must agree with the singular verb "is". Hour labels are
+  // already singular ("09:00-10:00 hour"), but weekday labels are pluralized
+  // ("Fridays"), so phrase those as a singular "<weekday> trading" subject
+  // (e.g. "Your Friday trading is bleeding money"). windowLabel stays plural
+  // for the rule, where "during your Fridays" reads correctly.
+  const titleSubject =
+    worst.kind === 'hour' ? windowLabel : `${worst.label.replace(/s$/, '')} trading`;
 
   return {
     id: 'toxic_bucket',
     family: 'toxic_bucket',
-    title: `Your ${windowLabel} is bleeding money`,
+    title: `Your ${titleSubject} is bleeding money`,
     detail: `${sampleSize} trades in this window net ${money(worst.netPnl)} — ${money(costUsd)} worse than your average trade would predict.`,
     rule: `Stop trading during your ${windowLabel} until you've reviewed why it underperforms.`,
     costUsd,
