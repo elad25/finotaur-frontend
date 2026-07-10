@@ -106,7 +106,11 @@ async function createWhopPromoCode(
     new_users_only: true,               // new users only
     stock: 999999,                      // 🔥 FIX: High number instead of 0!
     unlimited_stock: true,              // unlimited usage
-    number_of_intervals: 0,             // 0 = forever (not time-limited)
+    number_of_intervals: 1,             // 🔴 FIRST PAYMENT ONLY (was 0 = forever).
+                                        // A forever discount permanently cuts the
+                                        // referred cohort's LTGP — locked pricing rule:
+                                        // list price fixed, promos are a first-payment
+                                        // acquisition lever (same semantics as WELCOME).
   };
 
   console.log(`[Whop API] Request body:`, JSON.stringify(requestBody, null, 2));
