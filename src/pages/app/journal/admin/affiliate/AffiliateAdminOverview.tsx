@@ -5,13 +5,10 @@
 // FIXED: Using correct TIER_INFO property names
 // ============================================
 
-import { 
-  Users, 
-  TrendingUp, 
-  MousePointer,
+import {
+  Users,
+  TrendingUp,
   DollarSign,
-  UserCheck,
-  Clock,
   Award,
   RefreshCw,
   Database,
@@ -21,7 +18,11 @@ import { useAffiliateAdminStats } from '@/features/affiliate/hooks/useAffiliateA
 import { TIER_INFO } from '@/features/affiliate/types/affiliate.types';
 import { SkeletonStatRow, SkeletonCard } from '@/components/ds/Skeleton';
 
-export default function AffiliateAdminOverview() {
+interface AffiliateAdminOverviewProps {
+  onReviewApplications?: () => void;
+}
+
+export default function AffiliateAdminOverview({ onReviewApplications }: AffiliateAdminOverviewProps) {
   const { data: stats, isLoading, error, refetch, isRefetching } = useAffiliateAdminStats();
 
   // Loading state
@@ -60,10 +61,10 @@ export default function AffiliateAdminOverview() {
         {/* Empty Stats Preview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Affiliates', icon: Users, value: '0' },
-            { label: 'Pending Applications', icon: Clock, value: '0' },
-            { label: 'Total Clicks', icon: MousePointer, value: '0' },
-            { label: 'Total Signups', icon: UserCheck, value: '0' },
+            { label: 'Active Affiliates', icon: Users, value: '0' },
+            { label: 'Qualified Referrals', icon: TrendingUp, value: '0' },
+            { label: 'Total Commissions', icon: DollarSign, value: '$0' },
+            { label: 'Pending Payouts', icon: DollarSign, value: '$0' },
           ].map((stat, i) => (
             <div key={i} className="bg-[#111111] border border-gray-800 rounded-xl p-5">
               <div className="flex items-start justify-between mb-3">
@@ -106,37 +107,14 @@ export default function AffiliateAdminOverview() {
 
   const statCards = [
     {
-      label: 'Total Affiliates',
-      value: stats.total_affiliates,
-      subValue: `${stats.active_affiliates} active`,
+      label: 'Active Affiliates',
+      value: stats.active_affiliates,
+      subValue: stats.total_affiliates !== stats.active_affiliates
+        ? `${stats.total_affiliates} total`
+        : undefined,
       icon: Users,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
-    },
-    {
-      label: 'Pending Applications',
-      value: stats.pending_applications,
-      subValue: 'Awaiting review',
-      icon: Clock,
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/10',
-      highlight: stats.pending_applications > 0,
-    },
-    {
-      label: 'Total Clicks',
-      value: stats.total_clicks.toLocaleString('en-US'),
-      subValue: `${stats.conversion_rate.toFixed(1)}% conversion`,
-      icon: MousePointer,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
-    },
-    {
-      label: 'Total Signups',
-      value: stats.total_signups.toLocaleString('en-US'),
-      subValue: `${stats.qualification_rate.toFixed(1)}% qualified`,
-      icon: UserCheck,
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/10',
     },
     {
       label: 'Qualified Referrals',
@@ -163,15 +141,9 @@ export default function AffiliateAdminOverview() {
       bgColor: 'bg-orange-500/10',
       highlight: stats.total_pending_payouts_usd > 0,
     },
-    {
-      label: 'Est. Revenue',
-      value: `$${stats.total_revenue_usd.toLocaleString('en-US')}`,
-      subValue: 'From affiliates',
-      icon: TrendingUp,
-      color: 'text-cyan-400',
-      bgColor: 'bg-cyan-500/10',
-    },
   ];
+
+  const hasTopAffiliates = stats.top_affiliates.some((a) => a.total_qualified_referrals > 0);
 
   return (
     <div className="space-y-6">
@@ -188,17 +160,38 @@ export default function AffiliateAdminOverview() {
         </button>
       </div>
 
-      {/* Stats Grid */}
+      {/* Pending Applications Alert */}
+      {stats.pending_applications > 0 && (
+        <div className="flex items-center justify-between gap-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-5 py-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+            <p className="text-sm text-gray-200">
+              <span className="font-semibold text-white">{stats.pending_applications}</span>{' '}
+              {stats.pending_applications === 1 ? 'application' : 'applications'} awaiting review
+            </p>
+          </div>
+          {onReviewApplications && (
+            <button
+              onClick={onReviewApplications}
+              className="text-sm font-semibold text-yellow-400 hover:text-yellow-300 transition-colors whitespace-nowrap"
+            >
+              Review →
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Primary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div 
+            <div
               key={index}
               className={`
                 bg-[#111111] border rounded-xl p-5 transition-all
-                ${stat.highlight 
-                  ? 'border-[#D4AF37]/50 ring-1 ring-[#D4AF37]/20' 
+                ${stat.highlight
+                  ? 'border-[#D4AF37]/50 ring-1 ring-[#D4AF37]/20'
                   : 'border-gray-800 hover:border-gray-700'
                 }
               `}
@@ -215,15 +208,19 @@ export default function AffiliateAdminOverview() {
               </div>
               <p className="text-gray-400 text-sm mb-1">{stat.label}</p>
               <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-              <p className="text-xs text-gray-500">{stat.subValue}</p>
+              {stat.subValue && <p className="text-xs text-gray-500">{stat.subValue}</p>}
             </div>
           );
         })}
       </div>
 
-      {/* Top Affiliates & Recent Applications */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Affiliates */}
+      {/* Funnel Strip */}
+      <p className="text-xs text-gray-500">
+        Clicks {stats.total_clicks.toLocaleString('en-US')} · Signups {stats.total_signups.toLocaleString('en-US')} · Conversion {stats.conversion_rate.toFixed(1)}%
+      </p>
+
+      {/* Top Affiliates */}
+      {hasTopAffiliates && (
         <div className="bg-[#111111] border border-gray-800 rounded-xl p-6">
           <div className="flex items-center gap-2 mb-6">
             <Award className="w-5 h-5 text-[#D4AF37]" />
@@ -231,84 +228,40 @@ export default function AffiliateAdminOverview() {
           </div>
 
           <div className="space-y-3">
-            {stats.top_affiliates.length === 0 ? (
-              <p className="text-gray-500 text-sm text-center py-8">No affiliates yet</p>
-            ) : (
-              stats.top_affiliates.map((affiliate, index) => (
-                <div 
-                  key={affiliate.id}
-                  className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`
-                      w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm
-                      ${index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                        index === 1 ? 'bg-gray-400/20 text-gray-300' :
-                        index === 2 ? 'bg-orange-500/20 text-orange-400' :
-                        'bg-gray-700/20 text-gray-400'}
-                    `}>
-                      #{index + 1}
-                    </div>
-                    <div>
-                      <p className="text-white font-medium text-sm">{affiliate.display_name}</p>
-                      <p className="text-gray-500 text-xs">{affiliate.affiliate_code}</p>
-                    </div>
+            {stats.top_affiliates.map((affiliate, index) => (
+              <div
+                key={affiliate.id}
+                className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`
+                    w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm
+                    ${index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                      index === 1 ? 'bg-gray-400/20 text-gray-300' :
+                      index === 2 ? 'bg-orange-500/20 text-orange-400' :
+                      'bg-gray-700/20 text-gray-400'}
+                  `}>
+                    #{index + 1}
                   </div>
-                  <div className="text-right">
-                    <p className="text-white font-bold text-sm">
-                      {affiliate.total_qualified_referrals} 
-                      <span className="text-green-400 ml-1">qualified</span>
-                    </p>
-                    <p className="text-[#D4AF37] text-xs font-medium">
-                      ${affiliate.total_earnings_usd.toFixed(2)} earned
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Recent Applications */}
-        <div className="bg-[#111111] border border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <Clock className="w-5 h-5 text-blue-400" />
-            <h3 className="text-lg font-bold text-white">Recent Applications</h3>
-          </div>
-
-          <div className="space-y-3">
-            {stats.recent_applications.length === 0 ? (
-              <p className="text-gray-500 text-sm text-center py-8">No applications yet</p>
-            ) : (
-              stats.recent_applications.map((app) => (
-                <div 
-                  key={app.id}
-                  className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg"
-                >
                   <div>
-                    <p className="text-white font-medium text-sm">{app.full_name}</p>
-                    <p className="text-gray-500 text-xs">{app.email}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`
-                      px-2 py-1 rounded-full text-xs font-semibold
-                      ${app.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
-                        app.status === 'approved' ? 'bg-green-500/10 text-green-400' :
-                        app.status === 'rejected' ? 'bg-red-500/10 text-red-400' :
-                        'bg-gray-500/10 text-gray-400'}
-                    `}>
-                      {app.status}
-                    </span>
-                    <span className="text-gray-500 text-xs">
-                      {new Date(app.created_at).toLocaleDateString('en-US')}
-                    </span>
+                    <p className="text-white font-medium text-sm">{affiliate.display_name}</p>
+                    <p className="text-gray-500 text-xs">{affiliate.affiliate_code}</p>
                   </div>
                 </div>
-              ))
-            )}
+                <div className="text-right">
+                  <p className="text-white font-bold text-sm">
+                    {affiliate.total_qualified_referrals}
+                    <span className="text-green-400 ml-1">qualified</span>
+                  </p>
+                  <p className="text-[#D4AF37] text-xs font-medium">
+                    ${affiliate.total_earnings_usd.toFixed(2)} earned
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Tier Information */}
       <div className="bg-[#111111] border border-gray-800 rounded-xl p-6">

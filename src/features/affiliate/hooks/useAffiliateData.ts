@@ -897,7 +897,7 @@ export function useRequestPayout() {
     mutationFn: async (amount: number) => {
       if (!profile?.id) throw new Error('No affiliate profile');
       if (!profile.paypal_email) throw new Error('PayPal email not set');
-      if (amount < 100) throw new Error('Minimum payout is $100');
+      if (amount < 50) throw new Error('Minimum payout is $50');
 
       const { data: confirmedCommissions } = await supabase
         .from('affiliate_commissions')

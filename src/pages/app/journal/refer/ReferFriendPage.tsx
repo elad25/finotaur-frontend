@@ -46,6 +46,8 @@ interface CommissionTotals {
   paid: number;
 }
 
+const PAYOUT_MINIMUM_USD = 50;
+
 const STATUS_BADGE_CLASS: Record<ReferralDisplayStatus, string> = {
   'Pending verification': 'bg-gold-primary/10 text-gold-primary border-gold-border',
   Active: 'bg-white/8 text-ink-primary border-border-ds-default',
@@ -202,7 +204,7 @@ export default function ReferFriendPage() {
   if (state.kind === 'provisioning') {
     return (
       <div className="p-4 lg:p-6">
-        <h1 className="mb-6 text-h1 text-ink-primary">Refer a Friend</h1>
+        <h1 className="mb-6 text-h1 text-ink-primary">The Funded Friend Deal</h1>
         <SectionSpinner label="Setting up your referral code…" />
       </div>
     );
@@ -212,7 +214,7 @@ export default function ReferFriendPage() {
   if (state.kind === 'disabled') {
     return (
       <div className="p-4 lg:p-6 max-w-3xl mx-auto">
-        <h1 className="mb-6 text-h1 text-ink-primary">Refer a Friend</h1>
+        <h1 className="mb-6 text-h1 text-ink-primary">The Funded Friend Deal</h1>
         <Card padding="spacious" className="text-center">
           <p className="text-body text-ink-secondary">Referral program is not available right now.</p>
         </Card>
@@ -224,7 +226,7 @@ export default function ReferFriendPage() {
   if (state.kind === 'locked') {
     return (
       <div className="p-4 lg:p-6 max-w-3xl mx-auto">
-        <h1 className="mb-6 text-h1 text-ink-primary">Refer a Friend</h1>
+        <h1 className="mb-6 text-h1 text-ink-primary">The Funded Friend Deal</h1>
         <Card padding="spacious" className="flex flex-col items-center gap-4 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full border-[0.5px] border-gold-border bg-gold-primary/10">
             <Lock className="h-6 w-6 text-gold-primary" aria-hidden="true" />
@@ -249,7 +251,7 @@ export default function ReferFriendPage() {
   if (state.kind === 'error') {
     return (
       <div className="p-4 lg:p-6 max-w-3xl mx-auto">
-        <h1 className="mb-6 text-h1 text-ink-primary">Refer a Friend</h1>
+        <h1 className="mb-6 text-h1 text-ink-primary">The Funded Friend Deal</h1>
         <Card padding="spacious" className="flex flex-col items-center gap-4 text-center">
           <p className="text-body text-num-negative">{state.message}</p>
           <Button variant="goldOutline" size="sm" showArrow={false} onClick={retry}>
@@ -267,7 +269,10 @@ export default function ReferFriendPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
-      <h1 className="text-h1 text-ink-primary">Refer a Friend</h1>
+      <div>
+        <h1 className="text-h1 text-ink-primary">The Funded Friend Deal</h1>
+        <p className="mt-1 text-small text-ink-secondary">Give 20%, Get 20% for 12 months</p>
+      </div>
 
       {/* Hero — code + share link + terms */}
       <Card padding="spacious" className="flex flex-col gap-4">
@@ -386,14 +391,34 @@ export default function ReferFriendPage() {
       <Card padding="default" className="flex flex-col gap-4">
         <h2 className="text-h4 text-ink-primary">Payout settings</h2>
         <p className="text-small leading-relaxed text-ink-tertiary">
-          Payouts are sent via PayPal once your confirmed earnings reach $100.
+          Payouts are sent via PayPal once your confirmed earnings reach $50.
         </p>
+
+        {/* Progress toward next payout */}
+        <div className="flex flex-col gap-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-gold-primary transition-all duration-base ease-out"
+              style={{ width: `${Math.min(100, (commissions.confirmed / PAYOUT_MINIMUM_USD) * 100)}%` }}
+            />
+          </div>
+          <p className="text-small text-ink-tertiary">
+            {commissions.confirmed >= PAYOUT_MINIMUM_USD
+              ? 'Payout unlocked — sent to your PayPal on the next payout run (5th of the month).'
+              : `$${commissions.confirmed.toFixed(2)} of $${PAYOUT_MINIMUM_USD} until your next payout`}
+          </p>
+        </div>
+
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label htmlFor="referral-paypal-email" className="sr-only">
+            PayPal email for payouts
+          </label>
           <input
+            id="referral-paypal-email"
             type="email"
             value={paypalEmail}
             onChange={(e) => setPaypalEmail(e.target.value)}
-            placeholder="your-paypal@email.com"
+            placeholder="PayPal email for payouts"
             className="flex-1 rounded-[8px] border-[0.5px] border-border-ds-default bg-surface-1 px-4 py-2.5 text-body text-ink-primary placeholder:text-ink-muted focus:border-gold-primary focus:outline-none focus:ring-[3px] focus:ring-gold-primary/15"
           />
           <Button

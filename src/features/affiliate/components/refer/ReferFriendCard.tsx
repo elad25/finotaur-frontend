@@ -102,7 +102,7 @@ export function ReferFriendCard() {
       <Card padding="default" className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <Lock className="h-4 w-4 text-gold-primary" aria-hidden="true" />
-          <h3 className="text-h4 text-ink-primary">Refer a Friend</h3>
+          <h3 className="text-h4 text-ink-primary">The Funded Friend Deal</h3>
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
           Upgrade to get your personal referral code — your friend gets{' '}
@@ -121,7 +121,7 @@ export function ReferFriendCard() {
       <Card padding="default" className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <Gift className="h-4 w-4 text-gold-primary" aria-hidden="true" />
-          <h3 className="text-h4 text-ink-primary">Refer a Friend</h3>
+          <h3 className="text-h4 text-ink-primary">The Funded Friend Deal</h3>
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
           Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off · You earn{' '}
@@ -158,7 +158,7 @@ export function ReferFriendCard() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Gift className="h-4 w-4 text-gold-primary" aria-hidden="true" />
-          <h3 className="text-h4 text-ink-primary">Refer a Friend</h3>
+          <h3 className="text-h4 text-ink-primary">The Funded Friend Deal</h3>
         </div>
         <Link to="/app/journal/refer" className="text-small text-gold-primary hover:underline">
           View details

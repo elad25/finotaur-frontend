@@ -120,7 +120,7 @@ export function ReferralCodeInline() {
       <div className="flex flex-col justify-center gap-3 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-5">
         <div className="flex items-center gap-2.5">
           <Gift className="h-5 w-5 text-[#C9A646]" aria-hidden="true" />
-          <span className="text-base font-medium text-white">Your referral code</span>
+          <span className="text-base font-medium text-white">The Funded Friend Deal</span>
         </div>
         {state.kind === 'error' && <p className="text-xs text-red-400">{state.message}</p>}
         <button
@@ -148,7 +148,7 @@ export function ReferralCodeInline() {
 
   return (
     <div className="flex flex-col justify-center gap-3 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-5">
-      <span className="text-sm text-zinc-400">Your referral code</span>
+      <span className="text-sm text-zinc-400">The Funded Friend Deal</span>
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-md border border-zinc-600/50 bg-zinc-900/60 px-3 py-1.5 font-mono text-base font-semibold tracking-wider text-[#C9A646]">

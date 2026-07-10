@@ -393,7 +393,7 @@ export default function AffiliateSettings() {
           <div className="pt-2 border-t border-white/5">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Minimum Payout</span>
-              <span className="text-white">$100</span>
+              <span className="text-white">$50</span>
             </div>
             <div className="flex justify-between text-sm mt-2">
               <span className="text-gray-400">Payout Date</span>
