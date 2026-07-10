@@ -24,6 +24,8 @@ import { buildLeakReport } from '@/lib/journal/leakDetector';
 import type { Leak, LeakEvidence } from '@/lib/journal/leakDetector';
 import CreditsBanner from '@/components/journal/reports/CreditsBanner';
 import RecapCard from '@/components/journal/reports/RecapCard';
+import LeakCounterfactualChart from '@/components/journal/reports/LeakCounterfactualChart';
+import LeakActionPlan, { AddRuleButton } from '@/components/journal/reports/LeakActionPlan';
 
 // ---------------------------------------------------------------------------
 // Formatting helpers
@@ -86,6 +88,7 @@ function EvidenceRow({ evidence, trade }: EvidenceRowProps) {
   }
 
   const pnl = trade.pnl ?? 0;
+  const hasPositiveDelta = typeof evidence.deltaUsd === 'number' && evidence.deltaUsd > 0;
 
   return (
     <button
@@ -100,7 +103,14 @@ function EvidenceRow({ evidence, trade }: EvidenceRowProps) {
           <span className="text-ink-tertiary truncate">{evidence.note}</span>
         )}
       </div>
-      <Change value={pnl} format="currency" decimals={2} className="shrink-0" />
+      <div className="flex items-center gap-2 shrink-0">
+        {hasPositiveDelta && (
+          <span className="text-[11px] shrink-0" style={{ color: '#34D399' }}>
+            +{fmtCurrencyWhole(evidence.deltaUsd as number)} if followed
+          </span>
+        )}
+        <Change value={pnl} format="currency" decimals={2} className="shrink-0" />
+      </div>
     </button>
   );
 }
@@ -258,11 +268,20 @@ export default function AISummary() {
 
         {/* Your rule */}
         <div className="rounded-[12px] border-[0.5px] border-gold-border bg-surface-1 px-5 py-4">
-          <p className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-1.5">
-            Your rule
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-1.5">
+              Your rule
+            </p>
+            <AddRuleButton rule={verdict.rule} />
+          </div>
           <p className="text-sm text-ink-primary leading-relaxed">{verdict.rule}</p>
         </div>
+
+        {/* Counterfactual chart */}
+        <LeakCounterfactualChart trades={trades} verdict={verdict} />
+
+        {/* AI action plan */}
+        <LeakActionPlan verdict={verdict} />
 
         {/* Evidence */}
         <section>
