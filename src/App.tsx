@@ -842,13 +842,13 @@ function AppContent() {
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
           {/* TRADE COPIER — four-tab page (Connections / Trade Copier / Manage Risk / FINOTAUR Agent) */}
-          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Prop Risk stays beta-only while the copier itself is GA */}
-          <Route path="copy-trade/prop-risk"    element={<BetaRoute><PropRiskPage /></BetaRoute>} />
-          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/prop-risk"    element={<BetaRoute><JournalFeatureGate feature="risk-management"><PropRiskPage /></JournalFeatureGate></BetaRoute>} />
+          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="risk-management"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           <Route path="copy-trade/agent"        element={<Navigate to="/app/copy-trade/install" replace />} />
-          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><JournalFeatureGate feature="trade-copier"><TradeCopier /></JournalFeatureGate></LockedRoute>} />
           {/* Legacy aliases — redirect to overview */}
           <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies"   element={<Navigate to="/app/copy-trade/overview" replace />} />

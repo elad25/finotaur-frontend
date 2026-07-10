@@ -338,11 +338,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // Trade Copier is GA (open to all users, 2026-07-02).
   // Prop Risk stays beta-only — hidden entirely from non-beta users.
   'copy-trade': [
-    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2 },
-    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
-    { label: 'Prop Risk', path: '/app/copy-trade/prop-risk', icon: ShieldCheck, beta: true },
-    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
-    { label: 'FINOTAUR Agent', path: '/app/copy-trade/install', icon: Download },
+    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2, lockedForFree: true },
+    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy, lockedForFree: true },
+    { label: 'Prop Risk', path: '/app/copy-trade/prop-risk', icon: ShieldCheck, beta: true, lockedForFree: true },
+    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield, lockedForFree: true },
+    { label: 'FINOTAUR Agent', path: '/app/copy-trade/install', icon: Download, lockedForFree: true },
   ],
 
   'funding': [
