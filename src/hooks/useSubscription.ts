@@ -7,6 +7,7 @@
 // - The DB function expects 'p_user_id' as the parameter name
 // ================================================
 
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
@@ -153,6 +154,43 @@ function logOnce(key: string, ...args: unknown[]) {
 }
 
 // ================================================
+// FAIL-SAFE CACHE (last confirmed limits per user)
+// ================================================
+// Lets a paid user keep their real tier during a transient subscription-query
+// error (e.g. a PostgREST 503 that outlasts the transport retry) instead of
+// being silently degraded to the free tier. NOT fail-open: the cache only ever
+// holds a value already confirmed for this exact user id, and real entitlement
+// is server-enforced (DB trade-cap trigger, edge-enforced broker) regardless.
+const SUB_CACHE_PREFIX = 'finotaur-sub-cache-';
+const SUB_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h — beyond this a lapsed sub may have changed; fall back to free
+
+function readSubCache(userId: string): TradeLimits | null {
+  if (!userId || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(SUB_CACHE_PREFIX + userId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { limits: TradeLimits; at: number };
+    if (!parsed?.limits || typeof parsed.at !== 'number') return null;
+    if (Date.now() - parsed.at > SUB_CACHE_MAX_AGE_MS) return null;
+    return parsed.limits;
+  } catch {
+    return null;
+  }
+}
+
+function writeSubCache(userId: string, limits: TradeLimits): void {
+  if (!userId || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      SUB_CACHE_PREFIX + userId,
+      JSON.stringify({ limits, at: Date.now() })
+    );
+  } catch {
+    /* quota / private-mode — best-effort only */
+  }
+}
+
+// ================================================
 // QUERY KEYS
 // ================================================
 
@@ -174,8 +212,8 @@ export function useSubscription() {
   
   logOnce(`sub-${effectiveUserId}`, '📊 useSubscription initialized for user:', effectiveUserId);
   
-  const { 
-    data: limits,
+  const {
+    data: liveLimits,
     isLoading,
     error,
   } = useQuery({
@@ -302,7 +340,18 @@ const { data, error: rpcError } = await supabase.rpc('get_user_subscription_stat
     retry: 2,
     retryDelay: 1000,
   });
-  
+
+  // Persist every successful resolution so it can be restored during a later error.
+  useEffect(() => {
+    if (liveLimits) writeSubCache(effectiveUserId, liveLimits);
+  }, [liveLimits, effectiveUserId]);
+
+  // Fail-safe: when the query is in an ERROR state and React Query has no live
+  // data (e.g. a fresh load during a PostgREST outage), fall back to the last
+  // confirmed limits for THIS user so a paid user is not degraded to free.
+  // Confirmed "no subscription" (liveLimits === null, no error) is preserved as-is.
+  const limits = liveLimits ?? (error ? readSubCache(effectiveUserId) : liveLimits);
+
   // Warning state - for BASIC/TRIAL users approaching limit
   const { data: warningState } = useQuery({
     queryKey: subscriptionKeys.warning(effectiveUserId),
