@@ -21,6 +21,7 @@ import {
   XCircle,
   Eye,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { getUserById } from '@/services/adminService';
 import { UserWithStats } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -63,6 +64,7 @@ export default function UserDetails() {
       setUser(data);
     } catch (error) {
       console.error('❌ Error loading user details:', error);
+      toast.error('Failed to load user details');
     } finally {
       setLoading(false);
     }
@@ -128,10 +130,27 @@ export default function UserDetails() {
     return 'N/A';
   }
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] p-8">
         <LoadingSkeleton lines={15} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400 text-sm mb-4">User not found</p>
+          <button
+            onClick={() => navigate('/app/admin/users')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Users
+          </button>
+        </div>
       </div>
     );
   }
@@ -173,6 +192,11 @@ export default function UserDetails() {
               </div>
               <h3 className="text-xl font-bold text-white">{user.display_name || 'No name'}</h3>
               <p className="text-gray-400 text-sm">{user.email}</p>
+              {user.deleted_at && (
+                <span className="mt-2 inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+                  Deleted {formatDate(user.deleted_at)}
+                </span>
+              )}
             </div>
 
             <div className="space-y-3">
