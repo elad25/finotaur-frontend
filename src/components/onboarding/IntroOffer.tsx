@@ -307,6 +307,7 @@ export default function IntroOffer() {
       planName: 'premium',
       billingInterval: 'monthly',
       overrideWhopPlanId: INTRO_OFFER.whopPlanId,
+      discountCode: INTRO_OFFER.promoCode,
     });
   };
 
@@ -439,7 +440,7 @@ export default function IntroOffer() {
             <h2 className="text-2xl font-bold mb-2">
               <span className="text-white">One-time welcome offer: </span>
               <span style={{ background: 'linear-gradient(135deg, #F4D97B, #C9A646)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                30% Off Your First Month
+                30% Off Your First 3 Months
               </span>
             </h2>
 
@@ -454,7 +455,7 @@ export default function IntroOffer() {
             >
               <span className="text-sm text-zinc-500 line-through">${INTRO_OFFER.fullPrice.toFixed(2)}/mo</span>
               <span className="text-lg font-mono font-bold tracking-wide" style={{ color: '#F4D97B' }}>
-                ${INTRO_OFFER.introPrice.toFixed(2)} for month one
+                ${INTRO_OFFER.introPrice.toFixed(2)}/mo for 3 months
               </span>
             </div>
 
@@ -503,7 +504,7 @@ export default function IntroOffer() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  Claim 30% Off — Subscribe Now
+                  Claim 30% Off — 3 Months
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

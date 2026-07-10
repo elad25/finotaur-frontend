@@ -228,7 +228,12 @@ export const INTRO_OFFER = {
   whopProductId: WHOP_PRODUCT_IDS.premium_intro,
   introPrice: 31.49,
   fullPrice: 44.99,
-  discountedCycles: 1,
+  discountedCycles: 3,
+  // Hidden Whop promo — 30% off, applies to the first 2 recurring billing
+  // cycles, restricted to this plan. Combined with the plan's own initial-fee
+  // discount, this gives 3 discounted months total (month 1 = plan initial
+  // fee, months 2-3 = INTRO30 on the first 2 recurring cycles).
+  promoCode: 'INTRO30',
 } as const;
 
 // ============================================

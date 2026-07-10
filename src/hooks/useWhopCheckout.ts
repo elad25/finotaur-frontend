@@ -370,7 +370,10 @@ const checkoutSession = await createCheckoutSession({
           overrideUrl.searchParams.set('metadata[subscription_category]', plan.category);
           overrideUrl.searchParams.set('metadata[billing_interval]', plan.period);
         }
-        if (affiliateCode) overrideUrl.searchParams.set('d', affiliateCode);
+        // Discount code (e.g. a hidden intro promo) takes priority over a stored
+        // affiliate code, mirroring the edge function's discount_code > affiliate_code order.
+        if (discountCode) overrideUrl.searchParams.set('d', discountCode);
+        else if (affiliateCode) overrideUrl.searchParams.set('d', affiliateCode);
         if (clickId) overrideUrl.searchParams.set('ref', clickId);
         overrideUrl.searchParams.set('redirect_url', 'https://www.finotaur.com');
         checkoutUrl = overrideUrl.toString();
