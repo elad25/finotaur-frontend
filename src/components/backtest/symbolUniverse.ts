@@ -28,6 +28,7 @@ export const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
     { ticker: 'GC', label: 'Gold', symbol: 'GC=F' },
     { ticker: 'MGC', label: 'Micro Gold', symbol: 'MGC=F' },
     { ticker: 'SI', label: 'Silver', symbol: 'SI=F' },
+    { ticker: 'SIL', label: 'Micro Silver', symbol: 'SIL=F' },
     { ticker: 'HG', label: 'Copper', symbol: 'HG=F' },
     { ticker: 'CL', label: 'Crude Oil (WTI)', symbol: 'CL=F' },
     { ticker: 'MCL', label: 'Micro Crude Oil', symbol: 'MCL=F' },
