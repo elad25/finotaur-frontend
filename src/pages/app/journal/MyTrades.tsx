@@ -30,7 +30,7 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
-import { TradeShareMenu } from "@/features/floor/components/TradeShareMenu";
+import { ShareTradeDialog, type ShareableTrade } from "@/features/floor/components/ShareTradeDialog";
 import { isManualTrade } from "@/lib/trades/isManualTrade";
 import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
@@ -46,7 +46,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -1336,6 +1336,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [summaryPeriod, setSummaryPeriod] = useState<SummaryPeriod>("day");
   const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(() => new Set());
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [isSettingR, setIsSettingR] = useState(false);
   const [stopInput, setStopInput] = useState('');
   const [savingR, setSavingR] = useState(false);
@@ -1386,6 +1387,23 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
     [selectedTrade],
   );
   useRegisterJournalFinoContext(finoEntity);
+
+  // ── Share-trade dialog — minimal ShareableTrade projection of the open trade ──
+  const shareableTrade: ShareableTrade | null = useMemo(
+    () => selectedTrade ? {
+      id: selectedTrade.id,
+      symbol: selectedTrade.symbol,
+      side: selectedTrade.side,
+      pnl: selectedTrade.pnl,
+      entry_price: selectedTrade.entry_price,
+      exit_price: selectedTrade.exit_price,
+      quantity: selectedTrade.quantity,
+      close_at: selectedTrade.close_at,
+      setup: selectedTrade.setup,
+      broker: selectedTrade.broker,
+    } : null,
+    [selectedTrade],
+  );
 
   // ✅ 3. useEffect
 
@@ -2899,8 +2917,17 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                     {tradeDetailTab === 'chart' && (
                       <div className="flex items-center gap-2">
                         {/* Share is allowed for manual trades too (rooms only —
-                            Global Feed is gated inside TradeShareMenu itself). */}
-                        <TradeShareMenu trade={selectedTrade} />
+                            Global Feed is gated inside ShareTradeDialog itself). */}
+                        <button
+                          type="button"
+                          onClick={() => setShareOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-transparent bg-[#0284c7] px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#0ea5e9]"
+                          aria-label="Share trade"
+                          title="Share trade"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          Share
+                        </button>
                         {/* Fullscreen only makes sense when a real TradeChart is
                             rendered below — manual trades show a placeholder
                             instead (see the isManualTrade check in the CHART TAB
@@ -3214,6 +3241,12 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Share Trade Dialog — mounted at modal-body level (not inside the
+          'chart' tab block) so switching tabs doesn't unmount it. */}
+      {shareableTrade && (
+        <ShareTradeDialog trade={shareableTrade} open={shareOpen} onOpenChange={setShareOpen} />
+      )}
 
       {/* Delete Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
