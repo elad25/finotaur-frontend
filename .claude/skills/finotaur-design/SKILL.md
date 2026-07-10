@@ -239,6 +239,9 @@ COLORS (Tailwind classes)
 SPACING (8px grid — use ds- prefix)
   p-ds-1=4   p-ds-2=8   p-ds-3=12   p-ds-4=16   p-ds-5=24
   p-ds-6=32  p-ds-7=48  p-ds-8=64   p-ds-9=96
+  families: p/m/gap/w/h/size + inset (top-ds-N right-ds-N bottom-ds-N
+  left-ds-N inset-ds-N inset-x-ds-N inset-y-ds-N) + space-x/y-ds-N
+  (prefer gap-ds-N on flex/grid parents in new code)
 
 RADIUS
   rounded-sm     4px   pills, badges

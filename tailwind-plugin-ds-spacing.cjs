@@ -11,8 +11,11 @@
  *   p-ds-N, px-ds-N, py-ds-N, pt-ds-N, pr-ds-N, pb-ds-N, pl-ds-N
  *   m-ds-N, mx-ds-N, my-ds-N, mt-ds-N, mr-ds-N, mb-ds-N, ml-ds-N
  *   gap-ds-N, gap-x-ds-N, gap-y-ds-N
- *   space-x-ds-N, space-y-ds-N
  *   w-ds-N, h-ds-N, size-ds-N
+ *   top-ds-N, right-ds-N, bottom-ds-N, left-ds-N
+ *   inset-ds-N, inset-x-ds-N, inset-y-ds-N
+ *   space-x-ds-N, space-y-ds-N (sibling margins via child selector,
+ *   same selector as Tailwind core space-x/y; no -reverse variant)
  */
 
 const plugin = require('tailwindcss/plugin');
@@ -49,9 +52,22 @@ module.exports = plugin(function ({ matchUtilities }) {
       'gap-ds': (v) => ({ gap: v }),
       'gap-x-ds': (v) => ({ columnGap: v }),
       'gap-y-ds': (v) => ({ rowGap: v }),
+      'space-x-ds': (v) => ({
+        '& > :not([hidden]) ~ :not([hidden])': { marginLeft: v },
+      }),
+      'space-y-ds': (v) => ({
+        '& > :not([hidden]) ~ :not([hidden])': { marginTop: v },
+      }),
       'w-ds': (v) => ({ width: v }),
       'h-ds': (v) => ({ height: v }),
       'size-ds': (v) => ({ width: v, height: v }),
+      'top-ds': (v) => ({ top: v }),
+      'right-ds': (v) => ({ right: v }),
+      'bottom-ds': (v) => ({ bottom: v }),
+      'left-ds': (v) => ({ left: v }),
+      'inset-ds': (v) => ({ inset: v }),
+      'inset-x-ds': (v) => ({ left: v, right: v }),
+      'inset-y-ds': (v) => ({ top: v, bottom: v }),
     },
     { values: SCALE },
   );
