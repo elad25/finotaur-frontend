@@ -32,6 +32,7 @@ import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
 import { useSubscription } from '@/hooks/useSubscription';
 import { CopierDemoBanner } from '@/components/copyTrading/CopierDemoBanner';
 import { CopierDemoOverlay } from '@/components/copyTrading/CopierDemoOverlay';
+import { useJournalPreview } from '@/contexts/JournalPreviewContext';
 
 // ─── Premium Guard ────────────────────────────────────────────
 function PremiumGate() {
@@ -565,6 +566,11 @@ export default function TradeCopier() {
   // Same subscription hook CopierPremiumGate uses, so the adaptive CTA
   // matches its real tier check exactly.
   const { isPremium } = useSubscription();
+  // Free-tier preview (JournalFeatureGate) already shows its own persistent
+  // gold banner above the page — suppress the copier's own demo banner/modal
+  // here to avoid stacking two "this is sample data" notices. Paid users with
+  // zero broker connections (isDemo without isPreview) still see them.
+  const { isPreview } = useJournalPreview();
 
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' | 'install' =
     location.pathname.endsWith('/manage-risk')
@@ -660,19 +666,21 @@ export default function TradeCopier() {
           <>
             {isDemo ? (
               <>
-                <CopierDemoBanner className="rounded-lg" />
+                {!isPreview && <CopierDemoBanner className="rounded-lg" />}
                 <SectionCard>
                   <CopyTradingDashboard />
                 </SectionCard>
                 <SectionCard>
                   <CopierActivitySection />
                 </SectionCard>
-                <CopierDemoOverlay
-                  ctaLabel={isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
-                  onCta={() =>
-                    isPremium ? setShowAddBroker(true) : navigate('/app/upgrade')
-                  }
-                />
+                {!isPreview && (
+                  <CopierDemoOverlay
+                    ctaLabel={isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                    onCta={() =>
+                      isPremium ? setShowAddBroker(true) : navigate('/app/upgrade')
+                    }
+                  />
+                )}
               </>
             ) : hasAnyConnection ? (
               <>
@@ -706,7 +714,7 @@ export default function TradeCopier() {
         {activeTab === 'manage-risk' && (
           isDemo ? (
             <>
-              <CopierDemoBanner className="rounded-lg" />
+              {!isPreview && <CopierDemoBanner className="rounded-lg" />}
               <SectionCard>
                 <div className="text-center py-16 space-y-4">
                   <Shield className="w-12 h-12 text-zinc-700 mx-auto" />
@@ -736,7 +744,7 @@ export default function TradeCopier() {
         {activeTab === 'install' && (
           isDemo ? (
             <>
-              <CopierDemoBanner className="rounded-lg" />
+              {!isPreview && <CopierDemoBanner className="rounded-lg" />}
               <SectionCard>
                 <div className="text-center py-16 space-y-4">
                   <Download className="w-12 h-12 text-zinc-700 mx-auto" />
