@@ -50,7 +50,9 @@ export interface MarketsReportSection {
   key: string;
   title: string;
   /** 2-4 practical bullet points, each at most 3 sentences (Elad's style rule). */
-  bullets: string[];
+  bullets?: string[];
+  /** Legacy paragraph shape (pre-v2 server payloads) — rendered as a single bullet. */
+  text?: string;
 }
 
 export interface MarketsReportPayload {
