@@ -2,7 +2,6 @@
 // ============================================
 // Affiliate Admin - Overview Tab
 // Dashboard statistics and top performers
-// FIXED: Using correct TIER_INFO property names
 // ============================================
 
 import {
@@ -15,7 +14,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useAffiliateAdminStats } from '@/features/affiliate/hooks/useAffiliateAdmin';
-import { TIER_INFO } from '@/features/affiliate/types/affiliate.types';
 import { SkeletonStatRow, SkeletonCard } from '@/components/ds/Skeleton';
 
 interface AffiliateAdminOverviewProps {
@@ -76,30 +74,6 @@ export default function AffiliateAdminOverview({ onReviewApplications }: Affilia
               <p className="text-2xl font-bold text-gray-600">{stat.value}</p>
             </div>
           ))}
-        </div>
-
-        {/* Tier Information */}
-        <div className="bg-[#111111] border border-gray-800 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4">Commission Tiers</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {Object.entries(TIER_INFO).map(([key, tier]) => (
-              <div 
-                key={key}
-                className="p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-white font-semibold">{tier.name}</span>
-                  <span className="text-[#D4AF37] font-bold">
-                    {(tier.commissionRate * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <p className="text-gray-400 text-sm mb-2">{tier.description}</p>
-                <div className="text-xs text-gray-500">
-                  {tier.minClients} - {tier.maxClients || '∞'} qualified clients
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     );
@@ -262,37 +236,6 @@ export default function AffiliateAdminOverview({ onReviewApplications }: Affilia
           </div>
         </div>
       )}
-
-      {/* Tier Information */}
-      <div className="bg-[#111111] border border-gray-800 rounded-xl p-6">
-        <h3 className="text-lg font-bold text-white mb-4">Tier Structure</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Object.entries(TIER_INFO).map(([key, tier]) => (
-            <div 
-              key={key}
-              className="p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-white font-semibold">{tier.name}</span>
-                <span className="text-[#D4AF37] font-bold">
-                  {(tier.commissionRate * 100).toFixed(0)}%
-                </span>
-              </div>
-              <p className="text-gray-400 text-sm mb-2">{tier.description}</p>
-              <div className="text-xs text-gray-500">
-                {tier.minClients} - {tier.maxClients || '∞'} qualified clients
-              </div>
-              {'canRecruitSubAffiliates' in tier && tier.canRecruitSubAffiliates && (
-                <div className="mt-2">
-                  <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-xs rounded-full">
-                    Can recruit sub-affiliates
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
