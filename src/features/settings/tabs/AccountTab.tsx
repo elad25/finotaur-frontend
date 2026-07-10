@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ds/Spinner";
+import { ReferralCodeInline } from "@/features/affiliate/components/refer/ReferralCodeInline";
 import {
   useSettings,
   timezones,
@@ -291,65 +292,74 @@ export const AccountTab = () => {
           )}
         </div>
 
-        <div className="space-y-4">
-          {/* Name — separate First / Last name fields (both view + edit modes) */}
-          <div className="grid gap-1.5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
-              {/* First name */}
-              <div className="grid gap-1.5">
-                <Label className="text-sm text-zinc-300">First name</Label>
-                {editingProfile ? (
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First name"
-                    autoComplete="given-name"
-                    className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-                  />
-                ) : (
-                  <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
-                    {firstName || 'Not set'}
-                  </div>
-                )}
+        <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+          <div className="space-y-4 flex-1 min-w-0">
+            {/* Name — separate First / Last name fields (both view + edit modes) */}
+            <div className="grid gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                {/* First name */}
+                <div className="grid gap-1.5">
+                  <Label className="text-sm text-zinc-300">First name</Label>
+                  {editingProfile ? (
+                    <Input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="First name"
+                      autoComplete="given-name"
+                      className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                    />
+                  ) : (
+                    <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
+                      {firstName || 'Not set'}
+                    </div>
+                  )}
+                </div>
+                {/* Last name */}
+                <div className="grid gap-1.5">
+                  <Label className="text-sm text-zinc-300">Last name</Label>
+                  {editingProfile ? (
+                    <Input
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Last name"
+                      autoComplete="family-name"
+                      className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                    />
+                  ) : (
+                    <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
+                      {lastName || 'Not set'}
+                    </div>
+                  )}
+                </div>
               </div>
-              {/* Last name */}
-              <div className="grid gap-1.5">
-                <Label className="text-sm text-zinc-300">Last name</Label>
-                {editingProfile ? (
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Last name"
-                    autoComplete="family-name"
-                    className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-                  />
-                ) : (
-                  <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
-                    {lastName || 'Not set'}
-                  </div>
-                )}
+              <p className="text-xs text-zinc-500">Shown in the app and community</p>
+            </div>
+
+            {/* Email — Change 2: now shows current email + Change button */}
+            <div className="grid gap-1.5">
+              <Label className="text-sm text-zinc-400">Email Address</Label>
+              <div className="flex items-center gap-2 max-w-md">
+                <div className="flex-1 h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-zinc-300">
+                  {currentEmail}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openEmailDialog}
+                  className="shrink-0 gap-1.5 text-zinc-400 hover:text-[#C9A646] hover:bg-[#C9A646]/10"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Change
+                </Button>
               </div>
             </div>
-            <p className="text-xs text-zinc-500">Shown in the app and community</p>
           </div>
 
-          {/* Email — Change 2: now shows current email + Change button */}
-          <div className="grid gap-1.5">
-            <Label className="text-sm text-zinc-400">Email Address</Label>
-            <div className="flex items-center gap-2 max-w-md">
-              <div className="flex-1 h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-zinc-300">
-                {currentEmail}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openEmailDialog}
-                className="shrink-0 gap-1.5 text-zinc-400 hover:text-[#C9A646] hover:bg-[#C9A646]/10"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Change
-              </Button>
-            </div>
+          {/* Referral code — compact block, right side on desktop. Renders
+              nothing while unresolved / feature-disabled, so no empty
+              wrapper chrome (border/padding) is applied here. */}
+          <div className="w-full lg:w-72 lg:shrink-0">
+            <ReferralCodeInline />
           </div>
         </div>
       </Card>

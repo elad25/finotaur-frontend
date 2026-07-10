@@ -125,7 +125,9 @@ BEGIN
   -- revenue.
   SELECT * INTO v_profile FROM profiles WHERE id = p_user_id;
 
-  IF v_profile IS NULL THEN
+  -- NOTE: use FOUND, not "record IS NULL" — a plpgsql record with any NULL
+  -- field is neither IS NULL nor IS NOT NULL, which silently breaks both.
+  IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'not_paying');
   END IF;
 
@@ -143,7 +145,7 @@ BEGIN
   -- 3) Idempotent: return the existing row if this user already has one.
   SELECT * INTO v_existing FROM affiliates WHERE user_id = p_user_id;
 
-  IF v_existing IS NOT NULL THEN
+  IF FOUND THEN
     RETURN jsonb_build_object(
       'ok', true,
       'existing', true,
