@@ -1,140 +1,40 @@
 /**
  * JournalReportsBreakdowns — detailed performance breakdowns.
- * Tabs: Day & Time | Risk | Tags
+ * Tabs: Day & Time | Risk | Tags | Asset Class | Symbols | Strategy |
+ *       Duration | Price Range | Month | Combinations (flexible cross-analysis)
+ *
+ * All grouping / matrix / summary-card logic lives in
+ * `@/lib/journal/breakdownDimensions.ts` (pure, unit-tested). This file is
+ * presentational only.
  */
 
 import React, { useMemo, useState } from 'react';
-import dayjs from 'dayjs';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
 import { Card } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
-import { getAssetClass } from '@/utils/tradeCalculations';
 import type { BreakdownRow } from '@/lib/journal/breakdownKit';
-import { emptyRow, accumulateTrade } from '@/lib/journal/breakdownKit';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-// Reorder Mon-Sun for display (trading week)
-const TRADING_DAYS = [1, 2, 3, 4, 5, 6, 0]; // Mon=1 … Sun=0
-
-const R_BUCKETS: { label: string; min: number; max: number }[] = [
-  { label: '< −2R',    min: -Infinity, max: -2 },
-  { label: '−2R to −1R', min: -2,       max: -1 },
-  { label: '−1R to 0R',  min: -1,       max: 0  },
-  { label: '0R to 1R',   min: 0,        max: 1  },
-  { label: '1R to 2R',   min: 1,        max: 2  },
-  { label: '> 2R',        min: 2,        max: Infinity },
-];
-
-// ---------------------------------------------------------------------------
-// Grouping helpers
-// ---------------------------------------------------------------------------
-
-function groupByDow(trades: Trade[]): BreakdownRow[] {
-  const map = new Map<number, BreakdownRow>(
-    TRADING_DAYS.map(d => [d, emptyRow(DAY_NAMES[d])])
-  );
-  for (const t of trades) {
-    const dow = dayjs(t.open_at).day(); // 0=Sun..6=Sat
-    const row = map.get(dow);
-    if (row) accumulateTrade(row, t);
-  }
-  return TRADING_DAYS.map(d => map.get(d)!);
-}
-
-function groupByHour(trades: Trade[]): BreakdownRow[] {
-  const map = new Map<number, BreakdownRow>();
-  for (const t of trades) {
-    const h = dayjs(t.open_at).hour();
-    if (!map.has(h)) map.set(h, emptyRow(`${String(h).padStart(2, '0')}:00`));
-    accumulateTrade(map.get(h)!, t);
-  }
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([, row]) => row);
-}
-
-function groupBySession(trades: Trade[]): BreakdownRow[] {
-  const map = new Map<string, BreakdownRow>();
-  for (const t of trades) {
-    const key = t.session ?? '(unset)';
-    if (!map.has(key)) map.set(key, emptyRow(key));
-    accumulateTrade(map.get(key)!, t);
-  }
-  return Array.from(map.values()).sort((a, b) => b.netPnl - a.netPnl);
-}
-
-function groupByRBucket(trades: Trade[]): BreakdownRow[] {
-  const rows = R_BUCKETS.map(b => emptyRow(b.label));
-  for (const t of trades) {
-    const r = t.actual_user_r ?? t.actual_r ?? t.rr ?? 0;
-    const idx = R_BUCKETS.findIndex(b => r >= b.min && r < b.max);
-    if (idx !== -1) accumulateTrade(rows[idx], t);
-  }
-  return rows;
-}
-
-function groupByRiskUsd(trades: Trade[]): BreakdownRow[] {
-  const RISK_BUCKETS = [
-    { label: '< $50',      min: 0,   max: 50   },
-    { label: '$50–$100',   min: 50,  max: 100  },
-    { label: '$100–$200',  min: 100, max: 200  },
-    { label: '$200–$500',  min: 200, max: 500  },
-    { label: '> $500',     min: 500, max: Infinity },
-  ];
-  const rows = RISK_BUCKETS.map(b => emptyRow(b.label));
-  const withRisk = trades.filter(t => t.risk_usd != null && t.risk_usd > 0);
-  for (const t of withRisk) {
-    const risk = t.risk_usd!;
-    const idx = RISK_BUCKETS.findIndex(b => risk >= b.min && risk < b.max);
-    if (idx !== -1) accumulateTrade(rows[idx], t);
-  }
-  return rows;
-}
-
-function groupByTag(trades: Trade[]): BreakdownRow[] {
-  const map = new Map<string, BreakdownRow>();
-  for (const t of trades) {
-    const tradeTags = t.tags && t.tags.length > 0 ? t.tags : ['(untagged)'];
-    for (const tag of tradeTags) {
-      if (!map.has(tag)) map.set(tag, emptyRow(tag));
-      accumulateTrade(map.get(tag)!, t);
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.netPnl - a.netPnl);
-}
-
-/** Normalize raw asset-class strings to title-case display labels. */
-function normalizeAssetClassLabel(raw: string): string {
-  switch (raw.toLowerCase().trim()) {
-    case 'futures': return 'Futures';
-    case 'stocks':  return 'Stocks';
-    case 'options': return 'Options';
-    case 'crypto':  return 'Crypto';
-    case 'forex':   return 'Forex';
-    default: {
-      // Title-case fallback for unknown values
-      const s = raw.trim();
-      return s.length === 0 ? '(unknown)' : s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-    }
-  }
-}
-
-function groupByAssetClass(trades: Trade[]): BreakdownRow[] {
-  const map = new Map<string, BreakdownRow>();
-  for (const t of trades) {
-    const raw = t.asset_class ?? getAssetClass(t.symbol ?? '');
-    const label = normalizeAssetClassLabel(raw);
-    if (!map.has(label)) map.set(label, emptyRow(label));
-    accumulateTrade(map.get(label)!, t);
-  }
-  return Array.from(map.values()).sort((a, b) => b.count - a.count);
-}
+import {
+  groupByDow,
+  groupByHour,
+  groupBySession,
+  groupByRBucket,
+  groupByRiskUsd,
+  groupByTag,
+  groupByAssetClass,
+  groupBySymbol,
+  groupByStrategy,
+  groupByDuration,
+  groupByPriceRange,
+  groupByMonth,
+  topBottomByNetPnl,
+  computeDimensionSummary,
+  buildMatrix,
+  MATRIX_DIMENSIONS,
+  type DimAccessor,
+  type DimensionSummary,
+} from '@/lib/journal/breakdownDimensions';
 
 // ---------------------------------------------------------------------------
 // Sort types
@@ -267,68 +167,94 @@ const BreakdownTable: React.FC<BreakdownTableProps> = ({
 };
 
 // ---------------------------------------------------------------------------
-// Combination matrix helpers
+// DimensionSummaryCards — Best / Worst / Most Active, TradeZella-style
 // ---------------------------------------------------------------------------
 
-/** Dimension accessor type for matrix rows/cols */
-type DimAccessor = (t: Trade) => string;
-
-const dimStrategy: DimAccessor = t => t.strategy_name?.trim() || '(unset)';
-const dimSession:  DimAccessor = t => t.session?.trim()       || '(unset)';
-const dimAsset:    DimAccessor = t => normalizeAssetClassLabel(t.asset_class ?? getAssetClass(t.symbol ?? ''));
-
-interface MatrixResult {
-  rowKeys: string[];
-  colKeys: string[];
-  cells: Map<string, BreakdownRow>;
-  bestCell: { rowKey: string; colKey: string; row: BreakdownRow } | null;
+interface StatCardProps {
+  label: string;
+  row: BreakdownRow | null;
+  metric?: 'netPnl' | 'count';
 }
 
-function buildMatrix(
-  trades: Trade[],
-  rowAccessor: DimAccessor,
-  colAccessor: DimAccessor,
-): MatrixResult {
-  const cells = new Map<string, BreakdownRow>();
-  const rowTotals = new Map<string, number>(); // rowKey → netPnl, for sorting
-  const colSet = new Set<string>();
+const StatCard: React.FC<StatCardProps> = ({ label, row, metric = 'netPnl' }) => (
+  <Card padding="compact" className="flex flex-col gap-1 min-w-0">
+    <span className="text-[11px] font-medium tracking-[0.8px] uppercase text-ink-tertiary">
+      {label}
+    </span>
+    {row ? (
+      <>
+        <span className="text-sm font-semibold text-ink-primary truncate">{row.label}</span>
+        <span className="text-xs text-ink-secondary">
+          {metric === 'count' ? (
+            `${row.count} trade${row.count === 1 ? '' : 's'}`
+          ) : (
+            <Change value={row.netPnl} format="currency" decimals={2} showSign />
+          )}
+        </span>
+      </>
+    ) : (
+      <span className="text-xs text-ink-tertiary">Not enough data (min 3 trades)</span>
+    )}
+  </Card>
+);
 
-  for (const t of trades) {
-    const rk = rowAccessor(t);
-    const ck = colAccessor(t);
-    const key = `${rk}||${ck}`;
-    if (!cells.has(key)) cells.set(key, emptyRow(rk));
-    accumulateTrade(cells.get(key)!, t);
-    rowTotals.set(rk, (rowTotals.get(rk) ?? 0) + (t.pnl ?? 0));
-    colSet.add(ck);
-  }
+const DimensionSummaryCards: React.FC<{ summary: DimensionSummary }> = ({ summary }) => (
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+    <StatCard label="Best" row={summary.best} />
+    <StatCard label="Worst" row={summary.worst} />
+    <StatCard label="Most Active" row={summary.mostActive} metric="count" />
+  </div>
+);
 
-  // Sort rows by total netPnl desc, keep '(unset)' last
-  const rowKeys = Array.from(rowTotals.keys()).sort((a, b) => {
-    if (a === '(unset)') return 1;
-    if (b === '(unset)') return -1;
-    return (rowTotals.get(b) ?? 0) - (rowTotals.get(a) ?? 0);
-  });
+// ---------------------------------------------------------------------------
+// Loading skeleton
+// ---------------------------------------------------------------------------
 
-  // Sort cols alphabetically, keep '(unset)' last
-  const colKeys = Array.from(colSet).sort((a, b) => {
-    if (a === '(unset)') return 1;
-    if (b === '(unset)') return -1;
-    return a.localeCompare(b);
-  });
+const Skeleton: React.FC = () => (
+  <div className="space-y-2 animate-pulse">
+    {Array.from({ length: 6 }).map((_, i) => (
+      <div key={i} className="h-8 rounded bg-white/[0.04]" />
+    ))}
+  </div>
+);
 
-  // Find best cell: highest netPnl among cells with count >= 3
-  let bestCell: MatrixResult['bestCell'] = null;
-  for (const [key, row] of cells.entries()) {
-    if (row.count < 3) continue;
-    if (bestCell === null || row.netPnl > bestCell.row.netPnl) {
-      const [rowKey, colKey] = key.split('||');
-      bestCell = { rowKey, colKey, row };
-    }
-  }
+// ---------------------------------------------------------------------------
+// DimensionSection — Card + summary cards + table, one shared shape for
+// every "By X" panel so each tab isn't hand-rolling the same boilerplate.
+// ---------------------------------------------------------------------------
 
-  return { rowKeys, colKeys, cells, bestCell };
+interface DimensionSectionProps {
+  title: string;
+  rows: BreakdownRow[];
+  isLoading: boolean;
+  showAvgR?: boolean;
+  defaultSort?: SortState;
+  /** Extra content rendered below the table (e.g. Top10/Bottom10 quick views). */
+  footer?: React.ReactNode;
 }
+
+const DimensionSection: React.FC<DimensionSectionProps> = ({
+  title, rows, isLoading, showAvgR = true, defaultSort, footer,
+}) => {
+  const summary = useMemo(() => computeDimensionSummary(rows), [rows]);
+
+  return (
+    <Card padding="compact">
+      <h3 className="text-sm font-semibold text-ink-primary mb-4">{title}</h3>
+      {isLoading ? (
+        <Skeleton />
+      ) : rows.length === 0 ? (
+        <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
+      ) : (
+        <>
+          <DimensionSummaryCards summary={summary} />
+          <BreakdownTable rows={rows} showAvgR={showAvgR} defaultSort={defaultSort} />
+          {footer}
+        </>
+      )}
+    </Card>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // CombinationMatrix sub-component
@@ -349,7 +275,7 @@ const CombinationMatrix: React.FC<CombinationMatrixProps> = ({
   rowLabel,
   colLabel,
 }) => {
-  const { rowKeys, colKeys, cells, bestCell } = useMemo(
+  const { rowKeys, colKeys, cells, bestCell, capped } = useMemo(
     () => buildMatrix(trades, rowAccessor, colAccessor),
     [trades, rowAccessor, colAccessor],
   );
@@ -364,6 +290,11 @@ const CombinationMatrix: React.FC<CombinationMatrixProps> = ({
 
   return (
     <div>
+      {capped && (
+        <div className="mb-3 px-1 text-xs text-ink-tertiary">
+          This matrix is large — each axis is capped to the top 20 groups by trade count.
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -454,19 +385,10 @@ const CombinationMatrix: React.FC<CombinationMatrixProps> = ({
 // Tab keys
 // ---------------------------------------------------------------------------
 
-type TabKey = 'dayTime' | 'risk' | 'tags' | 'assetClass' | 'combos';
-
-// ---------------------------------------------------------------------------
-// Loading skeleton
-// ---------------------------------------------------------------------------
-
-const Skeleton: React.FC = () => (
-  <div className="space-y-2 animate-pulse">
-    {Array.from({ length: 6 }).map((_, i) => (
-      <div key={i} className="h-8 rounded bg-white/[0.04]" />
-    ))}
-  </div>
-);
+type TabKey =
+  | 'dayTime' | 'risk' | 'tags' | 'assetClass'
+  | 'symbols' | 'strategy' | 'duration' | 'priceRange' | 'month'
+  | 'combos';
 
 // ---------------------------------------------------------------------------
 // Main page component
@@ -483,12 +405,24 @@ export default function JournalReportsBreakdowns() {
   const riskUsdRows    = useMemo(() => groupByRiskUsd(trades),     [trades]);
   const tagRows        = useMemo(() => groupByTag(trades),         [trades]);
   const assetClassRows = useMemo(() => groupByAssetClass(trades),  [trades]);
+  const symbolRows     = useMemo(() => groupBySymbol(trades),      [trades]);
+  const strategyRows   = useMemo(() => groupByStrategy(trades),    [trades]);
+  const durationRows   = useMemo(() => groupByDuration(trades),    [trades]);
+  const priceRangeRows = useMemo(() => groupByPriceRange(trades),  [trades]);
+  const monthRows      = useMemo(() => groupByMonth(trades),       [trades]);
+
+  const symbolTopBottom = useMemo(() => topBottomByNetPnl(symbolRows, 10), [symbolRows]);
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'dayTime',    label: 'Day & Time'   },
     { key: 'risk',       label: 'Risk'         },
     { key: 'tags',       label: 'Tags'         },
     { key: 'assetClass', label: 'Asset Class'  },
+    { key: 'symbols',    label: 'Symbols'      },
+    { key: 'strategy',   label: 'Strategy'     },
+    { key: 'duration',   label: 'Duration'     },
+    { key: 'priceRange', label: 'Price Range'  },
+    { key: 'month',      label: 'Month'        },
     { key: 'combos',     label: 'Combinations' },
   ];
 
@@ -500,7 +434,7 @@ export default function JournalReportsBreakdowns() {
       <div>
         <h2 className="text-2xl font-semibold text-ink-primary">Breakdowns</h2>
         <p className="text-sm text-ink-tertiary mt-1">
-          Slice your trading performance by time, risk, and tags.
+          Slice your trading performance by time, risk, symbols, strategy, and more.
         </p>
       </div>
 
@@ -524,44 +458,24 @@ export default function JournalReportsBreakdowns() {
       {/* DAY & TIME tab */}
       {activeTab === 'dayTime' && (
         <div className="space-y-6">
-          <Card padding="compact">
-            <h3 className="text-sm font-semibold text-ink-primary mb-4">By Day of Week</h3>
-            {isLoading ? <Skeleton /> : <BreakdownTable rows={dowRows} />}
-          </Card>
-
-          <Card padding="compact">
-            <h3 className="text-sm font-semibold text-ink-primary mb-4">By Hour of Day</h3>
-            {isLoading ? <Skeleton /> : (
-              hourRows.length === 0
-                ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
-                : <BreakdownTable rows={hourRows} />
-            )}
-          </Card>
-
-          <Card padding="compact">
-            <h3 className="text-sm font-semibold text-ink-primary mb-4">By Session</h3>
-            {isLoading ? <Skeleton /> : (
-              sessionRows.length === 0
-                ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
-                : <BreakdownTable rows={sessionRows} />
-            )}
-          </Card>
+          <DimensionSection title="By Day of Week" rows={dowRows} isLoading={isLoading} />
+          <DimensionSection title="By Hour of Day" rows={hourRows} isLoading={isLoading} />
+          <DimensionSection title="By Session" rows={sessionRows} isLoading={isLoading} />
         </div>
       )}
 
       {/* RISK tab */}
       {activeTab === 'risk' && (
         <div className="space-y-6">
-          <Card padding="compact">
-            <h3 className="text-sm font-semibold text-ink-primary mb-4">By R-Multiple Bucket</h3>
-            {isLoading ? <Skeleton /> : <BreakdownTable rows={rRows} showAvgR={false} />}
-          </Card>
+          <DimensionSection
+            title="By R-Multiple Bucket"
+            rows={rRows}
+            isLoading={isLoading}
+            showAvgR={false}
+          />
 
           {hasRiskUsd && (
-            <Card padding="compact">
-              <h3 className="text-sm font-semibold text-ink-primary mb-4">By Risk Size (USD)</h3>
-              {isLoading ? <Skeleton /> : <BreakdownTable rows={riskUsdRows} />}
-            </Card>
+            <DimensionSection title="By Risk Size (USD)" rows={riskUsdRows} isLoading={isLoading} />
           )}
 
           {!hasRiskUsd && !isLoading && (
@@ -576,26 +490,75 @@ export default function JournalReportsBreakdowns() {
 
       {/* TAGS tab */}
       {activeTab === 'tags' && (
-        <Card padding="compact">
-          <h3 className="text-sm font-semibold text-ink-primary mb-4">By Tag</h3>
-          {isLoading ? <Skeleton /> : (
-            tagRows.length === 0
-              ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
-              : <BreakdownTable rows={tagRows} />
-          )}
-        </Card>
+        <DimensionSection title="By Tag" rows={tagRows} isLoading={isLoading} />
       )}
 
       {/* ASSET CLASS tab */}
       {activeTab === 'assetClass' && (
-        <Card padding="compact">
-          <h3 className="text-sm font-semibold text-ink-primary mb-4">By Asset Class</h3>
-          {isLoading ? <Skeleton /> : (
-            assetClassRows.length === 0
-              ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
-              : <BreakdownTable rows={assetClassRows} defaultSort={{ col: 'count', dir: 'desc' }} />
-          )}
-        </Card>
+        <DimensionSection
+          title="By Asset Class"
+          rows={assetClassRows}
+          isLoading={isLoading}
+          defaultSort={{ col: 'count', dir: 'desc' }}
+        />
+      )}
+
+      {/* SYMBOLS tab */}
+      {activeTab === 'symbols' && (
+        <DimensionSection
+          title="By Symbol"
+          rows={symbolRows}
+          isLoading={isLoading}
+          footer={
+            !isLoading && symbolRows.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+                <div>
+                  <h4 className="text-xs font-semibold text-ink-secondary mb-2">Top 10 by Net P&L</h4>
+                  <BreakdownTable rows={symbolTopBottom.top} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-ink-secondary mb-2">Bottom 10 by Net P&L</h4>
+                  <BreakdownTable rows={symbolTopBottom.bottom} />
+                </div>
+              </div>
+            )
+          }
+        />
+      )}
+
+      {/* STRATEGY tab */}
+      {activeTab === 'strategy' && (
+        <DimensionSection title="By Strategy" rows={strategyRows} isLoading={isLoading} />
+      )}
+
+      {/* DURATION tab */}
+      {activeTab === 'duration' && (
+        <DimensionSection
+          title="By Trade Duration"
+          rows={durationRows}
+          isLoading={isLoading}
+          defaultSort={{ col: 'label', dir: 'asc' }}
+        />
+      )}
+
+      {/* PRICE RANGE tab */}
+      {activeTab === 'priceRange' && (
+        <DimensionSection
+          title="By Price Range"
+          rows={priceRangeRows}
+          isLoading={isLoading}
+          defaultSort={{ col: 'label', dir: 'asc' }}
+        />
+      )}
+
+      {/* MONTH tab */}
+      {activeTab === 'month' && (
+        <DimensionSection
+          title="By Month"
+          rows={monthRows}
+          isLoading={isLoading}
+          defaultSort={{ col: 'label', dir: 'asc' }}
+        />
       )}
 
       {/* COMBINATIONS tab */}
@@ -607,33 +570,61 @@ export default function JournalReportsBreakdowns() {
 }
 
 // ---------------------------------------------------------------------------
-// CombosPanel — inner component so it can hold its own pairing state
+// CombosPanel — flexible Primary × Secondary cross-analysis, with the 3
+// original fixed combos kept as one-click presets.
 // ---------------------------------------------------------------------------
 
-type ComboKey = 'strategy-session' | 'asset-session' | 'strategy-asset';
-
-const COMBO_OPTIONS: { key: ComboKey; label: string; rowDim: DimAccessor; colDim: DimAccessor; rowLabel: string; colLabel: string }[] = [
-  { key: 'strategy-session', label: 'Strategy × Session', rowDim: dimStrategy, colDim: dimSession,  rowLabel: 'Strategy', colLabel: 'Session'  },
-  { key: 'asset-session',    label: 'Asset × Session',    rowDim: dimAsset,    colDim: dimSession,  rowLabel: 'Asset',    colLabel: 'Session'  },
-  { key: 'strategy-asset',   label: 'Strategy × Asset',   rowDim: dimStrategy, colDim: dimAsset,    rowLabel: 'Strategy', colLabel: 'Asset'    },
+const PRESETS: { key: string; label: string; rowId: string; colId: string }[] = [
+  { key: 'strategy-session', label: 'Strategy × Session', rowId: 'strategy',   colId: 'session'    },
+  { key: 'asset-session',    label: 'Asset × Session',    rowId: 'assetClass', colId: 'session'    },
+  { key: 'strategy-asset',   label: 'Strategy × Asset',   rowId: 'strategy',   colId: 'assetClass' },
 ];
 
-const CombosPanel: React.FC<{ trades: Trade[]; isLoading: boolean }> = ({ trades, isLoading }) => {
-  const [pairing, setPairing] = useState<ComboKey>('strategy-session');
+const DEFAULT_ROW_DIM = 'strategy';
+const DEFAULT_COL_DIM = 'session';
 
-  const selected = COMBO_OPTIONS.find(o => o.key === pairing)!;
+interface DimensionSelectProps {
+  label: string;
+  value: string;
+  onChange: (id: string) => void;
+}
+
+const DimensionSelect: React.FC<DimensionSelectProps> = ({ label, value, onChange }) => (
+  <label className="flex items-center gap-2 text-xs text-ink-tertiary">
+    {label}
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="rounded-md bg-white/[0.045] border border-white/[0.08] px-2.5 py-1.5 text-xs text-ink-secondary focus:outline-none focus:border-[#C9A646]/60 cursor-pointer"
+    >
+      {MATRIX_DIMENSIONS.map(d => (
+        <option key={d.id} value={d.id}>{d.label}</option>
+      ))}
+    </select>
+  </label>
+);
+
+const CombosPanel: React.FC<{ trades: Trade[]; isLoading: boolean }> = ({ trades, isLoading }) => {
+  const [rowDimId, setRowDimId] = useState(DEFAULT_ROW_DIM);
+  const [colDimId, setColDimId] = useState(DEFAULT_COL_DIM);
+
+  const rowDef = MATRIX_DIMENSIONS.find(d => d.id === rowDimId) ?? MATRIX_DIMENSIONS[0];
+  const colDef = MATRIX_DIMENSIONS.find(d => d.id === colDimId) ?? MATRIX_DIMENSIONS[0];
+
+  const rowAccessor = useMemo(() => rowDef.getAccessor(trades), [rowDef, trades]);
+  const colAccessor = useMemo(() => colDef.getAccessor(trades), [colDef, trades]);
 
   return (
     <Card padding="compact">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h3 className="text-sm font-semibold text-ink-primary">Combination Matrix</h3>
+        <h3 className="text-sm font-semibold text-ink-primary">Cross-Analysis Matrix</h3>
         <div className="flex gap-1.5 flex-wrap">
-          {COMBO_OPTIONS.map(opt => (
+          {PRESETS.map(opt => (
             <button
               key={opt.key}
-              onClick={() => setPairing(opt.key)}
+              onClick={() => { setRowDimId(opt.rowId); setColDimId(opt.colId); }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                pairing === opt.key
+                rowDimId === opt.rowId && colDimId === opt.colId
                   ? 'bg-[#C9A646]/55 text-white shadow-[0_0_18px_rgba(201,166,70,0.18)]'
                   : 'bg-white/[0.045] text-ink-secondary hover:text-ink-primary'
               }`}
@@ -643,15 +634,22 @@ const CombosPanel: React.FC<{ trades: Trade[]; isLoading: boolean }> = ({ trades
           ))}
         </div>
       </div>
+
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <DimensionSelect label="Primary" value={rowDimId} onChange={setRowDimId} />
+        <span className="text-ink-tertiary text-xs">×</span>
+        <DimensionSelect label="Secondary" value={colDimId} onChange={setColDimId} />
+      </div>
+
       {isLoading ? (
         <Skeleton />
       ) : (
         <CombinationMatrix
           trades={trades}
-          rowAccessor={selected.rowDim}
-          colAccessor={selected.colDim}
-          rowLabel={selected.rowLabel}
-          colLabel={selected.colLabel}
+          rowAccessor={rowAccessor}
+          colAccessor={colAccessor}
+          rowLabel={rowDef.label}
+          colLabel={colDef.label}
         />
       )}
     </Card>
