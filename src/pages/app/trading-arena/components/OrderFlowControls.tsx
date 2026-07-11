@@ -73,6 +73,12 @@ interface OrderFlowControlsProps {
   statusNote?: string;
   /** Tooltip on the whole cluster when backfill history is limited. */
   historyLimitedNote?: string;
+  /**
+   * 'bar' (default) — original top-of-chart strip chrome (bottom border,
+   * tight padding). 'menu' — used inside the Arena toolbar's "Chart ▾"
+   * popover: no border, roomier padding, same flex-wrap behavior.
+   */
+  variant?: 'bar' | 'menu';
 }
 
 const CELL_MODE_OPTIONS: { value: FootprintCellMode; label: string }[] = [
@@ -119,13 +125,17 @@ export function OrderFlowControls({
   disabled,
   statusNote,
   historyLimitedNote,
+  variant = 'bar',
 }: OrderFlowControlsProps) {
   const title = disabled ? 'Order flow requires a crypto symbol' : historyLimitedNote;
 
   return (
     <div
-      className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b"
-      style={{ borderColor: 'rgba(201,166,70,0.10)' }}
+      className={cn(
+        'flex items-center gap-3 flex-wrap',
+        variant === 'menu' ? 'p-2' : 'px-3 py-1.5 border-b',
+      )}
+      style={variant === 'bar' ? { borderColor: 'rgba(201,166,70,0.10)' } : undefined}
       title={title}
     >
       {/* Order Flow on/off */}
