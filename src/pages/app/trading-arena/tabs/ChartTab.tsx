@@ -134,6 +134,26 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
   const book = useBinanceOrderBook(symbol);
   const livePrice = book.lastPrice;
 
+  // Best bid/ask for the order-entry panel's "Buy Bid" / "Sell Ask" limit
+  // orders. useBinanceOrderBook keeps the full depth book in a ref (no
+  // per-message re-render — see that hook's header comment), so we read the
+  // top of book via its getBook() accessor and recompute whenever the
+  // (1x/sec-throttled) lastPrice ticks — the same trade-off useDepthSlices
+  // makes just above for the heatmap feed.
+  const { bid, ask } = useMemo(() => {
+    const { bids, asks } = book.getBook();
+    let bestBid: number | null = null;
+    for (const p of bids.keys()) {
+      if (bestBid === null || p > bestBid) bestBid = p;
+    }
+    let bestAsk: number | null = null;
+    for (const p of asks.keys()) {
+      if (bestAsk === null || p < bestAsk) bestAsk = p;
+    }
+    return { bid: bestBid, ask: bestAsk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.getBook, livePrice]);
+
   // ── Row size: auto-suggested from the loaded window's average PER-BAR
   // high/low range, refined on each bar load (onBarsLoad below), adjusted by
   // the density multiplier. FinotaurChart's onBarsLoad reports avgBarRange —
@@ -285,6 +305,8 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
           key={symbol}
           symbol={symbol}
           livePrice={livePrice}
+          bid={bid}
+          ask={ask}
           enabled={isCrypto}
         />
       </div>

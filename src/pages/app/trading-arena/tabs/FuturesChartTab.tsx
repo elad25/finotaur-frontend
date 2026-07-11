@@ -421,6 +421,11 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
           key={contractSymbol}
           symbol={contractSymbol}
           livePrice={latestPrice}
+          // No live order book on the Databento polling feed (see file header) —
+          // the order panel shows "—" for Bid/Ask and the Buy Bid/Sell Ask
+          // limit buttons stay disabled here.
+          bid={null}
+          ask={null}
           enabled={!feedUnavailable}
         />
       </div>

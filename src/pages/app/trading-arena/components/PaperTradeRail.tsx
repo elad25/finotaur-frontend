@@ -14,25 +14,26 @@
  * after fillPendingOrder — doing so would double-open the position.
  */
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useBacktestSession } from '@/hooks/useBacktestSession';
-import { PlaceOrderPanel } from '@/components/backtest/PlaceOrderPanel';
-import type { PlaceOrderSubmit } from '@/components/backtest/PlaceOrderPanel';
-import type { PaperSide } from '@/hooks/useBacktestSession';
 import { cn } from '@/lib/utils';
 
-// Internal notional only — used for risk-based sizing math in PlaceOrderPanel.
-// Never displayed to the user.
+// Internal notional only — used as the useBacktestSession starting balance
+// so P&L percentages have a denominator. Never displayed to the user.
 const PAPER_BALANCE = 100_000;
 
 export interface PaperTradeRailProps {
   symbol: string;
   livePrice: number | null;
+  /** Best bid from the live Binance order book. Null until the book connects. */
+  bid: number | null;
+  /** Best ask from the live Binance order book. Null until the book connects. */
+  ask: number | null;
   /** When false (non-crypto), the panel shows a disabled notice instead of the order form. */
   enabled: boolean;
 }
 
-export function PaperTradeRail({ symbol, livePrice, enabled }: PaperTradeRailProps) {
+export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled }: PaperTradeRailProps) {
   const {
     state,
     openPosition,
@@ -47,6 +48,12 @@ export function PaperTradeRail({ symbol, livePrice, enabled }: PaperTradeRailPro
   } = useBacktestSession(PAPER_BALANCE, 'arena-paper');
 
   const activePos = state.activePosition;
+
+  // New NinjaTrader-style order panel local state.
+  const [qty, setQty] = useState(1);
+  // TIF is cosmetic for paper market/limit orders — display-only, not wired
+  // into the engine (paper fills don't distinguish GTC vs Day).
+  const [tif, setTif] = useState<'GTC' | 'Day'>('GTC');
 
   // Unrealized P&L — pure number so we can color it.
   const unrealizedPnl = useMemo(() => {
@@ -123,38 +130,6 @@ export function PaperTradeRail({ symbol, livePrice, enabled }: PaperTradeRailPro
   // avoid stale-closure issues; the effect reads from `state` via closure but
   // fires on each price tick — this is the same pattern used by BacktestChart.
 
-  // ── Order submit handler ──────────────────────────────────────
-  const handleSubmit = useCallback((order: PlaceOrderSubmit) => {
-    if (livePrice == null || livePrice <= 0) return;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const side: PaperSide = order.side === 'buy' ? 'LONG' : 'SHORT';
-    const sl = order.stopLoss ?? undefined;
-    const tp = order.takeProfit ?? undefined;
-
-    if (order.kind === 'market') {
-      openPosition({
-        side,
-        price: livePrice,
-        time: nowSec,
-        size: order.size,
-        stopLoss: sl,
-        takeProfit: tp,
-        takeProfits: order.takeProfits,
-        entryOrderType: 'MARKET',
-      });
-    } else {
-      addPendingOrder({
-        side,
-        type: order.kind === 'limit' ? 'LIMIT' : 'STOP',
-        triggerPrice: order.price,
-        size: order.size,
-        stopLoss: sl,
-        takeProfit: tp,
-        time: nowSec,
-      });
-    }
-  }, [livePrice, openPosition, addPendingOrder]);
-
   // ── Disabled state (non-crypto or no live price) ──────────────
   if (!enabled) {
     return (
@@ -175,19 +150,169 @@ export function PaperTradeRail({ symbol, livePrice, enabled }: PaperTradeRailPro
 
   return (
     <div className="flex flex-col gap-3 p-3">
-      {/* PlaceOrderPanel — disabled if no live price yet */}
+      {/* NinjaTrader-style order-entry panel — disabled if no live price yet */}
       {livePrice == null ? (
         <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-center">
           <p className="text-[11px] text-zinc-600">Connecting to live feed…</p>
         </div>
       ) : (
-        <PlaceOrderPanel
-          marketPrice={livePrice}
-          symbol={symbol}
-          currentBalance={PAPER_BALANCE}
-          initialBalance={PAPER_BALANCE}
-          onSubmit={handleSubmit}
-        />
+        <div className="flex flex-col gap-2 rounded-xl border border-[#C9A646]/20 bg-[#0A0A0C] p-3">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-bold text-white">{symbol}</span>
+            <span className="rounded border border-[#C9A646]/30 bg-[#C9A646]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C9A646]">
+              Paper
+            </span>
+          </div>
+
+          {/* Order button grid */}
+          <div className="grid grid-cols-2 gap-[7px]">
+            <button
+              type="button"
+              onClick={() => {
+                if (livePrice <= 0) return;
+                openPosition({ side: 'LONG', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET' });
+              }}
+              className="rounded-md border border-[rgba(29,158,117,0.4)] bg-[rgba(29,158,117,0.18)] py-2 text-[12px] font-bold text-[#3ddc9a] transition-colors hover:bg-[rgba(29,158,117,0.28)]"
+            >
+              Buy Mkt
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (livePrice <= 0) return;
+                openPosition({ side: 'SHORT', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET' });
+              }}
+              className="rounded-md border border-[rgba(212,83,126,0.4)] bg-[rgba(212,83,126,0.18)] py-2 text-[12px] font-bold text-[#ff6b93] transition-colors hover:bg-[rgba(212,83,126,0.28)]"
+            >
+              Sell Mkt
+            </button>
+
+            <button
+              type="button"
+              disabled={bid == null || bid <= 0}
+              onClick={() => {
+                if (bid == null || bid <= 0) return;
+                addPendingOrder({ side: 'LONG', type: 'LIMIT', triggerPrice: bid, size: qty, time: nowSec() });
+              }}
+              className="flex flex-col items-center rounded-md border border-[rgba(29,158,117,0.2)] bg-[rgba(29,158,117,0.06)] py-1.5 text-[11px] font-semibold text-[#3ddc9a] transition-colors hover:bg-[rgba(29,158,117,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Buy Bid
+              <span className="text-[9px] font-normal normal-case text-[#3ddc9a]/60">wait · limit</span>
+            </button>
+            <button
+              type="button"
+              disabled={ask == null || ask <= 0}
+              onClick={() => {
+                if (ask == null || ask <= 0) return;
+                addPendingOrder({ side: 'SHORT', type: 'LIMIT', triggerPrice: ask, size: qty, time: nowSec() });
+              }}
+              className="flex flex-col items-center rounded-md border border-[rgba(212,83,126,0.2)] bg-[rgba(212,83,126,0.06)] py-1.5 text-[11px] font-semibold text-[#ff6b93] transition-colors hover:bg-[rgba(212,83,126,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Sell Ask
+              <span className="text-[9px] font-normal normal-case text-[#ff6b93]/60">wait · limit</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={!activePos}
+              onClick={() => {
+                if (!activePos) return;
+                reverse(livePrice, nowSec(), activePos.size);
+              }}
+              className="rounded-md border border-[#C9A646]/40 bg-[#C9A646]/10 py-1.5 text-[11px] font-bold text-[#C9A646] transition-colors hover:bg-[#C9A646]/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Reverse
+            </button>
+            <button
+              type="button"
+              disabled={!activePos && state.pendingOrders.length === 0}
+              onClick={() => {
+                if (state.activePosition) {
+                  closePosition({ price: livePrice, time: nowSec(), reason: 'manual' });
+                }
+                cancelAllPending();
+              }}
+              className="rounded-md border border-zinc-600 bg-black py-1.5 text-[11px] font-bold text-white transition-colors hover:border-zinc-400 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Close
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-600">
+            Close = flatten position + cancel pending
+          </p>
+
+          {/* PnL bar */}
+          <div className="flex items-center justify-between rounded-md border border-[#C9A646]/15 bg-black px-2.5 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Unrealized PnL
+            </span>
+            <span
+              className={cn(
+                'text-[13px] font-bold tabular-nums',
+                unrealizedPnl == null
+                  ? 'text-zinc-600'
+                  : unrealizedPnl >= 0
+                    ? 'text-[#3ddc9a]'
+                    : 'text-[#ff6b93]',
+              )}
+            >
+              {unrealizedPnl == null ? '—' : `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}`}
+            </span>
+          </div>
+
+          {/* Order qty + TIF */}
+          <div className="grid grid-cols-2 gap-[7px]">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Order Qty</p>
+              <div className="flex items-center justify-between rounded-md border border-[#C9A646]/20 bg-black/40 px-1 py-1">
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="h-5 w-5 rounded text-[13px] font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+                >
+                  −
+                </button>
+                <span className="text-[12px] font-semibold text-white tabular-nums">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => q + 1)}
+                  className="h-5 w-5 rounded text-[13px] font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">TIF</p>
+              {/* TIF is cosmetic for paper market orders — display-only, not wired into the engine. */}
+              <select
+                value={tif}
+                onChange={(e) => setTif(e.target.value as 'GTC' | 'Day')}
+                className="w-full rounded-md border border-[#C9A646]/20 bg-black/40 px-2 py-1 text-[11px] font-semibold text-zinc-300 focus:outline-none focus:border-[#C9A646]/40"
+              >
+                <option value="GTC">GTC</option>
+                <option value="Day">Day</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Bid / Ask levels */}
+          <div className="grid grid-cols-2 gap-[7px]">
+            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Bid</p>
+              <p className="text-[12px] font-semibold tabular-nums text-[#3ddc9a]">
+                {bid != null ? bid.toFixed(2) : '—'}
+              </p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Ask</p>
+              <p className="text-[12px] font-semibold tabular-nums text-[#ff6b93]">
+                {ask != null ? ask.toFixed(2) : '—'}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Open position card */}
