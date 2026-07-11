@@ -394,6 +394,28 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
             <div className="w-full max-w-2xl mx-auto pointer-events-none select-none opacity-95">
               <SharedTradeCard item={previewItem} />
             </div>
+
+            {/* Privacy toggles — horizontal, directly under the card */}
+            <div className="w-full max-w-2xl mx-auto flex flex-wrap items-start justify-center gap-ds-5 pt-ds-1">
+              <ToggleRow
+                checked={hidePnl}
+                onChange={setHidePnl}
+                label="Hide P&L"
+                description="Shown as •••"
+              />
+              <ToggleRow
+                checked={showSetupOnly}
+                onChange={setShowSetupOnly}
+                label="Show setup only"
+                description="Entry & exit hidden"
+              />
+              <ToggleRow
+                checked={revealSize}
+                onChange={setRevealSize}
+                label="Reveal position size"
+                description="Show contracts / shares"
+              />
+            </div>
           </div>
 
           {/* Controls — below the preview, two-up on wide dialogs */}
@@ -463,29 +485,6 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
             {/* Right cell: privacy + mentor-space rooms */}
             <div className="flex flex-col gap-ds-5 min-w-0">
-
-              {/* Privacy controls */}
-              <div className="flex flex-col gap-ds-3">
-                <SectionLabel>Privacy</SectionLabel>
-                <ToggleRow
-                  checked={hidePnl}
-                  onChange={setHidePnl}
-                  label="Hide P&L"
-                  description="Shown as •••"
-                />
-                <ToggleRow
-                  checked={showSetupOnly}
-                  onChange={setShowSetupOnly}
-                  label="Show setup only"
-                  description="Entry & exit hidden"
-                />
-                <ToggleRow
-                  checked={revealSize}
-                  onChange={setRevealSize}
-                  label="Reveal position size"
-                  description="Show contracts / shares"
-                />
-              </div>
 
               {/* Per-space community + mentor */}
               <div className="flex flex-col gap-ds-3">
