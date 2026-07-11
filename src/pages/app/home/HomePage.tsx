@@ -5,7 +5,7 @@
  * Renders full-width (no product sidebar) via NO_SIDEBAR_ROUTES in ProtectedAppLayout.
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
@@ -55,6 +55,19 @@ const PRODUCT_CARD: Record<string, { icon: LucideIcon; blurb: string }> = {
 // flip this to true to reconnect the button.
 const SHOW_PORTFOLIO_REPORT_BUTTON = false;
 
+// Rotating placeholder questions — the input "types" each one out and deletes
+// it, cycling through the set, so the field itself suggests what to ask FINO.
+// This is the only place the old static "Ask Fino anything…" copy lived; the
+// heading above the input is now the single "Ask Fino" label on the card.
+const FINO_PLACEHOLDER_QUESTIONS = [
+  "What's my win rate this week?",
+  'Which setup is losing me money?',
+  'Am I overtrading?',
+  "What's my most profitable time of day?",
+  'Review my worst trade today',
+  'Is my risk per trade too high?',
+];
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -81,6 +94,54 @@ export default function HomePage() {
   const greeting = computeGreeting();
 
   const [inputValue, setInputValue] = useState('');
+
+  // Animated placeholder: type a question out, hold, delete, move to the next.
+  // Only runs while the field is empty (never fights the user's own text) and
+  // respects prefers-reduced-motion (shows a single static question instead).
+  const [typedPlaceholder, setTypedPlaceholder] = useState('');
+  useEffect(() => {
+    if (inputValue) return;
+
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      setTypedPlaceholder(FINO_PLACEHOLDER_QUESTIONS[0]);
+      return;
+    }
+
+    let questionIndex = 0;
+    let charIndex = 0;
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = () => {
+      const full = FINO_PLACEHOLDER_QUESTIONS[questionIndex];
+      if (!deleting) {
+        charIndex += 1;
+        setTypedPlaceholder(full.slice(0, charIndex));
+        if (charIndex === full.length) {
+          deleting = true;
+          timer = setTimeout(tick, 1700); // hold the full question
+          return;
+        }
+        timer = setTimeout(tick, 55);
+      } else {
+        charIndex -= 1;
+        setTypedPlaceholder(full.slice(0, charIndex));
+        if (charIndex === 0) {
+          deleting = false;
+          questionIndex = (questionIndex + 1) % FINO_PLACEHOLDER_QUESTIONS.length;
+          timer = setTimeout(tick, 350); // pause before the next question
+          return;
+        }
+        timer = setTimeout(tick, 28);
+      }
+    };
+
+    timer = setTimeout(tick, 500);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
 
   // FINO mascot codec pick: Safari / iOS WebKit can't render VP9-alpha WebM
   // transparently, so those browsers get the animated-WebP-with-alpha fallback
@@ -156,27 +217,34 @@ export default function HomePage() {
               VP9 alpha, which preserves the dark fur and cape folds. The poster
               keeps a still FINO visible if the browser can't play VP9-alpha
               (e.g. Safari). Replaces the v8 animated-webp loop. */}
-          {finoUsesWebpFallback ? (
-            <img
-              src="/fino/fino-safari-v4.webp"
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-              className="h-40 w-40 flex-shrink-0 self-center object-contain"
-            />
-          ) : (
-            <video
-              src="/fino/fino-home-natural-v4.webm"
-              poster="/fino/fino-home-natural-v4-poster.png"
-              autoPlay
-              muted
-              loop
-              playsInline
-              aria-hidden="true"
-              draggable={false}
-              className="h-40 w-40 flex-shrink-0 self-center object-contain"
-            />
-          )}
+          {/* Waist-up crop: the media is scaled taller than this fixed-height
+              box and top-anchored, so overflow-hidden clips FINO's legs and we
+              read a bigger, more legible half-body bust (face + horns + gold
+              medallion + cape) in the same footprint. Adjust the media height
+              vs. the box height if the framing drifts. */}
+          <div className="h-28 w-28 flex-shrink-0 self-center overflow-hidden flex items-start justify-center">
+            {finoUsesWebpFallback ? (
+              <img
+                src="/fino/fino-safari-v4.webp"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="h-[148px] w-auto max-w-none object-contain object-top"
+              />
+            ) : (
+              <video
+                src="/fino/fino-home-natural-v4.webm"
+                poster="/fino/fino-home-natural-v4-poster.png"
+                autoPlay
+                muted
+                loop
+                playsInline
+                aria-hidden="true"
+                draggable={false}
+                className="h-[148px] w-auto max-w-none object-contain object-top"
+              />
+            )}
+          </div>
 
           {/* Right column — title, compact input, chips */}
           <div className="flex-1 min-w-0">
@@ -192,7 +260,7 @@ export default function HomePage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Fino anything..."
+                placeholder={inputValue ? '' : typedPlaceholder || FINO_PLACEHOLDER_QUESTIONS[0]}
                 aria-label="Ask Fino a question"
                 className="
                   flex-1 min-w-0 rounded-md bg-surface-base border border-border-ds-subtle
