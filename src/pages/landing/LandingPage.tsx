@@ -8,15 +8,14 @@
 import Navbar from '@/components/landing-new/Navbar';
 import Hero from '@/components/landing-new/Hero';
 import SocialProof from '@/components/landing-new/SocialProof';
-import BeforeAfter from '@/components/landing-new/BeforeAfter';
-import AISection from '@/components/landing-new/AISection';
-import CoreSystem from '@/components/landing-new/CoreSystem';
-import ProductShowcase from '@/components/landing-new/ProductShowcase';
+import TraderSection from '@/components/landing-new/TraderSection';
 import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
-import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
+import ChampionshipStrip from '@/components/landing-new/ChampionshipStrip';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
+import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
+import InvestorSection from '@/components/landing-new/InvestorSection';
+import FinotaurPlanSection from '@/components/landing-new/FinotaurPlanSection';
 import Testimonials from '@/components/landing-new/Testimonials';
-import Vision from '@/components/landing-new/Vision';
 import Pricing from '@/components/landing-new/Pricing';
 import RiskReversal from '@/components/landing-new/RiskReversal';
 import FAQ from '@/components/landing-new/FAQ';
@@ -46,7 +45,7 @@ const LandingPage = () => {
       <SEO
         title="Finotaur — AI Trading Intelligence for Stocks, Options & Crypto"
         titleAsIs
-        description="Finotaur is the AI-powered trading intelligence platform for retail traders. Free AI stock analysis, options flow scanner, dark pool data, and institutional-grade research — Bloomberg Terminal quality at retail pricing."
+        description="Finotaur is the AI-powered trading intelligence platform for retail traders. Free AI stock analysis, options flow scanner, dark pool data, and institutional-grade research — the only terminal independent traders and investors need."
         path="/"
         jsonLd={[
           softwareApplication(),
@@ -130,15 +129,14 @@ const LandingPage = () => {
       <Navbar />
       <Hero />
       <SocialProof />
-      <BeforeAfter />
-      <AISection />
-      <CoreSystem />
-      <ProductShowcase />
+      <TraderSection />
       <JournalToolsTabs />
+      <ChampionshipStrip />
       <PartnershipRow />
       <DesignPhilosophy />
+      <InvestorSection />
+      <FinotaurPlanSection />
       <Testimonials />
-      <Vision />
       <Pricing />
       <RiskReversal />
       <FAQ />

@@ -470,7 +470,7 @@ const Hero = () => {
       key: 'platform',
       eyebrow: 'THE PLATFORM',
       title: 'FINOTAUR Terminal',
-      tagline: 'The Bloomberg Terminal, reimagined for independent traders and investors. Every tool. Every signal. One unified intelligence layer.',
+      tagline: 'The only terminal independent traders and investors will ever need. Every tool. Every signal. One unified intelligence layer.',
       Preview: PlatformPreview,
       flagship: true,
       stats: ['5 Modules', '24/7 Intelligence', 'Real-time Flow'],

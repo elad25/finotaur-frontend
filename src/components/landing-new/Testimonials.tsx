@@ -73,7 +73,7 @@ const testimonials: Testimonial[] = [
     name: "Michael Rodriguez",
     role: "Prop Trader",
     avatar: "MR",
-    text: "I pay thousands per month for research subscriptions. Finotaur beats them all in value-for-money. The macro analysis here is better than anything I got from Bloomberg Terminal.",
+    text: "I pay thousands per month for research subscriptions. Finotaur beats them all in value-for-money. The macro analysis here is better than anything I got from terminals costing thousands a month.",
     highlight: "beats them all in value-for-money",
   },
 ];

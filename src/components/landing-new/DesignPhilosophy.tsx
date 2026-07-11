@@ -15,47 +15,74 @@ import { SectionTitle } from "./_shared/SectionTitle";
 // ---------------------------------------------------------------------------
 // Data
 // ---------------------------------------------------------------------------
-const comparisons = [
+type Persona = "TRADER" | "INVESTOR" | "BOTH";
+
+const comparisons: { persona: Persona; before: string; after: string }[] = [
   {
-    before: "Wake up to 50 headlines and zero clarity",
-    after: "Wake up with Top Secret — know exactly what matters",
+    persona: "TRADER",
+    before: "No idea why the account bleeds",
+    after: "The Leak Detector names the exact habit and its dollar cost",
   },
   {
-    before: "Analyze a stock in 4 hours",
-    after: "AI analyzes it in 30 seconds",
+    persona: "TRADER",
+    before: "Journaling by hand, abandoned by Tuesday",
+    after: "Every trade syncs, scores and files itself",
   },
   {
-    before: "Trade on gut feeling",
-    after: "Trade on data and conclusions",
+    persona: "TRADER",
+    before: "One good account, four unmanaged ones",
+    after: "The Copier mirrors your discipline across all of them",
   },
   {
-    before: "No idea why you're losing",
-    after: "AI journal shows exactly where the problem is",
+    persona: "INVESTOR",
+    before: "50 headlines, zero clarity",
+    after: "One daily briefing that says what actually matters",
   },
   {
-    before: "Pay $2,000+/month for separate tools",
-    after: "Everything for $89/month — one place",
+    persona: "INVESTOR",
+    before: "Four hours to research one stock",
+    after: "A full AI verdict in 30 seconds",
+  },
+  {
+    persona: "BOTH",
+    before: "$2,000+/month across scattered tools",
+    after: "One terminal, $89",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// PersonaChip — tiny gold chip identifying which persona the pair speaks to
+// ---------------------------------------------------------------------------
+function PersonaChip({ persona }: { persona: Persona }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-sm border border-gold-muted bg-gold-border text-gold-primary text-[9px] font-semibold uppercase tracking-[0.25em]">
+      {persona}
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // ComparisonPair — one Before + one After card
 // ---------------------------------------------------------------------------
 interface ComparisonPairProps {
+  persona: Persona;
   before: string;
   after: string;
   index: number;
 }
 
-function ComparisonPair({ before, after, index }: ComparisonPairProps) {
+function ComparisonPair({ persona, before, after, index }: ComparisonPairProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="grid md:grid-cols-2 gap-4 md:gap-6"
     >
+      <div className="mb-2">
+        <PersonaChip persona={persona} />
+      </div>
+      <div className="grid md:grid-cols-2 gap-4 md:gap-6">
       {/* ── Before card (red / num-negative) ── */}
       <div className="relative rounded-[12px] p-6 bg-section-card-rest border border-num-negative/30 shadow-card-rest">
         {/* Corner brackets — red tint */}
@@ -91,6 +118,7 @@ function ComparisonPair({ before, after, index }: ComparisonPairProps) {
         {/* Body */}
         <p className="text-ink-primary text-sm leading-relaxed font-medium">{after}</p>
       </div>
+      </div>
     </motion.div>
   );
 }
@@ -103,10 +131,10 @@ const DesignPhilosophy = () => {
     <SectionShell id="design-philosophy" atmosphere="subtle" beam={false} constructionMarkers={false}>
       {/* Section header */}
       <div className="text-center mb-12">
-        <SectionEyebrow>Design Philosophy</SectionEyebrow>
+        <SectionEyebrow>The Shift</SectionEyebrow>
         <SectionTitle gradient="split">
-          <span className="text-ink-primary">Before &amp; After </span>
-          <span className="text-gold-primary">Finotaur</span>
+          <span className="text-ink-primary">Before and after </span>
+          <span className="text-gold-primary">FINOTAUR.</span>
         </SectionTitle>
         <p className="font-sans font-light text-ink-secondary text-base leading-relaxed max-w-xl mx-auto mt-4">
           The transformation is real. Here&apos;s what changes on day one.
@@ -118,6 +146,7 @@ const DesignPhilosophy = () => {
         {comparisons.map((comp, index) => (
           <ComparisonPair
             key={index}
+            persona={comp.persona}
             before={comp.before}
             after={comp.after}
             index={index}
