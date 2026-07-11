@@ -119,7 +119,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
             <span
               className={cn(
                 'font-sans text-[34px] font-bold leading-none',
-                isNegative ? 'text-num-negative' : 'text-num-neutral',
+                isNegative ? 'text-num-negative' : 'text-status-success',
               )}
             >
               {formatPnl(trade_pnl as number)}
@@ -130,7 +130,12 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
           )}
 
           {rHidden ? null : (
-            <span className="font-mono tabular-nums text-[15px] font-semibold text-gold-primary">
+            <span
+              className={cn(
+                'font-mono tabular-nums text-[15px] font-semibold',
+                rIsNegative ? 'text-num-negative' : 'text-status-success',
+              )}
+            >
               {rIsNegative ? '−' : '+'}
               {Math.abs(trade_r as number).toFixed(1)}R
             </span>
