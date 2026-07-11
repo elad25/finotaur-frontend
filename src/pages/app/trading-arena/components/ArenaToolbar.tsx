@@ -96,14 +96,7 @@ export function ArenaToolbar({
   const showChartOnlyMenus = activeTab === 'chart';
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-shrink-0 items-center gap-1 px-4 h-9 border-b"
-      style={{
-        borderColor: 'rgba(201,166,70,0.12)',
-        background: '#0A0A0C',
-      }}
-    >
+    <div ref={containerRef} className="flex items-center gap-1">
       {/* Timeframe ▾ — always shown (chart / cvd / futures tabs all use it) */}
       <ToolbarTrigger
         caption="Timeframe"

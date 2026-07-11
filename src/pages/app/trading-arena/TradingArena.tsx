@@ -16,10 +16,9 @@
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Swords, ChevronLeft, Lock } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Swords, ChevronLeft } from 'lucide-react';
 import type { Interval } from '@/components/charting/types';
 import {
   SymbolAutocomplete,
@@ -29,11 +28,7 @@ import {
   type AssetClass,
 } from '@/components/backtest/symbolUniverse';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import {
-  TRADING_ARENA_TABS,
-  toTabId,
-  type TabId,
-} from './types';
+import { toTabId } from './types';
 import { ChartTab }        from './tabs/ChartTab';
 import { OrderFlowTab }    from './tabs/OrderFlowTab';
 import { TapeTab }         from './tabs/TapeTab';
@@ -52,46 +47,6 @@ import {
 const DEFAULT_SYMBOL = 'BTCUSDT';
 const DEFAULT_INTERVAL: Interval = '15m';
 
-interface TabSwitcherProps {
-  active: TabId;
-  onSelect: (id: TabId) => void;
-  /** Tab definitions, pre-resolved per-viewer (e.g. futures unlocked for admins). */
-  tabs: typeof TRADING_ARENA_TABS;
-}
-
-function TabSwitcher({ active, onSelect, tabs }: TabSwitcherProps) {
-  return (
-    <div className="flex items-center gap-0.5" role="tablist" aria-label="Arena tabs">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={active === tab.id}
-          disabled={tab.locked}
-          onClick={() => {
-            if (!tab.locked) onSelect(tab.id);
-          }}
-          className={cn(
-            'flex items-center gap-1.5 h-8 rounded-md px-3 text-[12px] font-medium',
-            'transition-all duration-150',
-            tab.locked
-              ? 'cursor-not-allowed opacity-40 text-[#555555]'
-              : active === tab.id
-                ? 'bg-[rgba(201,166,70,0.15)] text-[#C9A646] border border-[rgba(201,166,70,0.40)] shadow-[0_0_10px_rgba(201,166,70,0.10)]'
-                : 'text-[#888888] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)]',
-          )}
-        >
-          {tab.locked && (
-            <Lock className="h-2.5 w-2.5 flex-shrink-0" aria-hidden="true" />
-          )}
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -107,13 +62,6 @@ export default function TradingArena() {
   // admin check as the Arena's own route-level AdminBetaGate (App.tsx),
   // not a new roles system.
   const { isAdmin } = useAdminAuth();
-  const tabs = useMemo(
-    () =>
-      TRADING_ARENA_TABS.map((tab) =>
-        tab.id === 'futures' ? { ...tab, locked: !isAdmin } : tab,
-      ),
-    [isAdmin],
-  );
 
   // Asset and interval are held in component state.
   // Using URL search params would be ideal for bookmarking, but keeping it
@@ -137,14 +85,6 @@ export default function TradingArena() {
     setSymbol(arenaSymbol);
     setAssetClass(detected);
   }, []);
-
-  const handleTabSelect = useCallback(
-    (id: TabId) => {
-      if (id === 'futures' && !isAdmin) return; // defense-in-depth — tab is already disabled in the UI
-      navigate(`/app/trading-arena/${id}`, { replace: true });
-    },
-    [navigate, isAdmin],
-  );
 
   // Defense-in-depth: a non-admin landing directly on /trading-arena/futures
   // (deep link / stale bookmark) sees LockedTab, never FuturesChartTab —
@@ -213,23 +153,25 @@ export default function TradingArena() {
             variant="toolbar"
             filterToAssetClass={false}
           />
-        </div>
 
-        {/* Right: tab switcher */}
-        <div className="ml-auto flex-shrink-0">
-          <TabSwitcher active={activeTab} onSelect={handleTabSelect} tabs={tabs} />
+          {/* Divider */}
+          <span
+            className="w-px h-5 flex-shrink-0"
+            style={{ background: 'rgba(201,166,70,0.12)' }}
+            aria-hidden="true"
+          />
+
+          {/* Controls (Timeframe / Indicators / Chart) */}
+          <ArenaToolbar
+            interval={interval}
+            onIntervalChange={setIntervalValue}
+            activeTab={activeTab}
+            controls={ofControls}
+            onControlsChange={setOfControls}
+            chartControlsDisabled={assetClass !== 'crypto'}
+          />
         </div>
       </header>
-
-      {/* ── Single-row controls strip (Timeframe / Indicators / Chart) ──── */}
-      <ArenaToolbar
-        interval={interval}
-        onIntervalChange={setIntervalValue}
-        activeTab={activeTab}
-        controls={ofControls}
-        onControlsChange={setOfControls}
-        chartControlsDisabled={assetClass !== 'crypto'}
-      />
 
       {/* ── Content area ─────────────────────────────────────────── */}
       <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
