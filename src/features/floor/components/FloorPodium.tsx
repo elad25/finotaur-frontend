@@ -17,60 +17,6 @@ import championshipTrophy from '@/features/floor/assets/championship-trophy.png'
 import medalSilver from '@/features/floor/assets/medal-silver.png';
 import medalBronze from '@/features/floor/assets/medal-bronze.png';
 
-// ── Avatar helper ──────────────────────────────────────────────────────────────
-
-function PodiumAvatar({
-  name,
-  avatarUrl,
-  size,
-  ringColor,
-  ringWidth = '1.5px',
-}: {
-  name: string;
-  avatarUrl: string | null;
-  size: number;
-  /** Override for the champion's solid gold ring — defaults to the subtle rgba ring used elsewhere. */
-  ringColor?: string;
-  ringWidth?: string;
-}) {
-  const initial = (name || '?').trim().charAt(0).toUpperCase();
-  const dim = `${size}px`;
-  const border = `${ringWidth} solid ${ringColor ?? 'rgba(201,166,70,0.5)'}`;
-
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt=""
-        aria-hidden="true"
-        className="rounded-full object-cover shrink-0"
-        style={{
-          width: dim,
-          height: dim,
-          border,
-        }}
-      />
-    );
-  }
-
-  return (
-    <div
-      className="flex items-center justify-center rounded-full shrink-0 font-bold"
-      aria-hidden="true"
-      style={{
-        width: dim,
-        height: dim,
-        fontSize: `${Math.round(size * 0.38)}px`,
-        background: 'rgba(201,166,70,0.15)',
-        border: ringColor ? border : '1.5px solid rgba(201,166,70,0.45)',
-        color: '#E8C766',
-      }}
-    >
-      {initial}
-    </div>
-  );
-}
-
 // ── Null-safe stat label ───────────────────────────────────────────────────────
 
 function statLabel(value: number | null, suffix = ''): string {
@@ -119,7 +65,7 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
           }}
         />
 
-        {/* Left: trophy + avatar + identity */}
+        {/* Left: trophy + identity */}
         <div className="relative flex items-center gap-4 min-w-0" style={{ zIndex: 1 }}>
           {/* Trophy with a soft golden halo radiating around it */}
           <div className="relative shrink-0 inline-flex items-center justify-center">
@@ -142,14 +88,6 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
               }}
             />
           </div>
-
-          <PodiumAvatar
-            name={nickname}
-            avatarUrl={row.avatar_url}
-            size={56}
-            ringColor="#C9A646"
-            ringWidth="2px"
-          />
 
           <div className="min-w-0">
             <span

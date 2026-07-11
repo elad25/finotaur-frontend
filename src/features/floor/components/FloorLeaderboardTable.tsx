@@ -75,53 +75,6 @@ function RankBadge({ rank, qualified }: RankBadgeProps) {
   );
 }
 
-// ── Small avatar ───────────────────────────────────────────────────────────────
-
-function SmallAvatar({
-  name,
-  avatarUrl,
-  size = 24,
-}: {
-  name: string;
-  avatarUrl: string | null;
-  size?: number;
-}) {
-  const initial = (name || '?').trim().charAt(0).toUpperCase();
-  const dim = `${size}px`;
-
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt=""
-        aria-hidden="true"
-        className="rounded-full object-cover shrink-0"
-        style={{
-          width: dim,
-          height: dim,
-          border: '1px solid rgba(255,255,255,0.1)',
-        }}
-      />
-    );
-  }
-
-  return (
-    <div
-      className="flex items-center justify-center rounded-full shrink-0 text-[10px] font-bold"
-      aria-hidden="true"
-      style={{
-        width: dim,
-        height: dim,
-        background: 'rgba(201,166,70,0.15)',
-        border: '1px solid rgba(201,166,70,0.3)',
-        color: '#E8C766',
-      }}
-    >
-      {initial}
-    </div>
-  );
-}
-
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 
 /** Renders RR as a "2.4R"-style ratio — never a dollar amount. */
@@ -245,26 +198,19 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
 
                   {/* TRADER */}
                   <td className="px-3 py-3 max-w-[160px]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <SmallAvatar
-                        name={nickname}
-                        avatarUrl={row.avatar_url}
-                        size={24}
-                      />
-                      <span
-                        className={cn(
-                          'text-sm font-medium truncate',
-                          isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
-                        )}
-                      >
-                        {nickname}
-                        {isCurrentUser && (
-                          <span className="ml-1 text-[10px] font-normal text-[#C9A646]/70">
-                            (you)
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                    <span
+                      className={cn(
+                        'text-sm font-medium truncate block min-w-0',
+                        isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
+                      )}
+                    >
+                      {nickname}
+                      {isCurrentUser && (
+                        <span className="ml-1 text-[10px] font-normal text-[#C9A646]/70">
+                          (you)
+                        </span>
+                      )}
+                    </span>
                   </td>
 
                   {/* WIN % */}
