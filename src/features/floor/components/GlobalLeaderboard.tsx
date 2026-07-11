@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { DataState } from '@/components/ds/DataState';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSubscription } from '@/hooks/useSubscription';
 import {
   useActiveCompetition,
   useFloorLeaderboard,
@@ -42,6 +43,17 @@ import { cn } from '@/lib/utils';
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type PeriodTab = 'monthly' | 'this_year' | 'all_time';
+
+// ── Simulated preview rows (countdown/registration phases only) ────────────────
+// Realistic quality stats so the board never looks empty before the
+// competition goes live. Never mixed with real data once phase === 'live'.
+const SIMULATED_PREVIEW_ROWS: FloorLeaderboardRow[] = [
+  { user_id: 'sim-1', display_name: 'Preview Trader 1', floor_username: 'apex_scalper', avatar_url: null, discipline_score: 78, net_pnl: null, trade_count: 58, rank: 1, qualified: true, is_champion: false, win_rate: 62, avg_win: null, avg_loss: null, profit_factor: 3.1, best_trade: null, worst_trade: null, win_streak: 6, rr: 2.6, active_days: 24 },
+  { user_id: 'sim-2', display_name: 'Preview Trader 2', floor_username: 'iron_discipline', avatar_url: null, discipline_score: 74, net_pnl: null, trade_count: 46, rank: 2, qualified: true, is_champion: false, win_rate: 55, avg_win: null, avg_loss: null, profit_factor: 2.6, best_trade: null, worst_trade: null, win_streak: 4, rr: 2.1, active_days: 21 },
+  { user_id: 'sim-3', display_name: 'Preview Trader 3', floor_username: 'quiet_edge', avatar_url: null, discipline_score: 69, net_pnl: null, trade_count: 39, rank: 3, qualified: true, is_champion: false, win_rate: 48, avg_win: null, avg_loss: null, profit_factor: 2.2, best_trade: null, worst_trade: null, win_streak: 3, rr: 1.9, active_days: 19 },
+  { user_id: 'sim-4', display_name: 'Preview Trader 4', floor_username: 'steady_hands', avatar_url: null, discipline_score: 65, net_pnl: null, trade_count: 31, rank: 4, qualified: true, is_champion: false, win_rate: 44, avg_win: null, avg_loss: null, profit_factor: 1.9, best_trade: null, worst_trade: null, win_streak: 2, rr: 1.6, active_days: 16 },
+  { user_id: 'sim-5', display_name: 'Preview Trader 5', floor_username: 'process_first', avatar_url: null, discipline_score: 60, net_pnl: null, trade_count: 25, rank: 5, qualified: true, is_champion: false, win_rate: 40, avg_win: null, avg_loss: null, profit_factor: 1.7, best_trade: null, worst_trade: null, win_streak: 2, rr: 1.2, active_days: 13 },
+];
 
 // ── Configs ────────────────────────────────────────────────────────────────────
 
@@ -123,6 +135,8 @@ const JoinDialog = memo(function JoinDialog({
 }: JoinDialogProps) {
   const isBrokerError =
     error?.message?.toLowerCase().includes('broker') ?? false;
+  const isSubscriptionError =
+    error?.message?.toLowerCase().includes('trader members') ?? false;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,6 +181,29 @@ const JoinDialog = memo(function JoinDialog({
                   Go to Settings
                 </Link>
               </p>
+            ) : isSubscriptionError ? (
+              <div
+                className="rounded-lg px-3 py-2 flex flex-col gap-2"
+                style={{
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                }}
+              >
+                <p className="text-[12px]" style={{ color: '#C9A646' }}>
+                  {error.message}
+                </p>
+                <Link
+                  to="/app/all-markets/pricing"
+                  onClick={() => onOpenChange(false)}
+                  className="self-start rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition-all hover:opacity-90"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+                    color: '#0A0A0A',
+                  }}
+                >
+                  Upgrade to Trader
+                </Link>
+              </div>
             ) : (
               <p
                 className="text-[12px] rounded-lg px-3 py-2"
@@ -209,6 +246,34 @@ const JoinDialog = memo(function JoinDialog({
 });
 JoinDialog.displayName = 'JoinDialog';
 
+// ── Prize block (gold callout, shown whenever prize_summary is set) ────────────
+
+function PrizeBlock({ summary }: { summary: string }) {
+  const lines = summary
+    .split('. ')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    <div
+      className="rounded-[14px] px-3.5 py-3"
+      style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.2)' }}
+    >
+      <p
+        className="text-[9px] font-bold tracking-[0.2em] uppercase mb-1.5"
+        style={{ color: 'rgba(201,166,70,0.55)' }}
+      >
+        Prizes
+      </p>
+      {lines.map((line, i) => (
+        <p key={i} className="text-[12px] leading-snug font-medium" style={{ color: '#C9A646' }}>
+          {line}{line.endsWith('.') ? '' : '.'}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 // ── Competition status block (This Month tab only) ─────────────────────────────
 
 interface CompStatusProps {
@@ -217,6 +282,7 @@ interface CompStatusProps {
   registrationOpensAt: string | null;
   periodStart: string;
   periodEnd: string;
+  prizeSummary: string | null;
 }
 
 const CompStatusBlock = memo(function CompStatusBlock({
@@ -225,8 +291,10 @@ const CompStatusBlock = memo(function CompStatusBlock({
   registrationOpensAt,
   periodStart,
   periodEnd,
+  prizeSummary,
 }: CompStatusProps) {
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const { isPremium } = useSubscription();
 
   const { data: participation, isLoading: partLoading } =
     useMyFloorParticipation(competitionId);
@@ -304,6 +372,8 @@ const CompStatusBlock = memo(function CompStatusBlock({
           <span style={{ color: 'rgba(201,166,70,0.25)' }}>·</span>{' '}
           competition starts {formatDate(periodStart)}
         </p>
+
+        {prizeSummary && <PrizeBlock summary={prizeSummary} />}
       </div>
     );
   }
@@ -388,17 +458,41 @@ const CompStatusBlock = memo(function CompStatusBlock({
                 Only your real broker-verified trades count.
               </p>
             </div>
-            <button
-              onClick={() => { resetJoin(); setJoinDialogOpen(true); }}
-              className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
-                color: '#0A0A0A',
-              }}
-            >
-              Register
-            </button>
+            {isPremium ? (
+              <button
+                onClick={() => { resetJoin(); setJoinDialogOpen(true); }}
+                className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+                  color: '#0A0A0A',
+                }}
+              >
+                Register
+              </button>
+            ) : (
+              <Link
+                to="/app/all-markets/pricing"
+                className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95 text-center"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+                  color: '#0A0A0A',
+                }}
+              >
+                Upgrade to compete · Trader members enter free
+              </Link>
+            )}
           </div>
+
+          {/* Free-to-enter note */}
+          <p className="mt-3 text-[11px]" style={{ color: '#666' }}>
+            Free to enter for Trader members.
+          </p>
+
+          {prizeSummary && (
+            <div className="mt-3">
+              <PrizeBlock summary={prizeSummary} />
+            </div>
+          )}
 
           {/* Non-broker inline error */}
           {joinError && !joinError.message.toLowerCase().includes('broker') && (
@@ -870,6 +964,15 @@ export function GlobalLeaderboard() {
     ? rows?.find((r) => r.user_id === user.id) ?? null
     : null;
 
+  // Simulated preview: before the competition goes live (countdown or
+  // registration phase), if the live board has no qualified competitors yet,
+  // show a realistic sample board instead of an empty state. Once the
+  // competition is actually live, real data is always shown regardless.
+  const isPreviewPhase = phase === 'countdown' || phase === 'registration';
+  const hasRealQualified = !!rows && rows.some((r) => r.qualified);
+  const showSimulatedPreview =
+    period === 'monthly' && isPreviewPhase && (!rows || rows.length === 0 || !hasRealQualified);
+
   return (
     <div className="flex flex-col gap-ds-4 px-ds-5 py-ds-5">
       {/* ── Page header: title · live count · period tabs ── */}
@@ -949,32 +1052,59 @@ export function GlobalLeaderboard() {
       <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-ds-4 items-start">
         {/* Main column — podium + full ranking */}
         <div
-          className={`flex flex-col gap-ds-4 min-w-0 transition-opacity duration-200 ${
-            leaderboardFetching ? 'opacity-60' : ''
-          }`}
+          className={cn(
+            'flex flex-col gap-ds-4 min-w-0 transition-opacity duration-200',
+            leaderboardFetching && 'opacity-60',
+            showSimulatedPreview && 'opacity-80',
+          )}
         >
-          {rows && rows.length > 0 && <FloorPodium rows={rows} />}
-
-          <DataState
-            isLoading={false}
-            isError={isError}
-            error={error}
-            data={rows}
-            onRetry={refetch}
-            empty={
-              <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
-                No competitors on the leaderboard yet.
-              </p>
-            }
-          >
-            {(data) => (
+          {showSimulatedPreview ? (
+            <>
+              <div className="flex justify-end">
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-2.5 py-1"
+                  style={{
+                    color: '#C9A646',
+                    background: 'rgba(201,166,70,0.08)',
+                    border: '1px solid rgba(201,166,70,0.25)',
+                  }}
+                >
+                  Simulated preview · Board goes live August 1
+                </span>
+              </div>
+              <FloorPodium rows={SIMULATED_PREVIEW_ROWS} />
               <FloorLeaderboardTable
-                rows={data}
+                rows={SIMULATED_PREVIEW_ROWS}
                 currentUserId={user?.id ?? null}
                 minTrades={minTrades}
               />
-            )}
-          </DataState>
+            </>
+          ) : (
+            <>
+              {rows && rows.length > 0 && <FloorPodium rows={rows} />}
+
+              <DataState
+                isLoading={false}
+                isError={isError}
+                error={error}
+                data={rows}
+                onRetry={refetch}
+                empty={
+                  <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
+                    No competitors on the leaderboard yet.
+                  </p>
+                }
+              >
+                {(data) => (
+                  <FloorLeaderboardTable
+                    rows={data}
+                    currentUserId={user?.id ?? null}
+                    minTrades={minTrades}
+                  />
+                )}
+              </DataState>
+            </>
+          )}
         </div>
 
         {/* Right rail — full competition panel (status + OFFICIAL RULES) on all tabs */}
@@ -986,6 +1116,7 @@ export function GlobalLeaderboard() {
               registrationOpensAt={competition!.registration_opens_at}
               periodStart={competition!.period_start}
               periodEnd={competition!.period_end}
+              prizeSummary={competition!.prize_summary ?? null}
             />
             <CompRulesBlock minTrades={minTrades} />
           </div>

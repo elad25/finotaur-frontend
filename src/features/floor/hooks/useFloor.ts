@@ -21,6 +21,8 @@ export interface FloorCompetition {
   period_end: string;   // ISO date string
   status: 'active';
   min_trades: number;
+  // Optional until the backend migration ships — undefined-safe on the old RPC.
+  prize_summary?: string | null;
 }
 
 export interface FloorLeaderboardRow {
@@ -42,6 +44,10 @@ export interface FloorLeaderboardRow {
   best_trade: number | null;
   worst_trade: number | null;
   win_streak: number | null;
+  // Optional until the backend migration ships — undefined-safe on the old RPC.
+  // rr falls back to a client-side computation from avg_win/avg_loss when absent.
+  rr?: number | null;
+  active_days?: number | null;
 }
 
 export interface FloorParticipation {
@@ -70,7 +76,21 @@ const JOIN_ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'You must be signed in to join.',
   competition_not_found: 'This competition no longer exists.',
   competition_closed: 'This competition is closed for new entries.',
+  subscription_required: 'The Championship is open to Trader members.',
 };
+
+/**
+ * RR (realized avg-win / avg-loss ratio). Prefers the backend-computed
+ * value (post 20260710 migration); falls back to a client-side computation
+ * from avg_win/avg_loss so the table renders correctly against the OLD RPC.
+ */
+export function getRowRR(
+  row: Pick<FloorLeaderboardRow, 'rr' | 'avg_win' | 'avg_loss'>,
+): number | null {
+  if (row.rr !== undefined && row.rr !== null) return row.rr;
+  if (row.avg_win === null || row.avg_loss === null || row.avg_loss === 0) return null;
+  return Math.abs(row.avg_win / row.avg_loss);
+}
 
 function translateJoinError(raw: string): string {
   // Check if the raw message matches any known key

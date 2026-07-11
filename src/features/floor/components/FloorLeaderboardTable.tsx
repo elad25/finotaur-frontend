@@ -1,15 +1,17 @@
 // src/components/floor/FloorLeaderboardTable.tsx
 // =====================================================
 // Rich leaderboard table for The Floor competition.
-// Columns: Rank · Trader · Win % · Trades · Avg Win ·
-//          Avg Loss · PF · Best · Worst · Streak · Discipline
+// Columns: Rank · Trader · Win % · RR · PF · Trades · Days · Discipline
+// PF (Profit Factor) is the emphasized quality column — never a dollar
+// figure. Dollar-denominated stats (Avg Win/Loss/Best/Worst) are removed
+// entirely; ranking and display are quality-based, never by P&L.
 // Horizontal scroll on small screens.
 // =====================================================
 
 import { memo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
+import { getRowRR, type FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 
 interface FloorLeaderboardTableProps {
   rows: FloorLeaderboardRow[];
@@ -122,22 +124,10 @@ function SmallAvatar({
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 
-function fmtGreen(value: number | null) {
+/** Renders RR as a "2.4R"-style ratio — never a dollar amount. */
+function fmtRR(value: number | null) {
   if (value === null) return <span style={{ color: '#444' }}>—</span>;
-  return (
-    <span style={{ color: '#3fd27a' }}>
-      +{Math.round(value).toLocaleString('en-US')}
-    </span>
-  );
-}
-
-function fmtRed(value: number | null) {
-  if (value === null) return <span style={{ color: '#444' }}>—</span>;
-  return (
-    <span style={{ color: '#e26b6b' }}>
-      −{Math.round(Math.abs(value)).toLocaleString('en-US')}
-    </span>
-  );
+  return <span>{value.toFixed(1)}R</span>;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -163,14 +153,12 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
     { label: 'Rank', align: 'left' },
     { label: 'Trader', align: 'left' },
     { label: 'Win %', align: 'right' },
-    { label: 'PF', align: 'right' },
+    { label: 'RR', align: 'right' },
+    { label: 'PF', align: 'right', gold: true },
     { label: 'Trades', align: 'right' },
+    { label: 'Days', align: 'right' },
   ];
   const extraCols = [
-    { label: 'Avg Win', align: 'right' },
-    { label: 'Avg Loss', align: 'right' },
-    { label: 'Best', align: 'right' },
-    { label: 'Worst', align: 'right' },
     { label: 'Streak', align: 'right' },
   ];
   const headerCols = [
@@ -209,7 +197,7 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
         <table
           className="w-full text-sm"
           style={{
-            minWidth: expanded ? 780 : 480,
+            minWidth: expanded ? 660 : 580,
             background: '#0A0A0A',
             borderCollapse: 'collapse',
           }}
@@ -238,6 +226,7 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
               const isCurrentUser = row.user_id === currentUserId;
               const isQualified = row.qualified && row.rank !== null;
               const nickname = row.floor_username ?? row.display_name;
+              const rr = getRowRR(row);
 
               return (
                 <tr
@@ -283,11 +272,20 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
                     {row.win_rate !== null ? `${row.win_rate}%` : <span style={{ color: '#444' }}>—</span>}
                   </td>
 
-                  {/* PF */}
+                  {/* RR */}
                   <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
-                    {row.profit_factor !== null
-                      ? row.profit_factor.toFixed(2)
-                      : <span style={{ color: '#444' }}>—</span>}
+                    {fmtRR(rr)}
+                  </td>
+
+                  {/* PF — the star column, gold + bold */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                    {row.profit_factor !== null ? (
+                      <span className="font-bold" style={{ color: '#E8C766' }}>
+                        {row.profit_factor.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#444' }}>—</span>
+                    )}
                   </td>
 
                   {/* TRADES */}
@@ -310,25 +308,16 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
                     )}
                   </td>
 
+                  {/* DAYS */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                    {row.active_days !== undefined && row.active_days !== null
+                      ? row.active_days
+                      : <span style={{ color: '#444' }}>—</span>}
+                  </td>
+
                   {/* EXTRA STATS (expanded only) */}
                   {expanded && (
                     <>
-                      {/* AVG WIN */}
-                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                        {fmtGreen(row.avg_win)}
-                      </td>
-                      {/* AVG LOSS */}
-                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                        {fmtRed(row.avg_loss)}
-                      </td>
-                      {/* BEST */}
-                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                        {fmtGreen(row.best_trade)}
-                      </td>
-                      {/* WORST */}
-                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                        {fmtRed(row.worst_trade)}
-                      </td>
                       {/* STREAK */}
                       <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
                         {row.win_streak !== null
