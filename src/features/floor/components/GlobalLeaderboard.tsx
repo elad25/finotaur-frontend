@@ -29,6 +29,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import {
   useActiveCompetition,
   useFloorLeaderboard,
+  useFloorLeaderboardLastUpdated,
   useMyFloorParticipation,
   useJoinFloor,
   useLeaveFloor,
@@ -154,11 +155,9 @@ const JoinDialog = memo(function JoinDialog({
         </DialogHeader>
 
         <p className="text-sm leading-relaxed" style={{ color: '#A0A0A0' }}>
-          By registering, your verified results become public on the leaderboard.
-          Your entry is locked once the competition starts on{' '}
-          <span className="text-white font-medium">{formatDate(periodStart)}</span> —
-          you can&apos;t opt out mid-competition. Only your real broker-verified
-          trades count.
+          By joining, your verified results become public on the leaderboard.
+          Your entry is locked in — you can&apos;t opt out mid-competition. Only
+          your real broker-verified trades count.
         </p>
 
         {error && (
@@ -431,6 +430,7 @@ const CompStatusBlock = memo(function CompStatusBlock({
     }
 
     // Not yet registered — CTA
+    const hasStarted = new Date() >= new Date(periodStart);
     return (
       <>
         <div
@@ -462,7 +462,19 @@ const CompStatusBlock = memo(function CompStatusBlock({
 
           {/* Primary CTA — full width */}
           <div className="mt-4">
-            {isPremium ? (
+            {!hasStarted ? (
+              <button
+                disabled
+                className="w-full text-center block rounded-[10px] py-2.5 text-sm font-semibold cursor-not-allowed"
+                style={{
+                  background: '#1a1a1a',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  color: '#888',
+                }}
+              >
+                Opens {formatDate(periodStart)}
+              </button>
+            ) : isPremium ? (
               <button
                 onClick={() => { resetJoin(); setJoinDialogOpen(true); }}
                 className="w-full text-center block rounded-[10px] py-2.5 text-sm font-bold tracking-wide transition-all hover:opacity-90 active:scale-95"
@@ -972,6 +984,8 @@ export function GlobalLeaderboard() {
     refetch,
   } = useFloorLeaderboard(leaderboardScope, competitionId);
 
+  const { data: lastUpdated } = useFloorLeaderboardLastUpdated(competitionId);
+
   // Full-page skeleton only on the very first load (no rows yet). On period
   // switches, keepPreviousData retains the prior rows so the header, tabs and
   // right rail stay mounted and the list swaps in place — no blank flash.
@@ -1115,6 +1129,20 @@ export function GlobalLeaderboard() {
           ) : (
             <>
               {rows && rows.length > 0 && <FloorPodium rows={rows} />}
+
+              {period === 'monthly' && (
+                <p className="text-[11px]" style={{ color: '#666' }}>
+                  {lastUpdated
+                    ? `Updated daily · last updated ${new Date(lastUpdated).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}, ${new Date(lastUpdated).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}`
+                    : 'Updated once daily'}
+                </p>
+              )}
 
               <DataState
                 isLoading={false}

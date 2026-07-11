@@ -77,6 +77,7 @@ const JOIN_ERROR_MESSAGES: Record<string, string> = {
   competition_not_found: 'This competition no longer exists.',
   competition_closed: 'This competition is closed for new entries.',
   subscription_required: 'The Championship is open to Trader members.',
+  period_not_started: 'The challenge has not started yet.',
 };
 
 /**
@@ -157,11 +158,14 @@ export function useFloorLeaderboard(
     queryFn: async () => {
       if (scope === 'monthly') {
         if (!competitionId) return [];
-        const { data, error } = await supabase.rpc('floor_leaderboard', {
-          p_competition_id: competitionId,
-        });
-        if (error) throw error;
-        return (data as FloorLeaderboardRow[]) ?? [];
+        // Prefer the once-a-day snapshot; fall back to the live RPC until the
+        // backend migration (floor_leaderboard_daily) is deployed.
+        let res = await supabase.rpc('floor_leaderboard_daily', { p_competition_id: competitionId });
+        if (res.error) {
+          res = await supabase.rpc('floor_leaderboard', { p_competition_id: competitionId });
+        }
+        if (res.error) throw res.error;
+        return (res.data as FloorLeaderboardRow[]) ?? [];
       }
       // this_year or all_time
       const { data, error } = await supabase.rpc('floor_leaderboard_cumulative', {
@@ -171,8 +175,29 @@ export function useFloorLeaderboard(
       return (data as FloorLeaderboardRow[]) ?? [];
     },
     enabled: scope !== 'monthly' || !!competitionId,
-    staleTime: 30_000,
+    staleTime: scope === 'monthly' ? 30 * 60_000 : 30_000,
     gcTime: 2 * 60_000,
+  });
+}
+
+// =====================================================
+// useFloorLeaderboardLastUpdated
+// =====================================================
+// Timestamp of the last daily snapshot (for the "Updated daily" label).
+// Returns null if the snapshot RPC isn't deployed yet.
+export function useFloorLeaderboardLastUpdated(competitionId?: string) {
+  return useQuery<string | null>({
+    queryKey: ['floor', 'leaderboard-updated', competitionId ?? 'none'] as const,
+    enabled: !!competitionId,
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('floor_leaderboard_last_updated', {
+        p_competition_id: competitionId,
+      });
+      if (error) return null; // backward-compat: RPC not deployed yet
+      return (data as string | null) ?? null;
+    },
   });
 }
 
