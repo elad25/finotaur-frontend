@@ -21,15 +21,6 @@ import type { FootprintCellMode, ImbalancePreset } from '@/components/charting/o
 
 export type RowDensity = 'auto' | 'x2' | 'x4';
 
-/**
- * Bar-type aggregation for the underlying candle series — see
- * charting/orderflow/barBuilder.ts. FOUNDATION STAGE ONLY: only 'time' is
- * wired into the chart today (ChartTab still renders Binance klines
- * regardless of this field); 'tick'/'volume' render as disabled options
- * until the follow-up integration phase.
- */
-export type BarKind = 'time' | 'tick' | 'volume';
-
 export interface OrderFlowControlsState {
   enabled: boolean;
   cellMode: FootprintCellMode;
@@ -46,8 +37,6 @@ export interface OrderFlowControlsState {
   showStats: boolean;
   /** ATAS-style Magnifier — hover-a-candle popup showing full footprint detail at normal/semi-zoomed chart levels. Default ON. */
   magnifierEnabled: boolean;
-  /** Bar-type aggregation (foundation stage — see BarKind doc comment). Default 'time'. */
-  barAggregation: BarKind;
 }
 
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
@@ -61,7 +50,6 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   imbalancePreset: 'standard',
   showStats: true,
   magnifierEnabled: true,
-  barAggregation: 'time',
 };
 
 interface OrderFlowControlsProps {
@@ -99,14 +87,6 @@ const IMBALANCE_PRESET_OPTIONS: { value: ImbalancePreset; label: string; title: 
   { value: 'standard', label: 'Standard', title: 'Standard — 150% diagonal ratio, singles highlighted' },
   { value: 'strict', label: 'Strict', title: 'Strict — 300% diagonal ratio, singles highlighted' },
   { value: 'stacked', label: 'Stacked', title: 'Stacked — 150% ratio, only runs of 3+ consecutive levels highlighted' },
-];
-
-// Foundation stage — only 'time' is wired into the chart (see BarKind doc
-// comment). 'tick'/'volume' are visible but disabled until integration.
-const BAR_KIND_OPTIONS: { value: BarKind; label: string; comingSoon: boolean }[] = [
-  { value: 'time', label: 'Time', comingSoon: false },
-  { value: 'tick', label: 'Tick', comingSoon: true },
-  { value: 'volume', label: 'Volume', comingSoon: true },
 ];
 
 function pillClass(active: boolean, disabled: boolean): string {
@@ -201,26 +181,6 @@ export function OrderFlowControls({
             disabled={disabled || !state.enabled}
             onClick={() => onChange({ ...state, rowDensity: opt.value })}
             className={pillClass(state.rowDensity === opt.value, disabled || !state.enabled)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
-
-      {/* Bar-type segmented control — foundation stage (see BarKind doc
-          comment): Tick/Volume are visually present but disabled, "Coming
-          soon". barAggregation is NOT yet threaded into the chart. */}
-      <div className="flex items-center gap-1" role="group" aria-label="Bar type">
-        {BAR_KIND_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            disabled={disabled || !state.enabled || opt.comingSoon}
-            onClick={() => onChange({ ...state, barAggregation: opt.value })}
-            className={pillClass(state.barAggregation === opt.value, disabled || !state.enabled || opt.comingSoon)}
-            title={opt.comingSoon ? 'Coming soon' : undefined}
           >
             {opt.label}
           </button>

@@ -451,7 +451,11 @@ export function FootprintLayer({
         const yAt1 = seriesInstance.priceToCoordinate(rowSize);
         const rowHeightPx = yAt0 !== null && yAt1 !== null ? Math.abs((yAt0 as number) - (yAt1 as number)) : 0;
 
-        const detail = computeDetailLevel(candleWidthPx, rowHeightPx, currentStageRef.current);
+        // forceFullDetail (Trading Arena Footprint tab): skip the zoom-driven
+        // gate entirely and always render at 'full' — see FootprintConfig's
+        // doc comment. Every other caller leaves this undefined/false, so
+        // computeDetailLevel's existing hysteresis behavior is unaffected.
+        const detail = config.forceFullDetail ? 'full' : computeDetailLevel(candleWidthPx, rowHeightPx, currentStageRef.current);
         if (detail !== currentStageRef.current) {
           currentStageRef.current = detail;
           onStageChangeRef.current?.(detail);

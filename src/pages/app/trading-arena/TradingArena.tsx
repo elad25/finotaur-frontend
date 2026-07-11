@@ -1,17 +1,25 @@
 /**
  * Trading Arena — full-screen trading workstation (admin + beta only).
  *
- * Phase 0 scaffold:
+ * Tab restructure (2026-07): the tab bar is now exactly 3 tabs — Chart,
+ * Footprint, Liquidity. The former Tape / CVD / Options / Futures / Forex
+ * tabs were removed from navigation (files kept on disk, just unrouted —
+ * see tabs/TapeTab.tsx, tabs/CvdTab.tsx, tabs/LockedTab.tsx,
+ * tabs/FuturesChartTab.tsx). The former Order Flow tab (BookmapChart) is
+ * superseded by the new Liquidity tab (DepthMatrixLayer-based); legacy
+ * 'order-flow' deep links still resolve there — see types.ts's toTabId.
+ * Futures capability (admin-only Databento preview) now lives INSIDE the
+ * Footprint tab, switched by detected asset class — see tabs/FootprintTab.tsx.
+ *
+ * Phase 0 scaffold (still applies):
  *   - Full viewport, no app chrome (added to HIDE_CHROME_ROUTES via
  *     ProtectedAppLayout + NO_SIDEBAR_ROUTES / NO_SUBNAV_ROUTES).
  *   - Slim custom top bar: title + back control, asset selector,
  *     interval selector, tab switcher.
  *   - Tabs (URL-driven via :section param):
- *       Chart       → FinotaurChart + BinanceSource
- *       Order Flow  → BookmapChart + useBinanceOrderBook (live)
- *       Options     → Locked (coming soon)
- *       Futures     → Locked (coming soon)
- *       Forex       → Locked (coming soon)
+ *       Chart      → FinotaurChart + BinanceSource
+ *       Footprint  → dedicated full-detail order-flow footprint (crypto + futures)
+ *       Liquidity  → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
  *
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
@@ -29,12 +37,9 @@ import {
 } from '@/components/backtest/symbolUniverse';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { toTabId } from './types';
-import { ChartTab }        from './tabs/ChartTab';
-import { OrderFlowTab }    from './tabs/OrderFlowTab';
-import { TapeTab }         from './tabs/TapeTab';
-import { CvdTab }          from './tabs/CvdTab';
-import { LockedTab }       from './tabs/LockedTab';
-import { FuturesChartTab } from './tabs/FuturesChartTab';
+import { ChartTab }      from './tabs/ChartTab';
+import { FootprintTab }  from './tabs/FootprintTab';
+import { LiquidityTab }  from './tabs/LiquidityTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
 import { AccountSelector } from './components/AccountSelector';
 import {
@@ -58,10 +63,9 @@ export default function TradingArena() {
 
   const activeTab = toTabId(section);
 
-  // Futures is admin-only (the founder's own Tradovate feed) — everyone else
-  // sees the same "Coming soon" LockedTab as Options/Forex. Uses the SAME
-  // admin check as the Arena's own route-level AdminBetaGate (App.tsx),
-  // not a new roles system.
+  // Futures (admin-only Databento preview, now inside the Footprint tab) uses
+  // the SAME admin check as the Arena's own route-level AdminBetaGate
+  // (App.tsx), not a new roles system — see tabs/FootprintTab.tsx.
   const { isAdmin } = useAdminAuth();
 
   // Asset and interval are held in component state.
@@ -91,11 +95,6 @@ export default function TradingArena() {
     setSymbol(arenaSymbol);
     setAssetClass(detected);
   }, []);
-
-  // Defense-in-depth: a non-admin landing directly on /trading-arena/futures
-  // (deep link / stale bookmark) sees LockedTab, never FuturesChartTab —
-  // this mirrors the tab-content switch below, not just the tab button state.
-  const showFuturesTab = activeTab === 'futures' && isAdmin;
 
   const handleBack = useCallback(() => {
     navigate('/app/home');
@@ -196,22 +195,21 @@ export default function TradingArena() {
             onControlsChange={setOfControls}
           />
         )}
-        {activeTab === 'order-flow' && (
-          <OrderFlowTab symbol={symbol} />
+        {activeTab === 'footprint' && (
+          <FootprintTab
+            symbol={symbol}
+            interval={interval}
+            assetClass={assetClass}
+            isAdmin={isAdmin}
+          />
         )}
-        {activeTab === 'tape' && (
-          <TapeTab symbol={symbol} />
+        {activeTab === 'liquidity' && (
+          <LiquidityTab
+            symbol={symbol}
+            interval={interval}
+            assetClass={assetClass}
+          />
         )}
-        {activeTab === 'cvd' && (
-          <CvdTab symbol={symbol} interval={interval} />
-        )}
-        {activeTab === 'options' && <LockedTab label="Options" />}
-        {showFuturesTab ? (
-          <FuturesChartTab interval={interval} />
-        ) : (
-          activeTab === 'futures' && <LockedTab label="Futures" />
-        )}
-        {activeTab === 'forex'    && <LockedTab label="Forex" />}
       </main>
     </div>
   );
