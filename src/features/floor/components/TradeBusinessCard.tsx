@@ -67,14 +67,12 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
         'bg-surface-base border border-[rgba(201,166,70,0.35)]',
       )}
     >
-      {/* Subtle gold geometric watermark — CSS only, no external asset */}
-      <div
+      {/* FINOTAUR bull watermark — gold-on-black logo, screen-blended so the black drops out */}
+      <img
+        src="/finotaur-bull-watermark.png"
+        alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-10 -right-10 h-[180px] w-[180px] rotate-45 border-[16px] border-gold-primary/[0.06]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-16 -right-16 h-[140px] w-[140px] rotate-12 border-[10px] border-gold-primary/[0.05]"
+        className="pointer-events-none absolute -bottom-3 -right-3 w-[210px] opacity-[0.16] mix-blend-screen select-none"
       />
 
       <div className="relative z-10 flex flex-col gap-ds-3">
