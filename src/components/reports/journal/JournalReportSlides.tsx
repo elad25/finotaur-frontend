@@ -6,11 +6,6 @@
 import { useState, useMemo, type ReactNode } from 'react';
 import {
   ResponsiveContainer,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
   BarChart,
   Bar,
   Cell,
@@ -22,7 +17,7 @@ import {
   Area,
   ReferenceArea,
 } from 'recharts';
-import { Target, TrendingUp, Scale, TrendingDown, HelpCircle, Sparkles, ChevronRight } from 'lucide-react';
+import { Target, TrendingUp, Scale, TrendingDown, HelpCircle, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { Change, Price } from '@/components/ds/NumberDisplay';
 import { AIArenaTabNav } from '@/components/ai-arena/AIArenaTabNav';
@@ -31,6 +26,7 @@ import type {
   AdvancedStatTile,
   ConsistencyStatCard,
   DayOfWeekRow,
+  EdgeScoreMetric,
   JournalReportData,
   PatternClassification,
   StatusBadge,
@@ -53,6 +49,13 @@ const CARD_ICON: Record<string, typeof Target> = {
   'max-drawdown': TrendingDown,
 };
 
+const CONSISTENCY_LEDGER_HEADERS = [
+  { label: 'METRIC', className: 'col-span-3' },
+  { label: 'VALUE', className: 'col-span-2 text-right' },
+  { label: 'STATUS', className: 'col-span-2 text-right' },
+  { label: 'INSIGHT', className: 'col-span-5' },
+];
+
 function statusBadgeClasses(status: StatusBadge): string {
   switch (status) {
     case 'GREAT':
@@ -66,21 +69,8 @@ function statusBadgeClasses(status: StatusBadge): string {
   }
 }
 
-/** Status-tinted card background + border — gold for GREAT/GOOD, amber for
- *  NEEDS WORK, red for WATCH OUT. Fills stay ≤10% opacity per the "gold is a
- *  statement, not decoration" rule. */
-function statusTintClasses(status: StatusBadge): string {
-  switch (status) {
-    case 'GREAT':
-    case 'GOOD':
-      return 'border-gold-border bg-gradient-to-b from-gold-primary/[0.08] to-transparent';
-    case 'NEEDS WORK':
-      return 'border-status-warning/30 bg-gradient-to-b from-status-warning/[0.08] to-transparent';
-    case 'WATCH OUT':
-    default:
-      return 'border-num-negative/30 bg-gradient-to-b from-num-negative/[0.08] to-transparent';
-  }
-}
+/** Tiny uppercase panel/column caption — the report's shared label voice. */
+const CAPTION_CLASS = 'text-[10px] uppercase tracking-[0.15em] text-ink-tertiary';
 
 function statusValueClasses(status: StatusBadge): string {
   switch (status) {
@@ -115,9 +105,16 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
       <AIArenaTabNav items={CONSISTENCY_TABS} activeId={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'essential' && (
-        <div className="grid grid-cols-1 gap-ds-4 pt-ds-1 sm:grid-cols-2">
-          {data.consistency.map((card) => (
-            <ConsistencyCard key={card.key} card={card} />
+        <div className="pt-ds-1">
+          <div className="grid grid-cols-12 items-center gap-ds-2 border-b border-border-ds-subtle pb-ds-2">
+            {CONSISTENCY_LEDGER_HEADERS.map((h) => (
+              <span key={h.label} className={cn('text-[10px] uppercase tracking-[0.15em] text-ink-tertiary', h.className)}>
+                {h.label}
+              </span>
+            ))}
+          </div>
+          {data.consistency.map((card, i) => (
+            <ConsistencyRow key={card.key} card={card} isLast={i === data.consistency.length - 1} />
           ))}
         </div>
       )}
@@ -129,41 +126,45 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
   );
 }
 
-function ConsistencyCard({ card }: { card: ConsistencyStatCard }) {
+function ConsistencyRow({ card, isLast }: { card: ConsistencyStatCard; isLast: boolean }) {
   const Icon = CARD_ICON[card.key] ?? Target;
   return (
-    <div className={cn('rounded-[12px] border-[0.5px] p-ds-4', statusTintClasses(card.status))}>
-      <div className="flex items-center justify-between gap-ds-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Icon className="h-4 w-4 flex-shrink-0 text-gold-primary" aria-hidden="true" />
-          <span className="truncate text-xs text-ink-secondary">{card.label}</span>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={card.tooltip}
-                  onClick={(e) => e.preventDefault()}
-                  className="inline-flex flex-shrink-0 items-center justify-center"
-                >
-                  <HelpCircle className="h-3.5 w-3.5 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[220px] text-xs">
-                {card.tooltip}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <span className={cn('flex-shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(card.status))}>
+    <div className={cn('grid grid-cols-12 items-center gap-ds-2 py-ds-3', !isLast && 'border-b border-border-ds-subtle')}>
+      <div className="col-span-3 flex min-w-0 items-center gap-2">
+        <Icon className="h-4 w-4 flex-shrink-0 text-gold-primary" aria-hidden="true" />
+        <span className="truncate text-sm text-ink-primary">{card.label}</span>
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={card.tooltip}
+                onClick={(e) => e.preventDefault()}
+                className="inline-flex flex-shrink-0 items-center justify-center"
+              >
+                <HelpCircle className="h-3.5 w-3.5 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[220px] text-xs">
+              {card.tooltip}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className={cn('font-mono text-lg tabular-nums', statusValueClasses(card.status))}>{card.displayValue}</span>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className={cn('inline-flex rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(card.status))}>
           {card.status}
         </span>
       </div>
-      <p className={cn('mt-ds-2 font-mono text-2xl tabular-nums', statusValueClasses(card.status))}>{card.displayValue}</p>
-      <p className="mt-ds-1 flex items-start gap-1.5 text-xs italic leading-snug text-ink-secondary">
-        <Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-gold-primary" aria-hidden="true" />
-        <span>{card.explanation}</span>
-      </p>
+
+      <div className="col-span-5 min-w-0">
+        <span className="text-xs leading-snug text-ink-secondary">{card.explanation}</span>
+      </div>
     </div>
   );
 }
@@ -181,11 +182,11 @@ function AdvancedStatsGrid({ tiles }: { tiles: AdvancedStatTile[] }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-ds-3 pt-ds-1 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-x-ds-5 gap-y-0 pt-ds-1 sm:grid-cols-3 lg:grid-cols-4">
       {tiles.map((tile) => (
-        <div key={tile.key} className="rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
+        <div key={tile.key} className="border-b border-border-ds-subtle py-ds-2">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-[11px] text-ink-tertiary">{tile.label}</span>
+            <span className={cn('truncate', CAPTION_CLASS)}>{tile.label}</span>
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -235,7 +236,7 @@ function ConsistencyGraphs({ data }: { data: JournalReportData }) {
     <div className="space-y-ds-4 pt-ds-1">
       <div className="grid grid-cols-1 gap-ds-4 md:grid-cols-2">
         <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
-          <p className="mb-ds-2 text-[11px] text-ink-tertiary">Cumulative equity curve</p>
+          <p className={cn('mb-ds-2', CAPTION_CLASS)}>Cumulative equity curve</p>
           {data.risk.equityCurve.length === 0 ? (
             <div className="flex h-40 items-center justify-center text-xs text-ink-tertiary">Not enough closed trades.</div>
           ) : (
@@ -259,7 +260,7 @@ function ConsistencyGraphs({ data }: { data: JournalReportData }) {
         </div>
 
         <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
-          <p className="mb-ds-2 text-[11px] text-ink-tertiary">R-multiple distribution</p>
+          <p className={cn('mb-ds-2', CAPTION_CLASS)}>R-multiple distribution</p>
           {data.graphs.rDistribution.length === 0 ? (
             <div className="flex h-40 items-center justify-center text-xs text-ink-tertiary">Not enough R data yet.</div>
           ) : (
@@ -281,7 +282,7 @@ function ConsistencyGraphs({ data }: { data: JournalReportData }) {
       </div>
 
       <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
-        <p className="mb-ds-2 text-[11px] text-ink-tertiary">Daily P&amp;L</p>
+        <p className={cn('mb-ds-2', CAPTION_CLASS)}>Daily P&amp;L</p>
         {data.graphs.dailyPnl.length === 0 ? (
           <div className="flex h-40 items-center justify-center text-xs text-ink-tertiary">Not enough dated trades yet.</div>
         ) : (
@@ -324,97 +325,136 @@ function scoreStatus(score: number): StatusBadge {
   return 'WATCH OUT';
 }
 
-function EdgeScoreBar({ score }: { score: number }) {
+/** English verdict word per metric, colored to match the ledger's status language. */
+function metricVerdict(status: StatusBadge): { word: string; className: string } {
+  switch (status) {
+    case 'GREAT':
+      return { word: 'Strength', className: 'text-gold-primary' };
+    case 'GOOD':
+      return { word: 'Solid', className: 'text-gold-primary' };
+    case 'NEEDS WORK':
+      return { word: 'Weak', className: 'text-status-warning' };
+    case 'WATCH OUT':
+    default:
+      return { word: 'Critical', className: 'text-num-negative' };
+  }
+}
+
+/** Position vs. the pro benchmark zone — score >= 66 is the pro zone. */
+function vsProLabel(score: number): string {
+  if (score >= 66) return 'Above';
+  if (score >= 33) return 'Below';
+  return 'Far below';
+}
+
+const OVERALL_VERDICT: Record<StatusBadge, string> = {
+  GREAT: 'Durable edge — protect it with the same risk discipline.',
+  GOOD: 'A real edge is forming — tighten the weak metrics.',
+  'NEEDS WORK': 'The edge is fragile — the weak metrics are erasing it.',
+  'WATCH OUT': 'No durable edge yet — risk control comes first.',
+};
+
+/** Mini benchmark bar fill color per status — matches the ledger's verdict colors. */
+function scoreBarFillClass(status: StatusBadge): string {
+  switch (status) {
+    case 'GREAT':
+    case 'GOOD':
+      return 'bg-gold-primary/80';
+    case 'NEEDS WORK':
+      return 'bg-status-warning/80';
+    case 'WATCH OUT':
+    default:
+      return 'bg-num-negative/80';
+  }
+}
+
+const EDGE_LEDGER_HEADERS = [
+  { label: 'METRIC', className: 'col-span-4' },
+  { label: 'VALUE', className: 'col-span-2 text-right' },
+  { label: 'SCORE', className: 'col-span-2 text-right' },
+  { label: 'VS PRO', className: 'col-span-2 text-right' },
+  { label: 'VERDICT', className: 'col-span-2 text-right' },
+];
+
+/** One ledger row — metric label + tooltip, raw value, mini benchmark bar +
+ *  score, position vs. the pro zone, and a one-word verdict. */
+function EdgeLedgerRow({ metric, isLast }: { metric: EdgeScoreMetric; isLast: boolean }) {
+  const status = scoreStatus(metric.score);
+  const tooltipCopy = EDGE_METRIC_TOOLTIP[metric.key] ?? metric.label;
+  const verdict = metricVerdict(status);
+  const clampedScore = Math.max(0, Math.min(100, metric.score));
+
   return (
-    <div
-      className="h-2 w-full overflow-hidden rounded-full"
-      style={{ background: 'linear-gradient(90deg, #E24B4A 0%, #eab308 50%, #C9A646 100%)' }}
-    >
-      <div className="relative h-full w-full">
-        <div
-          className="absolute top-0 h-full w-[3px] bg-ink-primary"
-          style={{ left: `${Math.max(0, Math.min(100, score))}%` }}
-        />
+    <div className={cn('grid grid-cols-12 items-center gap-ds-2 py-ds-3', !isLast && 'border-b border-border-ds-subtle')}>
+      <div className="col-span-4 flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-sm text-ink-primary">{metric.label}</span>
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={tooltipCopy}
+                onClick={(e) => e.preventDefault()}
+                className="inline-flex flex-shrink-0 items-center justify-center"
+              >
+                <HelpCircle className="h-3 w-3 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[220px] text-xs">
+              {tooltipCopy}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className="font-mono text-sm tabular-nums text-ink-primary">{metric.rawLabel}</span>
+      </div>
+
+      <div className="col-span-2 flex items-center justify-end gap-ds-2">
+        <span className="relative hidden h-1 w-12 overflow-hidden rounded-full bg-white/[0.06] sm:inline-block">
+          <span className={cn('absolute left-0 top-0 h-full rounded-full', scoreBarFillClass(status))} style={{ width: `${clampedScore}%` }} />
+          <span className="absolute left-[66%] top-0 h-full w-px bg-white/20" />
+        </span>
+        <span className="font-mono text-sm tabular-nums text-ink-primary">{Math.round(metric.score)}</span>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className="text-xs text-ink-secondary">{vsProLabel(metric.score)}</span>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className={cn('text-xs font-semibold tracking-wide', verdict.className)}>{verdict.word}</span>
       </div>
     </div>
   );
 }
 
 export function EdgeScoreSlideContent({ data }: { data: JournalReportData }) {
-  const radarData = data.edgeScore.metrics.map((m) => ({ label: m.label, value: m.score }));
   const overallStatus = scoreStatus(data.edgeScore.overall);
 
   return (
-    <div className="space-y-ds-5">
-      <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2">
-        <div className="space-y-ds-4">
-          <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
-            <ResponsiveContainer width="100%" height={220}>
-              <RadarChart data={radarData} outerRadius="72%" margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
-                <PolarGrid stroke="rgba(255,255,255,0.10)" />
-                <PolarAngleAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.62)', fontSize: 10 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                <Radar dataKey="value" stroke="#C9A646" strokeWidth={2} fill="#C9A646" fillOpacity={0.28} isAnimationActive={false} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
-            <p className="text-xs text-ink-secondary">Your Edge Score</p>
-            <p className="mt-ds-1 font-mono text-3xl tabular-nums text-gold-primary">{data.edgeScore.overall.toFixed(1)}</p>
-            <div className="mt-ds-3">
-              <EdgeScoreBar score={data.edgeScore.overall} />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-ds-3">
-          <p className="text-xs text-ink-secondary">Your FINO Edge Score combines 6 key metrics:</p>
-          {data.edgeScore.metrics.map((m) => {
-            const status = scoreStatus(m.score);
-            const tooltipCopy = EDGE_METRIC_TOOLTIP[m.key] ?? m.label;
-            return (
-              <div key={m.key} className="flex items-center justify-between gap-ds-2 rounded-[8px] bg-surface-2 px-ds-3 py-ds-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-xs text-ink-secondary">{m.label}</span>
-                  <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={tooltipCopy}
-                          onClick={(e) => e.preventDefault()}
-                          className="inline-flex flex-shrink-0 items-center justify-center"
-                        >
-                          <HelpCircle className="h-3 w-3 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[220px] text-xs">
-                        {tooltipCopy}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-ds-2">
-                  <span className="font-mono text-xs tabular-nums text-ink-tertiary">{m.rawLabel}</span>
-                  <span className={cn('rounded-sm px-1.5 py-0.5 text-[10px] font-semibold tabular-nums', statusBadgeClasses(status))}>
-                    {Math.round(m.score)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+    <div className="grid grid-cols-1 gap-ds-6 md:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]">
+      <div className="flex flex-col items-center justify-center text-center md:border-r md:border-border-ds-subtle md:pr-ds-6">
+        <p className="font-mono text-7xl font-light tabular-nums leading-none text-ink-primary">{data.edgeScore.overall.toFixed(1)}</p>
+        <p className="mt-ds-2 text-[10px] uppercase tracking-[0.2em] text-ink-tertiary">Edge Score &middot; of 100</p>
+        <span className={cn('mt-ds-3 rounded-full px-ds-3 py-1 text-[11px] font-semibold tracking-wide', statusBadgeClasses(overallStatus))}>
+          {overallStatus}
+        </span>
+        <p className="mt-ds-4 max-w-[220px] text-sm leading-snug text-ink-secondary">{OVERALL_VERDICT[overallStatus]}</p>
       </div>
 
-      <div className="flex items-center justify-between rounded-[12px] border-[0.5px] border-gold-border bg-gold-primary/[0.06] px-ds-4 py-ds-3">
-        <span className="text-sm text-ink-secondary">Overall Edge Score</span>
-        <div className="flex items-center gap-ds-2">
-          <span className="font-mono text-lg tabular-nums text-gold-primary">{data.edgeScore.overall.toFixed(1)}</span>
-          <span className={cn('rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(overallStatus))}>
-            {overallStatus}
-          </span>
+      <div>
+        <div className="grid grid-cols-12 items-center gap-ds-2 border-b border-border-ds-subtle pb-ds-2">
+          {EDGE_LEDGER_HEADERS.map((h) => (
+            <span key={h.label} className={cn('text-[10px] uppercase tracking-[0.15em] text-ink-tertiary', h.className)}>
+              {h.label}
+            </span>
+          ))}
         </div>
+        {data.edgeScore.metrics.map((m, i) => (
+          <EdgeLedgerRow key={m.key} metric={m} isLast={i === data.edgeScore.metrics.length - 1} />
+        ))}
       </div>
     </div>
   );
@@ -430,10 +470,17 @@ export function DayOfWeekSlideContent({ data }: { data: JournalReportData }) {
 
   return (
     <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2">
-      <div className="space-y-ds-2">
-        <div className="flex items-center justify-between px-ds-1">
-          <p className="text-xs font-medium text-ink-secondary">By Day of Week</p>
-          <span className="text-[11px] text-gold-primary">Click on each day</span>
+      <div>
+        <div className="flex items-center justify-between px-ds-1 pb-ds-2">
+          <p className={CAPTION_CLASS}>By Day of Week</p>
+          <span className="text-[10px] uppercase tracking-[0.1em] text-gold-primary">Click on each day</span>
+        </div>
+        <div className="flex items-center justify-between border-b border-border-ds-subtle px-ds-2 pb-ds-1">
+          <span className={CAPTION_CLASS}>DAY</span>
+          <div className="flex items-center gap-ds-3">
+            <span className={CAPTION_CLASS}>RECORD</span>
+            <span className={CAPTION_CLASS}>P&amp;L</span>
+          </div>
         </div>
         {data.dayOfWeek.map((row) => (
           <DayRow key={row.day} row={row} selected={row.day === selectedDay} onSelect={() => setSelectedDay(row.day)} />
@@ -442,7 +489,7 @@ export function DayOfWeekSlideContent({ data }: { data: JournalReportData }) {
 
       <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
         <div className="mb-ds-3 flex items-center justify-between gap-ds-2">
-          <p className="text-xs text-ink-secondary">
+          <p className={CAPTION_CLASS}>
             Entry Time on {selectedDay} ({hourBuckets.reduce((s, b) => s + b.trades, 0)} trades)
           </p>
           <div className="flex flex-shrink-0 items-center gap-ds-3 text-[11px]">
@@ -482,11 +529,11 @@ function DayRow({ row, selected, onSelect }: { row: DayOfWeekRow; selected: bool
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center justify-between rounded-[8px] border-[0.5px] px-ds-3 py-ds-2 text-left transition-colors duration-base ease-out',
-        selected ? 'border-gold-border bg-gold-primary/[0.06]' : 'border-border-ds-subtle bg-surface-base hover:border-border-ds-default',
+        'flex w-full items-center justify-between rounded-none border-b border-l-2 border-border-ds-subtle px-ds-2 py-ds-2 text-left transition-colors duration-base ease-out',
+        selected ? 'border-l-gold-primary bg-gold-primary/[0.06]' : 'border-l-transparent hover:bg-white/[0.03]',
       )}
     >
-      <span className="text-sm text-ink-primary">{row.day}</span>
+      <span className={cn('text-sm', selected ? 'text-gold-primary' : 'text-ink-primary')}>{row.day}</span>
       <div className="flex items-center gap-ds-3">
         <span className="text-[11px] text-ink-tertiary">
           {row.wins}W {row.losses}L
@@ -509,12 +556,6 @@ const CLASSIFICATION_COLOR: Record<PatternClassification, string> = {
   Strength: '#C9A646',
   'Area to Improve': '#E24B4A',
   Neutral: 'rgba(255,255,255,0.6)',
-};
-
-const CLASSIFICATION_BG: Record<PatternClassification, string> = {
-  Strength: 'rgba(201,166,70,0.12)',
-  'Area to Improve': 'rgba(226,75,74,0.12)',
-  Neutral: 'rgba(255,255,255,0.10)',
 };
 
 export function PatternsSlideContent({ data }: { data: JournalReportData }) {
@@ -542,19 +583,18 @@ export function PatternsSlideContent({ data }: { data: JournalReportData }) {
         </div>
       </div>
 
-      <div className="space-y-ds-3">
-        {data.patterns.map((p) => (
-          <div
-            key={p.key}
-            className="overflow-hidden rounded-[8px] border-[0.5px] border-border-ds-subtle p-ds-3"
-            style={{ background: `linear-gradient(90deg, ${CLASSIFICATION_BG[p.classification]} 0%, transparent 80%)` }}
-          >
+      <div>
+        {data.patterns.map((p, i) => (
+          <div key={p.key} className={cn('py-ds-3', i !== data.patterns.length - 1 && 'border-b border-border-ds-subtle')}>
             <div className="flex items-center justify-between gap-ds-3">
               <div className="min-w-0">
-                <span className="font-semibold text-ink-primary">{p.name}</span>
-                <span className="ml-ds-2 text-xs leading-snug text-ink-secondary">{p.description}</span>
+                <span className="text-sm font-semibold text-ink-primary">{p.name}</span>
+                <p className="mt-ds-1 text-xs leading-snug text-ink-tertiary">{p.description}</p>
               </div>
               <div className="flex-shrink-0 text-right">
+                <p className="text-[11px] font-semibold" style={{ color: CLASSIFICATION_COLOR[p.classification] }}>
+                  {p.classification}
+                </p>
                 <p className="font-mono text-lg tabular-nums text-ink-primary">{p.pct}%</p>
                 <p className="text-[11px] text-ink-tertiary">{p.count} trades</p>
               </div>
@@ -607,7 +647,7 @@ export function RiskDrawdownSlideContent({ data }: { data: JournalReportData }) 
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-ds-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 divide-x divide-border-ds-subtle sm:grid-cols-4">
         <RiskStat label="Max Drawdown">
           <Change value={-Math.abs(risk.maxDrawdown)} format="currency" decimals={0} />
         </RiskStat>
@@ -627,8 +667,8 @@ export function RiskDrawdownSlideContent({ data }: { data: JournalReportData }) 
 
 function RiskStat({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
-      <p className="text-[11px] text-ink-tertiary">{label}</p>
+    <div className="px-ds-3 py-ds-2">
+      <p className={CAPTION_CLASS}>{label}</p>
       <div className="mt-ds-1">{children}</div>
     </div>
   );
@@ -645,15 +685,15 @@ export function DisciplineSlideContent({ data }: { data: JournalReportData }) {
   return (
     <div className="space-y-ds-5">
       <div>
-        <p className="mb-ds-2 text-xs text-ink-secondary">Mistake tag breakdown</p>
+        <p className={cn('mb-ds-2', CAPTION_CLASS)}>Mistake tag breakdown</p>
         {discipline.mistakeTags.length === 0 ? (
           <div className="rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4 text-center text-xs text-ink-tertiary">
             No trades have been tagged with a mistake yet.
           </div>
         ) : (
-          <div className="space-y-ds-2">
-            {discipline.mistakeTags.slice(0, 6).map((t) => (
-              <div key={t.tag} className="rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
+          <div>
+            {discipline.mistakeTags.slice(0, 6).map((t, i, arr) => (
+              <div key={t.tag} className={cn('py-ds-3', i !== arr.length - 1 && 'border-b border-border-ds-subtle')}>
                 <div className="flex items-center justify-between gap-ds-2">
                   <span className="truncate text-sm text-ink-primary">{t.tag}</span>
                   <div className="flex flex-shrink-0 items-center gap-ds-3">
@@ -672,8 +712,8 @@ export function DisciplineSlideContent({ data }: { data: JournalReportData }) {
 
       {(discipline.bestSession || discipline.worstSession) && (
         <div>
-          <p className="mb-ds-2 text-xs text-ink-secondary">Best vs. worst session</p>
-          <div className="grid grid-cols-1 gap-ds-3 sm:grid-cols-2">
+          <p className={cn('mb-ds-2', CAPTION_CLASS)}>Best vs. worst session</p>
+          <div className="grid grid-cols-1 divide-y divide-border-ds-subtle sm:grid-cols-2 sm:divide-x sm:divide-y-0">
             {discipline.bestSession && <SessionCard label="Best session" session={discipline.bestSession} />}
             {discipline.worstSession && <SessionCard label="Worst session" session={discipline.worstSession} />}
           </div>
@@ -685,8 +725,8 @@ export function DisciplineSlideContent({ data }: { data: JournalReportData }) {
 
 function SessionCard({ label, session }: { label: string; session: { label: string; winRate: number; netPnl: number; trades: number } }) {
   return (
-    <div className="rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-3">
-      <p className="text-[11px] uppercase tracking-[1px] text-ink-tertiary">{label}</p>
+    <div className="px-ds-3 py-ds-2">
+      <p className={CAPTION_CLASS}>{label}</p>
       <p className="mt-ds-1 text-sm font-semibold text-ink-primary">{session.label}</p>
       <div className="mt-ds-2 flex items-center justify-between">
         <span className="text-xs text-ink-secondary">{session.winRate.toFixed(1)}% win &middot; {session.trades} trades</span>

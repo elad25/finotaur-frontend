@@ -163,13 +163,13 @@ export function ReportShell({ slides, children, onClose, title, subtitle, locked
         <Carousel setApi={setApi} opts={{ loop: false, align: 'center' }} className="h-full w-full">
           <CarouselContent className="h-full">
             {slides.map((s, i) => (
-              <CarouselItem key={s.key} className="flex h-full items-center justify-center">
+              <CarouselItem key={s.key} className="flex h-full items-start justify-center">
                 <div
                   ref={(el) => {
                     slideRefs.current[i] = el;
                   }}
                   data-report-slide={s.key}
-                  className="mx-auto h-full max-h-full w-full max-w-4xl overflow-y-auto py-ds-2"
+                  className="mx-auto h-full max-h-full w-full max-w-4xl overflow-y-auto overscroll-contain py-ds-2 pr-ds-2"
                 >
                   {children[i]}
                 </div>
