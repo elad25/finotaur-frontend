@@ -47,7 +47,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -555,42 +555,47 @@ const buildTradeSummaries = (
 // Pure SVG, reads only the already-computed win-rate percent — no data logic here.
 const WinRateDonut = ({ percent }: { percent: number }) => {
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-  const size = 56;
-  const strokeWidth = 5;
+  const size = 64;
+  const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (safePercent / 100) * circumference;
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0 -rotate-90"
-      aria-hidden="true"
-    >
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        strokeWidth={strokeWidth}
-        className="text-white/10"
-        stroke="currentColor"
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        className="text-gold-primary"
-        stroke="currentColor"
-      />
-    </svg>
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="-rotate-90"
+        aria-hidden="true"
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          strokeWidth={strokeWidth}
+          className="text-white/10"
+          stroke="currentColor"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="text-gold-primary"
+          stroke="currentColor"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-ink-primary tabular-nums">
+        {safePercent.toFixed(1)}%
+      </span>
+    </div>
   );
 };
 
@@ -599,8 +604,8 @@ const WinRateDonut = ({ percent }: { percent: number }) => {
 const PnlSparkline = ({ data }: { data: number[] }) => {
   if (data.length < 2) return null;
 
-  const width = 88;
-  const height = 34;
+  const width = 64;
+  const height = 24;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
@@ -616,7 +621,9 @@ const PnlSparkline = ({ data }: { data: number[] }) => {
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden="true">
-      <polygon points={areaPoints} className="fill-emerald-400/10" stroke="none" />
+      {/* Area fill only makes sense with >= 3 points — with exactly 2 points it
+          renders as a triangle, not a trend shape. Line still draws at >= 2. */}
+      {data.length >= 3 && <polygon points={areaPoints} className="fill-emerald-400/10" stroke="none" />}
       <polyline
         points={linePoints}
         fill="none"
@@ -640,6 +647,7 @@ const StatsCard = memo(({
   loading,
   donutPercent,
   sparklineData,
+  help,
 }: {
   icon: any;
   title: string;
@@ -650,27 +658,36 @@ const StatsCard = memo(({
   loading?: boolean;
   donutPercent?: number;
   sparklineData?: number[];
+  help?: string;
 }) => (
   <div className="rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5 transition-colors duration-base hover:border-border-ds-default">
     <div className="flex items-center justify-between mb-ds-4">
       {/* Title row */}
       <div className="flex items-center justify-between flex-1 min-w-0">
-        <div className="text-[10px] font-semibold text-ink-secondary uppercase tracking-[0.15em]">
-          {title}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="text-[10px] font-semibold text-ink-secondary uppercase tracking-[0.15em] truncate">
+            {title}
+          </div>
+          {help && (
+            <span title={help} className="inline-flex shrink-0 text-ink-secondary/50 hover:text-ink-secondary cursor-help">
+              <HelpCircle className="w-3 h-3" strokeWidth={1.8} />
+            </span>
+          )}
         </div>
+        {/* Uniform gold-tinted icon chip — all 4 cards, not per-metric color */}
         <div
-          className="inline-flex items-center justify-center w-8 h-8 rounded-xl shrink-0"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-md shrink-0"
           style={{
-            background: color.replace('0.1', '0.15'),
-            border: `1px solid ${color.replace('0.1', '0.3')}`,
+            background: 'rgba(201,166,70,0.12)',
+            border: '1px solid rgba(201,166,70,0.3)',
           }}
         >
-          <Icon className="w-4 h-4" style={{ color: color.replace('0.1', '1') }} strokeWidth={1.8} />
+          <Icon className="w-4 h-4 text-gold-primary" strokeWidth={1.8} />
         </div>
       </div>
     </div>
 
-    <div className="flex items-end justify-between gap-ds-3">
+    <div className="flex items-center justify-between gap-ds-3">
       <div className="min-w-0">
         {/* Value — large and dominant */}
         {loading ? (
@@ -848,15 +865,12 @@ const TradeRow = memo(({
         </Badge>
       </TableCell>
 
-      {/* Session */}
+      {/* Session — plain muted text, not a colored pill (per mock) */}
       <TableCell>
         {trade.session ? (
-          <Badge
-            variant="outline"
-            className={`rounded-sm px-2 py-0.5 text-xs font-medium ${getSessionColor(trade.session)}`}
-          >
+          <span className="text-xs text-ink-secondary">
             {formatSessionDisplay(trade.session)}
-          </Badge>
+          </span>
         ) : (
           <span className="text-zinc-500">—</span>
         )}
@@ -2064,6 +2078,7 @@ const stats = useMemo<Stats>(() => {
               subtitle={stats.totalTrades > 0 ? `${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE` : undefined}
               color="rgba(59, 130, 246, 0.1)"
               loading={isStatsLoading}
+              help="All trades in the selected period"
             />
 
             <StatsCard
@@ -2074,6 +2089,7 @@ const stats = useMemo<Stats>(() => {
               color="rgba(16, 185, 129, 0.1)"
               loading={isStatsLoading}
               donutPercent={stats.winRate}
+              help="Winning share of closed trades"
             />
 
             <StatsCard
@@ -2085,6 +2101,7 @@ const stats = useMemo<Stats>(() => {
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
               loading={isStatsLoading}
               sparklineData={pnlSparklineData}
+              help="Total realized profit and loss"
             />
 
             <StatsCard
@@ -2095,6 +2112,7 @@ const stats = useMemo<Stats>(() => {
               color="rgba(168, 85, 247, 0.1)"
               valueColor={stats.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}
               loading={isStatsLoading}
+              help="Average R multiple per closed trade"
             />
           </div>
         </div>
@@ -2110,12 +2128,14 @@ const stats = useMemo<Stats>(() => {
                 placeholder="Search symbol, strategy, session..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-zinc-900/50 border-zinc-800"
+                className="pl-10 h-9 rounded-md border-border-ds-subtle bg-black/40 text-sm text-ink-primary placeholder:text-ink-secondary/60 focus-visible:border-gold-primary/60"
               />
             </div>
+            {/* Segmented view-mode chip. Kept as <Select> (existing component/logic —
+                not converted to Tabs); trigger restyled to the mock's chip look. */}
             <Select value={viewMode} onValueChange={(value) => setViewMode(value as "trades" | "days")}>
-              <SelectTrigger className="h-11 w-40 rounded-[12px] border-gold-primary/70 bg-surface-base text-ink-primary shadow-glow-gold-active">
-                <CalendarDays className="mr-ds-2 h-4 w-4 text-gold-primary" />
+              <SelectTrigger className="h-9 w-auto min-w-[128px] gap-ds-2 rounded-md border-border-ds-subtle bg-transparent px-3 text-xs font-medium text-ink-secondary duration-base hover:border-gold-primary/50 hover:text-ink-primary data-[state=open]:border-gold-primary data-[state=open]:text-gold-primary">
+                <CalendarDays className="h-3.5 w-3.5 text-gold-primary" />
                 <SelectValue placeholder="View" />
               </SelectTrigger>
               <SelectContent className="border-border-ds-subtle bg-surface-base text-ink-primary">
@@ -2133,7 +2153,7 @@ const stats = useMemo<Stats>(() => {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="border-zinc-800 bg-zinc-900/50"
+                      className="h-9 w-9 rounded-md border-border-ds-subtle bg-transparent text-ink-secondary duration-base hover:border-gold-primary hover:text-gold-primary"
                       onClick={handleAutoLink}
                       disabled={autoLinkLoading}
                       title="Link unlinked trades to strategies whose match rules fit them."
@@ -2151,7 +2171,7 @@ const stats = useMemo<Stats>(() => {
                   <Button
                     variant="outline"
                     size="icon"
-                    className="border-zinc-800 bg-zinc-900/50"
+                    className="h-9 w-9 rounded-md border-border-ds-subtle bg-transparent text-ink-secondary duration-base hover:border-gold-primary hover:text-gold-primary"
                     onClick={exportTrades}
                   >
                     <Download className="w-4 h-4" />
