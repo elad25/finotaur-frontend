@@ -8,7 +8,7 @@
 // Gold-on-black palette (#C9A646 / #E8C766 / #0A0A0A / #141414).
 // =====================================================
 
-import { Crown, Trophy } from 'lucide-react';
+import { Crown } from 'lucide-react';
 import { getRowRR, type FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 
 // ── Avatar helper ──────────────────────────────────────────────────────────────
@@ -97,32 +97,30 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
             'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.02) 100%), #0A0A0A',
         }}
       >
-        {/* Oversized trophy watermark — championship presence, behind the PF number */}
-        <Trophy
+        {/* Oversized trophy watermark — championship presence, behind the PF number.
+            Slightly smaller on mobile so it doesn't overwhelm the stacked layout. */}
+        <img
+          src="/assets/floor/championship-trophy.png"
+          alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute"
+          className="pointer-events-none absolute select-none w-[140px] sm:w-[200px] h-auto"
           style={{
             right: '-24px',
             top: '50%',
             transform: 'translateY(-50%)',
-            width: '180px',
-            height: '180px',
-            color: '#C9A646',
-            opacity: 0.06,
+            opacity: 0.07,
             zIndex: 0,
           }}
         />
 
         {/* Left: trophy + avatar + identity */}
         <div className="relative flex items-center gap-4 min-w-0" style={{ zIndex: 1 }}>
-          <Trophy
-            aria-hidden="true"
+          <img
+            src="/assets/floor/championship-trophy.png"
+            alt="Championship trophy"
+            className="shrink-0 select-none h-[56px] sm:h-[72px] w-auto"
             style={{
-              width: '44px',
-              height: '44px',
-              color: '#C9A646',
-              filter: 'drop-shadow(0 0 10px rgba(201,166,70,0.65))',
-              flexShrink: 0,
+              filter: 'drop-shadow(0 0 14px rgba(201,166,70,0.45))',
             }}
           />
 
@@ -212,11 +210,12 @@ function SubPodiumCard({
   const nickname = row.floor_username ?? row.display_name;
   const isRunnerUp = slot === 'runner-up';
 
-  const romanLabel = isRunnerUp ? 'II' : 'III';
   // Subtle metal identity — silver for runner-up, bronze for third. Clearly
   // quieter than the champion card (no gradient border, no trophy, no glow).
   const slotBorderColor = isRunnerUp ? 'rgba(203,213,225,0.5)' : 'rgba(205,127,50,0.5)';
-  const slotTextColor = isRunnerUp ? '#cbd5e1' : '#cd7f32';
+  const medalSrc = isRunnerUp ? '/assets/floor/medal-silver.png' : '/assets/floor/medal-bronze.png';
+  const medalAlt = isRunnerUp ? 'Silver medal' : 'Bronze medal';
+  const medalGlow = isRunnerUp ? 'rgba(203,213,225,0.35)' : 'rgba(205,127,50,0.35)';
 
   return (
     <div
@@ -226,17 +225,13 @@ function SubPodiumCard({
         border: `1px solid ${slotBorderColor}`,
       }}
     >
-      {/* Rank pill */}
-      <span
-        className="inline-flex w-fit items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest"
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          color: slotTextColor,
-          border: `1px solid ${slotBorderColor}`,
-        }}
-      >
-        {romanLabel}
-      </span>
+      {/* Medal */}
+      <img
+        src={medalSrc}
+        alt={medalAlt}
+        className="w-fit select-none h-[40px] sm:h-[52px]"
+        style={{ filter: `drop-shadow(0 0 6px ${medalGlow})` }}
+      />
 
       {/* Avatar + nickname */}
       <div className="flex items-center gap-3 min-w-0">
