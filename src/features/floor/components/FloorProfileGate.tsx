@@ -48,25 +48,17 @@ export function FloorProfileGate({ children }: FloorProfileGateProps) {
             border: '1px solid rgba(201,166,70,0.2)',
           }}
         >
-          {/* Icon — FINOTAUR bull mark */}
+          {/* Logo — FINOTAUR bull, blended naturally into the card (no container) */}
           <div className="flex justify-center">
-            <div
-              className="flex h-20 w-20 items-center justify-center rounded-full overflow-hidden"
+            <img
+              src="/BULL%20ONLY.png"
+              alt="FINOTAUR"
+              className="h-24 w-auto object-contain"
               style={{
-                background: '#000',
-                border: '1px solid rgba(201,166,70,0.3)',
+                maskImage: 'radial-gradient(ellipse at center, black 56%, transparent 82%)',
+                WebkitMaskImage: 'radial-gradient(ellipse at center, black 56%, transparent 82%)',
               }}
-            >
-              <img
-                src="/favicon.png"
-                alt="FINOTAUR"
-                className="w-[68px] h-auto object-contain"
-                style={{
-                  maskImage: 'radial-gradient(ellipse at center, black 82%, transparent 100%)',
-                  WebkitMaskImage: 'radial-gradient(ellipse at center, black 82%, transparent 100%)',
-                }}
-              />
-            </div>
+            />
           </div>
 
           {/* Heading */}
