@@ -176,6 +176,16 @@ export interface FootprintConfig {
    * the 'full' stage (numbers are already on-screen). Default ON.
    */
   magnifierEnabled: boolean;
+  /**
+   * When true, FootprintLayer skips the zoom-driven `computeDetailLevel`
+   * gate entirely and always renders at the 'full' detail stage, regardless
+   * of candle width / row height. Used by the Trading Arena's dedicated
+   * Footprint tab, where the footprint IS the chart (not a progressive-
+   * disclosure overlay revealed by zooming in). Optional, default/undefined
+   * = unchanged existing behavior (zoom-driven hidden/shaded/full) for every
+   * other caller (ChartTab, FuturesChartTab, Backtest).
+   */
+  forceFullDetail?: boolean;
 }
 
 /** Standard preset: ratio 1.5x (150%), 0.5% dust filter, singles highlighted. */

@@ -4,8 +4,9 @@
  * Replaces the old 3-row chart-controls layout (a header row with an inline
  * IntervalSelector pill-strip, plus a wrapping OrderFlowControls strip
  * holding ~25 buttons) with ONE horizontal row of dropdown triggers:
- *   - Timeframe ▾  — always shown. Replaces the header's old inline
- *                    IntervalSelector 1:1 (same ARENA_INTERVALS list).
+ *   - Timeframe    — always shown. Now a TimeframeMenu (see that file):
+ *                    favorite chips + a TradingView-style grouped dropdown
+ *                    (SECONDS/MINUTES/HOURS/DAYS) with a "Custom…" dialog.
  *   - Indicators ▾ — chart tab only. PLACEHOLDER: read-only rows for the
  *                    two hardcoded default indicators (EMA 50 / RSI 14).
  *                    No add/remove logic, no state.
@@ -22,16 +23,19 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Interval } from '@/components/charting/types';
 import type { FootprintCellMode } from '@/components/charting/orderflow/types';
-import { ARENA_INTERVALS, type TabId } from '../types';
+import type { TabId } from '../types';
+import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
 import { OrderFlowControls, type OrderFlowControlsState } from './OrderFlowControls';
+import { TimeframeMenu } from './TimeframeMenu';
 
-type MenuId = 'timeframe' | 'indicators' | 'chart';
+type MenuId = 'indicators' | 'chart';
 
 interface ArenaToolbarProps {
-  interval: Interval;
-  onIntervalChange: (v: Interval) => void;
+  interval: ArenaInterval;
+  onIntervalChange: (v: ArenaInterval) => void;
+  /** Which timeframe sections are usable for the active symbol/asset class. */
+  intervalCapability: IntervalCapability;
   activeTab: TabId;
   controls: OrderFlowControlsState;
   onControlsChange: (next: OrderFlowControlsState) => void;
@@ -56,6 +60,7 @@ const CELL_MODE_LABELS: Record<FootprintCellMode, string> = {
 export function ArenaToolbar({
   interval,
   onIntervalChange,
+  intervalCapability,
   activeTab,
   controls,
   onControlsChange,
@@ -97,36 +102,14 @@ export function ArenaToolbar({
 
   return (
     <div ref={containerRef} className="flex items-center gap-1">
-      {/* Timeframe ▾ — always shown (chart / cvd / futures tabs all use it) */}
-      <ToolbarTrigger
-        caption="Timeframe"
-        value={ARENA_INTERVALS.find((opt) => opt.value === interval)?.label ?? interval}
-        isOpen={openMenu === 'timeframe'}
-        onClick={() => toggleMenu('timeframe')}
-      >
-        <div className="flex flex-col p-1 min-w-[96px]" role="listbox" aria-label="Select timeframe">
-          {ARENA_INTERVALS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              role="option"
-              aria-selected={interval === opt.value}
-              onClick={() => {
-                onIntervalChange(opt.value);
-                setOpenMenu(null);
-              }}
-              className={cn(
-                'h-7 rounded px-2 text-left text-[11px] font-semibold transition-all duration-150',
-                interval === opt.value
-                  ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border border-[rgba(201,166,70,0.45)]'
-                  : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border border-transparent',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </ToolbarTrigger>
+      {/* Timeframe — always shown (chart / footprint / liquidity tabs all use it).
+          Renders favorite chips + the grouped dropdown + a "Custom…" dialog —
+          see TimeframeMenu.tsx. */}
+      <TimeframeMenu
+        value={interval}
+        onChange={onIntervalChange}
+        capability={intervalCapability}
+      />
 
       {showChartOnlyMenus && (
         <>

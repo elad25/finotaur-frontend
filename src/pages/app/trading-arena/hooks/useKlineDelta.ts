@@ -33,6 +33,7 @@ const BINANCE_KLINES_URL = 'https://api.binance.com/api/v3/klines';
 
 /** Map our internal interval names to Binance's accepted values. */
 const INTERVAL_MAP: Record<Interval, string | null> = {
+  '1s': null, // not supported — useKlineDelta is REST-klines only, no sub-minute bars
   '1m': '1m',
   '2m': null,
   '5m': '5m',

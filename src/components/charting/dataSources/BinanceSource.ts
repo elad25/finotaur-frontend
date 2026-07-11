@@ -34,6 +34,7 @@ const MAX_BARS = 1000;
 
 /** Map our internal interval names to Binance's accepted values. */
 const INTERVAL_MAP: Record<Interval, string | null> = {
+  '1s': '1s',
   '1m': '1m',
   '2m': null, // not supported — caller should pick 1m or 5m
   '5m': '5m',

@@ -23,8 +23,11 @@ export interface Bar {
   volume?: number;
 }
 
-/** Yahoo-style intervals. Binance source maps internally. */
+/** Yahoo-style intervals. Binance source maps internally.
+ *  '1s' is a Binance-only addition (Trading Arena SECONDS timeframes) — no
+ *  other source supports it; see BinanceSource's INTERVAL_MAP. */
 export type Interval =
+  | '1s'
   | '1m'
   | '2m'
   | '5m'
