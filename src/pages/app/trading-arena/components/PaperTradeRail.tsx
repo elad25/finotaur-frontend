@@ -17,10 +17,16 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useBacktestSession } from '@/hooks/useBacktestSession';
 import { cn } from '@/lib/utils';
+import { CleanSelect, type CleanSelectOption } from './CleanSelect';
 
 // Internal notional only — used as the useBacktestSession starting balance
 // so P&L percentages have a denominator. Never displayed to the user.
 const PAPER_BALANCE = 100_000;
+
+const TIF_OPTIONS: CleanSelectOption<'GTC' | 'Day'>[] = [
+  { value: 'GTC', label: 'GTC' },
+  { value: 'Day', label: 'Day' },
+];
 
 export interface PaperTradeRailProps {
   symbol: string;
@@ -286,14 +292,7 @@ export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled }: PaperTr
             <div>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">TIF</p>
               {/* TIF is cosmetic for paper market orders — display-only, not wired into the engine. */}
-              <select
-                value={tif}
-                onChange={(e) => setTif(e.target.value as 'GTC' | 'Day')}
-                className="w-full rounded-md border border-[#C9A646]/20 bg-black/40 px-2 py-1 text-[11px] font-semibold text-zinc-300 focus:outline-none focus:border-[#C9A646]/40"
-              >
-                <option value="GTC">GTC</option>
-                <option value="Day">Day</option>
-              </select>
+              <CleanSelect<'GTC' | 'Day'> value={tif} onChange={setTif} options={TIF_OPTIONS} className="w-full" />
             </div>
           </div>
 

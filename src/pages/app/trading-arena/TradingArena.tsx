@@ -36,6 +36,7 @@ import { CvdTab }          from './tabs/CvdTab';
 import { LockedTab }       from './tabs/LockedTab';
 import { FuturesChartTab } from './tabs/FuturesChartTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
+import { AccountSelector } from './components/AccountSelector';
 import {
   DEFAULT_ORDER_FLOW_CONTROLS,
   type OrderFlowControlsState,
@@ -69,6 +70,11 @@ export default function TradingArena() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [interval, setIntervalValue] = useState<Interval>(DEFAULT_INTERVAL);
   const [assetClass, setAssetClass] = useState<AssetClass>('crypto');
+
+  // Selected real account for the header's account selector. Display/context
+  // only for now — NOT wired into the paper-trading engine or order routing;
+  // the Arena stays 100% paper (real execution is out of scope here).
+  const [accountId, setAccountId] = useState<string | null>(null);
 
   // Order Flow controls — lifted up from ChartTab so the Arena toolbar's
   // "Chart ▾" dropdown (rendered here, above <main>) can host them.
@@ -170,6 +176,11 @@ export default function TradingArena() {
             onControlsChange={setOfControls}
             chartControlsDisabled={assetClass !== 'crypto'}
           />
+        </div>
+
+        {/* Right: real-account selector (display/context only — see accountId comment above) */}
+        <div className="ml-auto flex-shrink-0">
+          <AccountSelector value={accountId} onChange={setAccountId} />
         </div>
       </header>
 
