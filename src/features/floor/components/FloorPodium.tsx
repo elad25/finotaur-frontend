@@ -10,6 +10,12 @@
 
 import { Crown } from 'lucide-react';
 import { getRowRR, type FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
+// Imported through Vite so they get content-hashed filenames — overwriting the
+// image content later produces a NEW url, so the immutable CDN cache can never
+// serve a stale version (public/ assets keep a stable url and get stuck cached).
+import championshipTrophy from '@/features/floor/assets/championship-trophy.png';
+import medalSilver from '@/features/floor/assets/medal-silver.png';
+import medalBronze from '@/features/floor/assets/medal-bronze.png';
 
 // ── Avatar helper ──────────────────────────────────────────────────────────────
 
@@ -100,7 +106,7 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
         {/* Oversized trophy watermark — championship presence, behind the PF number.
             Slightly smaller on mobile so it doesn't overwhelm the stacked layout. */}
         <img
-          src="/assets/floor/championship-trophy.png"
+          src={championshipTrophy}
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute select-none w-[140px] sm:w-[200px] h-auto"
@@ -128,7 +134,7 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
               }}
             />
             <img
-              src="/assets/floor/championship-trophy.png"
+              src={championshipTrophy}
               alt="Championship trophy"
               className="relative select-none h-[56px] sm:h-[72px] w-auto"
               style={{
@@ -226,7 +232,7 @@ function SubPodiumCard({
   // Subtle metal identity — silver for runner-up, bronze for third. Clearly
   // quieter than the champion card (no gradient border, no trophy, no glow).
   const slotBorderColor = isRunnerUp ? 'rgba(203,213,225,0.5)' : 'rgba(205,127,50,0.5)';
-  const medalSrc = isRunnerUp ? '/assets/floor/medal-silver.png' : '/assets/floor/medal-bronze.png';
+  const medalSrc = isRunnerUp ? medalSilver : medalBronze;
   const medalAlt = isRunnerUp ? 'Silver medal' : 'Bronze medal';
   const medalGlow = isRunnerUp ? 'rgba(203,213,225,0.35)' : 'rgba(205,127,50,0.35)';
 
