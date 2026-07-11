@@ -595,19 +595,24 @@ const WinRateDonut = ({ percent }: { percent: number }) => {
 };
 
 // 🎯 Small presentational sparkline for the Net P&L StatsCard.
-// Pure SVG, reads only an already-computed cumulative-equity series.
-const PnlSparkline = ({ data }: { data: number[] }) => {
+// Pure SVG, reads an already-computed cumulative-equity series enriched with
+// per-trade P&L + a short date label so it can show a hover tooltip.
+const PnlSparkline = ({ data }: { data: { label: string; pnl: number; cum: number }[] }) => {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
   if (data.length < 2) return null;
 
   const width = 100;
   const height = 44;
   const padding = 2;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const values = data.map(d => d.cum);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
+  const n = data.length;
 
-  const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * width;
+  const points = values.map((value, index) => {
+    const x = (index / (n - 1)) * width;
     const y = padding + (1 - (value - min) / range) * (height - padding * 2);
     return [x, y] as const;
   });
@@ -615,33 +620,82 @@ const PnlSparkline = ({ data }: { data: number[] }) => {
   const linePoints = points.map(([x, y]) => `${x},${y}`).join(' ');
   const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    setHoverIndex(Math.round(ratio * (n - 1)));
+  };
+
+  const handleMouseLeave = () => setHoverIndex(null);
+
+  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
+  const hoverXPercent = hoverIndex !== null ? (hoverIndex / (n - 1)) * 100 : null;
+  const hoverYPercent = hoverIndex !== null ? (points[hoverIndex][1] / height) * 100 : null;
+  const tooltipXPercent = hoverXPercent !== null ? Math.min(88, Math.max(12, hoverXPercent)) : null;
+
   return (
-    <svg
-      width="100%"
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="block"
-      style={{ width: '100%' }}
-      aria-hidden="true"
+    <div
+      className="relative"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
-      <defs>
-        <linearGradient id="pnlSparkFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.25} className="text-emerald-400" />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0} className="text-emerald-400" />
-        </linearGradient>
-      </defs>
-      <polygon points={areaPoints} fill="url(#pnlSparkFill)" stroke="none" />
-      <polyline
-        points={linePoints}
-        fill="none"
-        className="stroke-emerald-400"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+      <svg
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="block"
+        style={{ width: '100%' }}
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="pnlSparkFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.25} className="text-emerald-400" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} className="text-emerald-400" />
+          </linearGradient>
+        </defs>
+        <polygon points={areaPoints} fill="url(#pnlSparkFill)" stroke="none" />
+        <polyline
+          points={linePoints}
+          fill="none"
+          className="stroke-emerald-400"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {hovered && hoverXPercent !== null && hoverYPercent !== null && tooltipXPercent !== null && (
+        <>
+          <div
+            className="absolute w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 pointer-events-none"
+            style={{
+              left: `${hoverXPercent}%`,
+              top: `${hoverYPercent}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+          <div
+            className="absolute z-10 rounded-md border border-border-ds-subtle bg-[#111] px-2 py-1 text-[11px] pointer-events-none whitespace-nowrap"
+            style={{
+              left: `${tooltipXPercent}%`,
+              top: `${hoverYPercent}%`,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+            }}
+          >
+            <div className="text-ink-secondary">{hovered.label}</div>
+            <div className={hovered.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              {formatSignedCurrency(hovered.pnl)}
+            </div>
+            <div className="text-ink-secondary">
+              Total: {hovered.cum < 0 ? '−' : ''}${Math.abs(hovered.cum).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
@@ -664,6 +718,7 @@ const StatsCard = memo(({
   donutPercent,
   sparklineData,
   help,
+  inlineValue,
 }: {
   icon: any;
   title: string;
@@ -673,11 +728,12 @@ const StatsCard = memo(({
   valueColor?: string;
   loading?: boolean;
   donutPercent?: number;
-  sparklineData?: number[];
+  sparklineData?: { label: string; pnl: number; cum: number }[];
   help?: string;
+  inlineValue?: boolean;
 }) => (
-  <div className="relative rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5 transition-colors duration-base hover:border-border-ds-default">
-    <div className="flex items-center justify-between mb-ds-4">
+  <div className="relative rounded-[12px] border border-border-ds-subtle bg-surface-1 px-ds-5 pt-ds-4 pb-ds-3 transition-colors duration-base hover:border-border-ds-default">
+    <div className="flex items-center justify-between mb-ds-3">
       {/* Title row */}
       <div className="flex items-center justify-between flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -688,6 +744,13 @@ const StatsCard = memo(({
             <span title={help} className="inline-flex shrink-0 text-ink-secondary/50 hover:text-ink-secondary cursor-help">
               <HelpCircle className="w-3 h-3" strokeWidth={1.8} />
             </span>
+          )}
+          {/* Inline value — Net P&L card renders its value in the title row
+              instead of the big value block below (inlineValue prop). */}
+          {inlineValue && !loading && (
+            <div className={`text-xl font-bold tracking-tight ${valueColor || 'text-ink-primary'}`}>
+              {value}
+            </div>
           )}
         </div>
         {/* Uniform gold-tinted icon chip — circular. The Win Rate card has no
@@ -708,15 +771,18 @@ const StatsCard = memo(({
     </div>
 
     <div className={`min-w-0 ${donutPercent !== undefined ? 'pr-20' : ''}`}>
-      {/* Value — large and dominant. */}
+      {/* Value — large and dominant. Skipped when inlineValue renders it in
+          the title row instead. */}
       {loading ? (
         <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
       ) : (
-        <div className="mb-2">
-          <div className={`text-3xl font-bold tracking-tight leading-none ${valueColor || 'text-ink-primary'}`}>
-            {value}
+        !inlineValue && (
+          <div className="mb-2">
+            <div className={`text-3xl font-bold tracking-tight leading-none ${valueColor || 'text-ink-primary'}`}>
+              {value}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {!loading && subtitle && (
@@ -728,7 +794,7 @@ const StatsCard = memo(({
       {/* Mini equity chart (Net P&L) — spans the card's full inner width,
           rendered below the value+subtitle block, not inline with the number. */}
       {!loading && sparklineData && sparklineData.length > 0 && (
-        <div className="mt-3 -mb-1">
+        <div className="mt-2 -mb-1">
           <PnlSparkline data={sparklineData} />
         </div>
       )}
@@ -1629,6 +1695,8 @@ const stats = useMemo<Stats>(() => {
   // 🎯 Cumulative-equity series for the Net P&L StatsCard sparkline (visual-only).
   // Reuses the exact same source (closed trades from displayTrades) and pnl
   // accessor (getTradeData(...).pnl) as the stats calc above — no new data logic.
+  // Enriched per-point with { label, pnl, cum } so the sparkline can show a
+  // hover tooltip with the individual trade's P&L, not just the running total.
   const pnlSparklineData = useMemo(() => {
     const closed = displayTrades.filter(t => {
       if (t.input_mode === 'risk-only') {
@@ -1645,7 +1713,11 @@ const stats = useMemo<Stats>(() => {
     return chronological.map(trade => {
       const { pnl } = getTradeData(trade, oneR, rBasisMode);
       running += pnl;
-      return running;
+      const label = new Date(trade.close_at ?? trade.open_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      return { label, pnl, cum: running };
     });
   }, [displayTrades, oneR, rBasisMode]);
 
@@ -2141,6 +2213,7 @@ const stats = useMemo<Stats>(() => {
               loading={isStatsLoading}
               sparklineData={pnlSparklineData}
               help="Total realized profit and loss"
+              inlineValue
             />
 
             <StatsCard
