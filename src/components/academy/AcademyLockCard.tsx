@@ -21,7 +21,7 @@ export function AcademyLockCard() {
         Basic up. Join Finotaur and this chapter — and all the rest — unlock instantly.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button variant="gold" size="compact" onClick={() => navigate("/journal")}>
+        <Button variant="gold" size="compact" onClick={() => navigate("/#pricing")}>
           See plans →
         </Button>
         {!isLoggedIn && (
