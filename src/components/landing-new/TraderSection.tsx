@@ -229,6 +229,62 @@ const tabs: TraderTab[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Pillar data — groups the flat tab list into a two-level nav. Journal and
+// AI Insights show a secondary sub-tab row; Copier and Risk are single-panel
+// pillars (their "sub-tab" is just themselves, no secondary row rendered).
+// ---------------------------------------------------------------------------
+type PillarKey = 'journal' | 'ai' | 'copier' | 'risk';
+
+interface Pillar {
+  key: PillarKey;
+  icon: LucideIcon;
+  label: string;
+  subKeys: TraderTabKey[];
+}
+
+const pillars: Pillar[] = [
+  {
+    key: 'journal',
+    icon: LayoutDashboard,
+    label: 'Trade Journal',
+    subKeys: ['dashboard', 'calendar', 'breakdowns', 'playbooks', 'backtesting', 'replay'],
+  },
+  {
+    key: 'ai',
+    icon: Brain,
+    label: 'AI Insights',
+    subKeys: ['leak', 'revenge', 'shadow'],
+  },
+  {
+    key: 'copier',
+    icon: Copy,
+    label: 'Trade Copier',
+    subKeys: ['copier'],
+  },
+  {
+    key: 'risk',
+    icon: ShieldCheck,
+    label: 'Risk Manager',
+    subKeys: ['risk'],
+  },
+];
+
+// Auto-rotation sequence — LIVE panels only, flattened across pillars in
+// Journal → AI Insights → Copier → Risk order. SOON panels (Backtesting,
+// Trade Replay) are reachable only via a manual sub-tab click.
+const ROTATION_SEQUENCE: TraderTabKey[] = [
+  'dashboard',
+  'calendar',
+  'breakdowns',
+  'playbooks',
+  'leak',
+  'revenge',
+  'shadow',
+  'copier',
+  'risk',
+];
+
 const AUTOROTATE_MS = 6000;
 
 // ---------------------------------------------------------------------------
@@ -302,39 +358,58 @@ function PanelCopy({ tab, children }: { tab: TraderTab; children?: ReactNode }) 
 // TraderSection
 // ---------------------------------------------------------------------------
 const TraderSection = () => {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeTabKey, setActiveTabKey] = useState<TraderTabKey>(ROTATION_SEQUENCE[0]);
   const [isPaused, setIsPaused] = useState(false);
   const [autoRotateStopped, setAutoRotateStopped] = useState(false);
   const preloadedRef = useRef<Set<string>>(new Set());
 
-  const activeTab = tabs[activeIndex];
+  const activeTab = tabs.find((t) => t.key === activeTabKey)!;
+  const activePillar = pillars.find((p) => p.subKeys.includes(activeTabKey))!;
+  const hasSubRow = activePillar.subKeys.length > 1;
 
-  // Auto-rotation: advance every 6s, looping. Paused on hover, stopped for
-  // good once the visitor manually picks a tab.
+  // Auto-rotation: advance every 6s through the LIVE-only sequence, looping.
+  // Paused on hover, stopped for good once the visitor manually picks a pill
+  // at either level.
   useEffect(() => {
     if (autoRotateStopped || isPaused) return;
     const id = window.setInterval(() => {
-      setActiveIndex((i) => (i + 1) % tabs.length);
+      setActiveTabKey((key) => {
+        const idx = ROTATION_SEQUENCE.indexOf(key);
+        const nextIdx = idx === -1 ? 0 : (idx + 1) % ROTATION_SEQUENCE.length;
+        return ROTATION_SEQUENCE[nextIdx];
+      });
     }, AUTOROTATE_MS);
     return () => window.clearInterval(id);
   }, [autoRotateStopped, isPaused]);
 
-  // Preload the NEXT tab's screenshot so the fade-in never shows a blank
+  // Preload the NEXT panel's screenshot so the fade-in never shows a blank
   // frame while the browser fetches it. (Chosen over eagerly mounting every
   // panel's <img> — keeps the DOM light and still keeps lazy-loading intact
   // for panels a visitor never reaches via manual clicks.)
   useEffect(() => {
-    const next = tabs[(activeIndex + 1) % tabs.length];
-    if (next.image && !preloadedRef.current.has(next.image.src)) {
+    const idx = ROTATION_SEQUENCE.indexOf(activeTabKey);
+    const nextKey = ROTATION_SEQUENCE[idx === -1 ? 0 : (idx + 1) % ROTATION_SEQUENCE.length];
+    const next = tabs.find((t) => t.key === nextKey);
+    if (next?.image && !preloadedRef.current.has(next.image.src)) {
       preloadedRef.current.add(next.image.src);
       const img = new Image();
       img.src = next.image.src;
     }
-  }, [activeIndex]);
+  }, [activeTabKey]);
 
-  function handleTabClick(index: number) {
-    setActiveIndex(index);
+  function handleTabClick(key: TraderTabKey) {
+    setActiveTabKey(key);
     setAutoRotateStopped(true);
+  }
+
+  function handlePillarClick(pillar: Pillar) {
+    setAutoRotateStopped(true);
+    // If we're already showing a leaf that belongs to this pillar, leave it
+    // as-is — otherwise jump to the pillar's first sub-tab (or its single
+    // panel, for Copier/Risk).
+    if (!pillar.subKeys.includes(activeTabKey)) {
+      setActiveTabKey(pillar.subKeys[0]);
+    }
   }
 
   return (
@@ -362,75 +437,144 @@ const TraderSection = () => {
 
       {/* ===== TAB AREA ===== */}
       <div>
-        {/* Tab pills — hovering the pill bar pauses auto-rotation (click intent);
+        {/* Pill rows — hovering either row pauses auto-rotation (click intent);
             hovering the panel below does NOT, so rotation stays visible while reading */}
-        <div
-          role="tablist"
-          aria-label="The Trader — feature showcase"
-          className="flex flex-wrap justify-center gap-3 mb-10"
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-        >
-          {tabs.map((tab, index) => {
-            const Icon = tab.icon;
-            const isActive = tab.key === activeTab.key;
-            return (
-              <button
-                key={tab.key}
-                role="tab"
-                type="button"
-                aria-selected={isActive}
-                aria-controls={`trader-tabpanel-${tab.key}`}
-                id={`trader-tab-${tab.key}`}
-                onClick={() => handleTabClick(index)}
-                className={`group relative overflow-hidden inline-flex items-center gap-2.5 px-5 py-3 rounded-[12px] border transition-all duration-200 ease-out ${
-                  isActive
-                    ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
-                    : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
-                }`}
-              >
-                <span
-                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-br from-gold-primary/30 to-gold-primary/10 border border-gold-primary/40'
-                      : 'bg-section-card-deep border border-gold-border group-hover:border-gold-primary/25'
+        <div onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
+          {/* Primary row — 4 pillar pills, always visible */}
+          <div
+            role="tablist"
+            aria-label="The Trader — feature categories"
+            className="flex flex-wrap justify-center gap-3 mb-4"
+          >
+            {pillars.map((pillar) => {
+              const Icon = pillar.icon;
+              const isActivePillar = pillar.key === activePillar.key;
+              const isSinglePanel = pillar.subKeys.length === 1;
+              return (
+                <button
+                  key={pillar.key}
+                  role="tab"
+                  type="button"
+                  aria-selected={isActivePillar}
+                  aria-controls={isSinglePanel ? `trader-tabpanel-${pillar.subKeys[0]}` : undefined}
+                  id={`trader-tab-pillar-${pillar.key}`}
+                  onClick={() => handlePillarClick(pillar)}
+                  className={`group relative overflow-hidden inline-flex items-center gap-3 px-6 py-3.5 rounded-[14px] border transition-all duration-200 ease-out ${
+                    isActivePillar
+                      ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
+                      : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
                   }`}
                 >
-                  <Icon
-                    className={`h-3.5 w-3.5 ${
-                      isActive ? 'text-gold-primary' : 'text-ink-tertiary group-hover:text-gold-primary/70'
+                  <span
+                    className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors ${
+                      isActivePillar
+                        ? 'bg-gradient-to-br from-gold-primary/30 to-gold-primary/10 border border-gold-primary/40'
+                        : 'bg-section-card-deep border border-gold-border group-hover:border-gold-primary/25'
                     }`}
-                    aria-hidden="true"
-                  />
-                </span>
-                <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
-                {tab.status === 'soon' && (
-                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-1.5 py-0.5">
-                    Soon
+                  >
+                    <Icon
+                      className={`h-4 w-4 ${
+                        isActivePillar ? 'text-gold-primary' : 'text-ink-tertiary group-hover:text-gold-primary/70'
+                      }`}
+                      aria-hidden="true"
+                    />
                   </span>
-                )}
+                  <span className="text-sm font-semibold whitespace-nowrap">{pillar.label}</span>
 
-                {/* Progress affordance — animated fill while auto-rotating, static once stopped. */}
-                {isActive && !autoRotateStopped && (
-                  <span
-                    key={activeIndex}
-                    className="absolute left-0 bottom-0 h-[2px] bg-gold-primary rounded-full"
-                    style={{
-                      animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
-                      animationPlayState: isPaused ? 'paused' : 'running',
-                    }}
-                    aria-hidden="true"
-                  />
-                )}
-                {isActive && autoRotateStopped && (
-                  <span
-                    className="absolute left-0 bottom-0 h-[2px] w-full bg-gold-primary rounded-full"
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            );
-          })}
+                  {/* Progress affordance lives on the primary pill only for single-panel
+                      pillars (Copier / Risk) — multi-sub pillars carry it on the sub-pill. */}
+                  {isActivePillar && isSinglePanel && !autoRotateStopped && (
+                    <span
+                      key={activeTabKey}
+                      className="absolute left-0 bottom-0 h-[2px] bg-gold-primary rounded-full"
+                      style={{
+                        animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
+                        animationPlayState: isPaused ? 'paused' : 'running',
+                      }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {isActivePillar && isSinglePanel && autoRotateStopped && (
+                    <span
+                      className="absolute left-0 bottom-0 h-[2px] w-full bg-gold-primary rounded-full"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Secondary row — only when the active pillar has more than one sub-tab */}
+          {hasSubRow && (
+            <div
+              role="tablist"
+              aria-label={`${activePillar.label} — features`}
+              className="flex flex-wrap justify-center gap-3 mb-10"
+            >
+              {activePillar.subKeys.map((key) => {
+                const tab = tabs.find((t) => t.key === key)!;
+                const Icon = tab.icon;
+                const isActive = tab.key === activeTabKey;
+                return (
+                  <button
+                    key={tab.key}
+                    role="tab"
+                    type="button"
+                    aria-selected={isActive}
+                    aria-controls={`trader-tabpanel-${tab.key}`}
+                    id={`trader-tab-${tab.key}`}
+                    onClick={() => handleTabClick(tab.key)}
+                    className={`group relative overflow-hidden inline-flex items-center gap-2.5 px-5 py-3 rounded-[12px] border transition-all duration-200 ease-out ${
+                      isActive
+                        ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
+                        : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
+                    }`}
+                  >
+                    <span
+                      className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                        isActive
+                          ? 'bg-gradient-to-br from-gold-primary/30 to-gold-primary/10 border border-gold-primary/40'
+                          : 'bg-section-card-deep border border-gold-border group-hover:border-gold-primary/25'
+                      }`}
+                    >
+                      <Icon
+                        className={`h-3.5 w-3.5 ${
+                          isActive ? 'text-gold-primary' : 'text-ink-tertiary group-hover:text-gold-primary/70'
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
+                    {tab.status === 'soon' && (
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-1.5 py-0.5">
+                        Soon
+                      </span>
+                    )}
+
+                    {/* Progress affordance — animated fill while auto-rotating, static once stopped. */}
+                    {isActive && !autoRotateStopped && (
+                      <span
+                        key={activeTabKey}
+                        className="absolute left-0 bottom-0 h-[2px] bg-gold-primary rounded-full"
+                        style={{
+                          animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
+                          animationPlayState: isPaused ? 'paused' : 'running',
+                        }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {isActive && autoRotateStopped && (
+                      <span
+                        className="absolute left-0 bottom-0 h-[2px] w-full bg-gold-primary rounded-full"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Tab panel */}
@@ -439,7 +583,7 @@ const TraderSection = () => {
             key={activeTab.key}
             id={`trader-tabpanel-${activeTab.key}`}
             role="tabpanel"
-            aria-labelledby={`trader-tab-${activeTab.key}`}
+            aria-labelledby={hasSubRow ? `trader-tab-${activeTab.key}` : `trader-tab-pillar-${activePillar.key}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
