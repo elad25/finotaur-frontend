@@ -115,14 +115,27 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
 
         {/* Left: trophy + avatar + identity */}
         <div className="relative flex items-center gap-4 min-w-0" style={{ zIndex: 1 }}>
-          <img
-            src="/assets/floor/championship-trophy.png"
-            alt="Championship trophy"
-            className="shrink-0 select-none h-[56px] sm:h-[72px] w-auto"
-            style={{
-              filter: 'drop-shadow(0 0 14px rgba(201,166,70,0.45))',
-            }}
-          />
+          {/* Trophy with a soft golden halo radiating around it */}
+          <div className="relative shrink-0 inline-flex items-center justify-center">
+            <span
+              aria-hidden="true"
+              className="absolute pointer-events-none rounded-full"
+              style={{
+                width: '112px',
+                height: '112px',
+                background:
+                  'radial-gradient(circle, rgba(201,166,70,0.50) 0%, rgba(201,166,70,0.16) 45%, transparent 70%)',
+              }}
+            />
+            <img
+              src="/assets/floor/championship-trophy.png"
+              alt="Championship trophy"
+              className="relative select-none h-[56px] sm:h-[72px] w-auto"
+              style={{
+                filter: 'drop-shadow(0 0 8px rgba(201,166,70,0.55))',
+              }}
+            />
+          </div>
 
           <PodiumAvatar
             name={nickname}
@@ -225,17 +238,14 @@ function SubPodiumCard({
         border: `1px solid ${slotBorderColor}`,
       }}
     >
-      {/* Medal */}
-      <img
-        src={medalSrc}
-        alt={medalAlt}
-        className="w-fit select-none h-[40px] sm:h-[52px]"
-        style={{ filter: `drop-shadow(0 0 6px ${medalGlow})` }}
-      />
-
-      {/* Avatar + nickname */}
+      {/* Medal (in place of the avatar) + nickname */}
       <div className="flex items-center gap-3 min-w-0">
-        <PodiumAvatar name={nickname} avatarUrl={row.avatar_url} size={38} />
+        <img
+          src={medalSrc}
+          alt={medalAlt}
+          className="shrink-0 select-none h-[46px] w-[46px] object-contain"
+          style={{ filter: `drop-shadow(0 0 6px ${medalGlow})` }}
+        />
         <span
           className="text-sm font-medium truncate"
           style={{ color: '#e0e0e0' }}
