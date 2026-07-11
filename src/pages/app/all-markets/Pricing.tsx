@@ -197,6 +197,10 @@ export default function PlatformPricing() {
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [hasActiveJournalSubscription, setHasActiveJournalSubscription] = useState(false);
   const [existingJournalPlan, setExistingJournalPlan] = useState<string | null>(null);
+  const [journalInterval, setJournalInterval] = useState<string | null>(null);
+  const [hasActiveTopSecret, setHasActiveTopSecret] = useState(false);
+  const [hasActiveNewsletter, setHasActiveNewsletter] = useState(false);
+  const [topSecretInterval, setTopSecretInterval] = useState<string | null>(null);
   const [hasNewsletterMonthly, setHasNewsletterMonthly] = useState(false);
   const [hasTopSecretMonthly, setHasTopSecretMonthly] = useState(false);
   const [hasJournalPremiumMonthly, setHasJournalPremiumMonthly] = useState(false);
@@ -264,11 +268,17 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         setPlatformYearlyPlan(data?.platform_yearly_plan || null);
 
         // 🔥 Check existing Journal subscription
-        if (data?.whop_membership_id && 
+        if (data?.whop_membership_id &&
             ['active', 'trialing', 'trial'].includes(data.subscription_status || '')) {
           setHasActiveJournalSubscription(true);
           setExistingJournalPlan(data.account_type || null);
+          setJournalInterval(data.subscription_interval || null);
         }
+
+        // 🔥 Interval-agnostic ownership (standalone Trader/Investor coexist — see handlePlanClick)
+        setHasActiveTopSecret(!!(data?.top_secret_enabled && ['active', 'trial'].includes(data?.top_secret_status || '')));
+        setHasActiveNewsletter(!!['active', 'trial'].includes(data?.newsletter_status || ''));
+        setTopSecretInterval(data?.top_secret_interval || null);
 
         // 🔥 Check standalone monthly subscriptions (relevant for Core upsell warning)
         const newsletterIsMonthly = 
@@ -386,15 +396,31 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       return;
     }
 
-    // הצג אזהרה רק אם יש מנויים קיימים שיבוטלו
-    const hasStandaloneSubscriptions = hasNewsletterMonthly || hasTopSecretMonthly || hasJournalPremiumMonthly || hasActiveJournalSubscription;
+    // Standalone rungs (Trader/Investor) coexist — buying one never cancels the other.
+    // Block re-purchase of an already-owned standalone; allow monthly → yearly upgrade of the same product.
+    if (planId === 'journal' && hasActiveJournalSubscription) {
+      const isYearlyUpgrade = billingInterval === 'yearly' && journalInterval !== 'yearly';
+      if (!isYearlyUpgrade) return;
+      proceedToCheckout(planId);
+      return;
+    }
+    if (planId === 'top_secret' && hasActiveTopSecret) {
+      const isYearlyUpgrade = billingInterval === 'yearly' && topSecretInterval !== 'yearly';
+      if (!isYearlyUpgrade) return;
+      proceedToCheckout(planId);
+      return;
+    }
+
+    // The auto-cancel warning applies ONLY to Platform plans — they absorb standalone subs.
+    const targetIsPlatform = planId === 'finotaur' || planId === 'enterprise';
+    const hasStandaloneSubscriptions = hasActiveJournalSubscription || hasActiveTopSecret || hasActiveNewsletter;
     const hasExistingPlatform = currentPlatformPlan !== 'free';
-    if (hasExistingPlatform || hasStandaloneSubscriptions) {
+    if (targetIsPlatform && (hasExistingPlatform || hasStandaloneSubscriptions)) {
       setPendingPlanId(planId);
       setShowUpgradeWarning(true);
       return;
     }
-    
+
     proceedToCheckout(planId);
   };
 
@@ -608,9 +634,17 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             const isSamePlanUpgradeToYearly = plan.id === currentPlatformPlan && 
               currentBillingInterval === 'monthly' && billingInterval === 'yearly';
             // 🔥 v6.1.0: If user is on yearly and viewing monthly, still show as "current" (downgrade blocked)
-            const isSamePlanDowngradeToMonthly = plan.id === currentPlatformPlan && 
+            const isSamePlanDowngradeToMonthly = plan.id === currentPlatformPlan &&
               currentBillingInterval === 'yearly' && billingInterval === 'monthly';
-            const isCurrentPlan = (isSamePlanSameInterval || isSamePlanDowngradeToMonthly) && !isSamePlanUpgradeToYearly;
+            // Standalone rungs (Trader/Investor) coexist and are owned independently of platform_plan —
+            // mark their card as current only while no Platform plan is active.
+            const ownsThisStandalone =
+              currentPlatformPlan === 'free' &&
+              ((plan.id === 'journal' && hasActiveJournalSubscription) ||
+               (plan.id === 'top_secret' && hasActiveTopSecret));
+            const standaloneInterval = plan.id === 'journal' ? journalInterval : topSecretInterval;
+            const standaloneYearlyUpgradeAvailable = ownsThisStandalone && billingInterval === 'yearly' && standaloneInterval !== 'yearly';
+            const isCurrentPlan = ((isSamePlanSameInterval || isSamePlanDowngradeToMonthly) && !isSamePlanUpgradeToYearly) || (ownsThisStandalone && !standaloneYearlyUpgradeAvailable);
             const isLoadingThis = loading === plan.id;
 
             // 🔥 גישה C: חסום Yearly → Monthly upgrade
@@ -1231,9 +1265,20 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       )}
 
       {/* 🔥 Upgrade Warning Popup */}
-      {showUpgradeWarning && pendingPlanId && (
+      {showUpgradeWarning && pendingPlanId && (() => {
+        // Build the actual list of subscriptions that will be auto-cancelled by this Platform upgrade.
+        const cancelTargets: string[] = [];
+        if (hasActiveJournalSubscription) cancelTargets.push('Trader');
+        if (hasActiveTopSecret || hasActiveNewsletter) cancelTargets.push('Investor');
+        if (currentPlatformPlan !== 'free') cancelTargets.push('current plan');
+        const cancelList = cancelTargets.length > 1
+          ? `${cancelTargets.slice(0, -1).join(', ')} and ${cancelTargets[cancelTargets.length - 1]}`
+          : cancelTargets[0] ?? '';
+        const pendingPlanName = pendingPlanId === 'enterprise' ? 'ULTIMATE' : 'FINOTAUR';
+
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowUpgradeWarning(false)}
           />
@@ -1246,7 +1291,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               <h3 className="text-white font-semibold text-base">Heads up before you continue</h3>
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-5">
-              Subscribing to a Platform plan will <span className="text-amber-400 font-medium">automatically cancel</span> any existing Top Secret or Journal subscriptions you have — they're all included in your new plan.
+              Upgrading to {pendingPlanName} will <span className="text-amber-400 font-medium">automatically cancel</span> your {cancelList} subscription{cancelTargets.length > 1 ? 's' : ''} — everything included is part of your new plan.
             </p>
             <div className="flex gap-3">
               <button
@@ -1268,7 +1313,8 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
