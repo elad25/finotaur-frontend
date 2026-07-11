@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { SectionShell } from './_shared/SectionShell';
 import { SectionEyebrow } from './_shared/SectionEyebrow';
 import { SectionTitle } from './_shared/SectionTitle';
+import finoThinking from '@/assets/landing/fino-thinking.webp';
 
 // Real chat mock built from the in-app FINO avatar — shows an actual example
 // exchange instead of an idle mascot loop. Dark bubble card, gold accents,
@@ -43,25 +44,13 @@ function renderChatText(text: string) {
   );
 }
 
-// FINO mascot codec pick: Safari / iOS WebKit can't render VP9-alpha WebM
-// transparently, so those browsers get the animated-WebP-with-alpha fallback
-// instead. Everything Chromium/Gecko keeps the smaller, smoother VP9 WebM.
-// (Mirrors the pattern in src/pages/app/home/HomePage.tsx — same assets,
-// same waist-up crop technique, scaled up for this section's empty space.)
-const finoUsesWebpFallback =
-  typeof navigator !== 'undefined' &&
-  /AppleWebKit/.test(navigator.userAgent) &&
-  !/Chrome|Chromium|Android/.test(navigator.userAgent);
-
-/** Half-body FINO, "thinking" — real animated asset (video/animated-webp),
- * never a static image with CSS motion. Waist-up crop: media is scaled
- * taller than the fixed-height box and top-anchored, so overflow-hidden
- * clips the legs and we read a bigger half-body bust (face + horns + gold
- * medallion + cape). A staggered thought-bubble trail rises diagonally
- * toward the chat to signal "thinking". */
+/** Static half-body FINO, "thinking" — gazing up-left. Sits toward the
+ * right edge of the left column so it visually bridges toward the chat
+ * mock. A staggered thought-bubble trail rises toward the upper-left,
+ * following FINO's gaze, to signal "thinking". */
 const FinoThinking = () => {
   return (
-    <div className="relative mt-ds-6 flex items-start gap-3">
+    <div className="relative mt-ds-6 flex items-start gap-3 self-end ml-auto mx-auto md:mx-0 md:ml-auto md:mr-[-24px] lg:mr-[-48px]">
       <style>{`
         @keyframes fino-thought-pulse {
           0%, 100% { opacity: 0.35; }
@@ -71,40 +60,35 @@ const FinoThinking = () => {
           .fino-thought-dot { animation: none !important; opacity: 0.6 !important; }
         }
       `}</style>
-      <div className="relative h-52 w-52 flex-shrink-0 overflow-hidden flex items-start justify-center">
-        {finoUsesWebpFallback ? (
-          <img
-            src="/fino/fino-safari-v4.webp"
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-            className="h-[280px] w-auto max-w-none object-contain object-top"
-          />
-        ) : (
-          <video
-            src="/fino/fino-home-natural-v4.webm"
-            poster="/fino/fino-home-natural-v4-poster.png"
-            autoPlay
-            muted
-            loop
-            playsInline
-            aria-hidden="true"
-            draggable={false}
-            className="h-[280px] w-auto max-w-none object-contain object-top"
-          />
-        )}
-      </div>
 
       {/* Thought-bubble trail — three dots of increasing size, rising
-          diagonally up-right of FINO's head toward the chat. Rendered
-          flex-col-reverse so the smallest dot sits nearest the head (bottom)
-          and the largest drifts furthest up-right (top), each pulsing in
-          sequence outward. Hidden below md where the diagonal positioning
-          gets cramped next to the copy. */}
+          toward FINO's upper-left gaze (his head is at the top of the
+          bust image, hence items-start on the row above). Smallest sits
+          nearest the head (bottom of this column), growing outward toward
+          the upper-left, each pulsing in sequence outward. Hidden below md
+          where the diagonal positioning gets cramped next to the copy. */}
       <div
         aria-hidden="true"
-        className="hidden md:flex flex-col-reverse items-start gap-2.5 mt-1"
+        className="hidden md:flex flex-col items-end gap-2.5 mt-2"
       >
+        <span
+          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 mr-5"
+          style={{
+            width: 13,
+            height: 13,
+            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
+            animationDelay: '0.8s',
+          }}
+        />
+        <span
+          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 mr-3"
+          style={{
+            width: 9,
+            height: 9,
+            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
+            animationDelay: '0.4s',
+          }}
+        />
         <span
           className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40"
           style={{
@@ -114,25 +98,17 @@ const FinoThinking = () => {
             animationDelay: '0s',
           }}
         />
-        <span
-          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 ml-3"
-          style={{
-            width: 9,
-            height: 9,
-            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
-            animationDelay: '0.4s',
-          }}
-        />
-        <span
-          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 ml-5"
-          style={{
-            width: 13,
-            height: 13,
-            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
-            animationDelay: '0.8s',
-          }}
-        />
       </div>
+
+      <img
+        src={finoThinking}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        loading="lazy"
+        decoding="async"
+        className="h-56 lg:h-64 w-auto select-none"
+      />
     </div>
   );
 };

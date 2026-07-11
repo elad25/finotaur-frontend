@@ -254,6 +254,16 @@ const ROTATION_SEQUENCE: TraderTabKey[] = [
 
 const AUTOROTATE_MS = 8000;
 
+// Direction-aware slide+crossfade variants — `direction` (+1 = advancing
+// forward through the sequence, -1 = going back) is passed in via
+// AnimatePresence's `custom` prop so the EXITING panel (rendered by the
+// previous render) picks up the latest direction too.
+const panelVariants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 48 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: -dir * 48 }),
+};
+
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
@@ -283,7 +293,7 @@ function ProductShot({
         alt={alt}
         loading="lazy"
         decoding="async"
-        className="relative block w-full max-w-full h-auto rounded-[12px] border border-border-ds-subtle"
+        className="relative block w-auto max-w-full h-auto max-h-[420px] lg:max-h-[500px] object-contain mx-auto rounded-[12px] border border-border-ds-subtle"
       />
     </div>
   );
@@ -329,6 +339,7 @@ const TraderSection = () => {
   // ROTATION_SEQUENCE — never by re-deriving "next" from a captured key,
   // which is what caused the stale-closure bug (advanced once, then stuck).
   const [seqIndex, setSeqIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
   const [autoRotateStopped, setAutoRotateStopped] = useState(false);
   const preloadedRef = useRef<Set<string>>(new Set());
@@ -344,6 +355,7 @@ const TraderSection = () => {
   useEffect(() => {
     if (autoRotateStopped || isPaused) return;
     const id = window.setInterval(() => {
+      setDirection(1);
       setSeqIndex((i) => (i + 1) % ROTATION_SEQUENCE.length);
     }, AUTOROTATE_MS);
     return () => window.clearInterval(id);
@@ -365,7 +377,9 @@ const TraderSection = () => {
 
   function goToKey(key: TraderTabKey) {
     const idx = ROTATION_SEQUENCE.indexOf(key);
-    setSeqIndex(idx === -1 ? 0 : idx);
+    const targetIdx = idx === -1 ? 0 : idx;
+    setDirection(targetIdx >= seqIndex ? 1 : -1);
+    setSeqIndex(targetIdx);
     setAutoRotateStopped(true);
   }
 
@@ -380,16 +394,20 @@ const TraderSection = () => {
     // panel, for Copier/Risk).
     if (!pillar.subKeys.includes(activeTabKey)) {
       const idx = ROTATION_SEQUENCE.indexOf(pillar.subKeys[0]);
-      setSeqIndex(idx === -1 ? 0 : idx);
+      const targetIdx = idx === -1 ? 0 : idx;
+      setDirection(targetIdx >= seqIndex ? 1 : -1);
+      setSeqIndex(targetIdx);
     }
   }
 
   function handlePrevArrow() {
+    setDirection(-1);
     setSeqIndex((i) => (i - 1 + ROTATION_SEQUENCE.length) % ROTATION_SEQUENCE.length);
     setAutoRotateStopped(true);
   }
 
   function handleNextArrow() {
+    setDirection(1);
     setSeqIndex((i) => (i + 1) % ROTATION_SEQUENCE.length);
     setAutoRotateStopped(true);
   }
@@ -560,27 +578,32 @@ const TraderSection = () => {
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab.key}
-              id={`trader-tabpanel-${activeTab.key}`}
-              role="tabpanel"
-              aria-labelledby={hasSubRow ? `trader-tab-${activeTab.key}` : `trader-tab-pillar-${activePillar.key}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
-            >
-              <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-10 lg:gap-14 items-center">
-                <PanelCopy tab={activeTab} />
-                <ProductShot
-                  src={activeTab.image.src}
-                  alt={activeTab.image.alt}
-                  glow={activeTab.image.glow}
-                />
-              </div>
-            </motion.div>
-          </AnimatePresence>
+          <div className="grid min-h-[440px] lg:min-h-[540px] items-center">
+            <AnimatePresence initial={false} custom={direction}>
+              <motion.div
+                key={activeTab.key}
+                id={`trader-tabpanel-${activeTab.key}`}
+                role="tabpanel"
+                aria-labelledby={hasSubRow ? `trader-tab-${activeTab.key}` : `trader-tab-pillar-${activePillar.key}`}
+                custom={direction}
+                variants={panelVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className="[grid-area:1/1]"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-10 lg:gap-14 items-center">
+                  <PanelCopy tab={activeTab} />
+                  <ProductShot
+                    src={activeTab.image.src}
+                    alt={activeTab.image.alt}
+                    glow={activeTab.image.glow}
+                  />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 

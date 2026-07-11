@@ -10,7 +10,6 @@ import Hero from '@/components/landing-new/Hero';
 import SocialProof from '@/components/landing-new/SocialProof';
 import TraderSection from '@/components/landing-new/TraderSection';
 import FinoSection from '@/components/landing-new/FinoSection';
-import ChampionshipStrip from '@/components/landing-new/ChampionshipStrip';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
 import InvestorSection from '@/components/landing-new/InvestorSection';
 import FinotaurPlanSection from '@/components/landing-new/FinotaurPlanSection';
@@ -130,7 +129,6 @@ const LandingPage = () => {
       <SocialProof />
       <TraderSection />
       <FinoSection />
-      <ChampionshipStrip />
       <PartnershipRow />
       <InvestorSection />
       <FinotaurPlanSection />
