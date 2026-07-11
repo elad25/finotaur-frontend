@@ -31,6 +31,8 @@ import {
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 import { getTradovateAuthorizationUrl } from '@/lib/brokers/tradovate/tradovate-oauth';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import { getDemoPortfolios, getDemoBrokerConnections } from '@/utils/demoCopierData';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -161,10 +163,12 @@ export function JournalAccountsOverview() {
   // null = nothing in progress.
   const [connectingKey, setConnectingKey] = useState<string | null>(null);
 
+  const { isDemo } = useCopierDemoMode();
+
   const {
-    tradovatePortfolios,
-    brokerPortfolios,
-    manualPortfolios,
+    tradovatePortfolios: liveTradovatePortfolios,
+    brokerPortfolios: liveBrokerPortfolios,
+    manualPortfolios: liveManualPortfolios,
     isLoading: portfoliosLoading,
     error: portfoliosError,
     refetch: refetchPortfolios,
@@ -173,10 +177,18 @@ export function JournalAccountsOverview() {
   // Load all active connections (journal + copier) for status enrichment.
   // Non-blocking: if this fails the rows still render, just without the live pill.
   const {
-    connections,
+    connections: liveConnections,
     isLoading: connectionsLoading,
     error: connectionsError,
   } = useBrokerConnections({ active: true });
+
+  // Demo mode swaps in the shared sample roster (2 connected connection
+  // groups, 4 accounts) instead of live data — same roster used by the
+  // Trade Copier tab, so it's consistent across all copier surfaces.
+  const tradovatePortfolios = isDemo ? getDemoPortfolios() : liveTradovatePortfolios;
+  const brokerPortfolios = isDemo ? [] : liveBrokerPortfolios;
+  const manualPortfolios = isDemo ? [] : liveManualPortfolios;
+  const connections = isDemo ? getDemoBrokerConnections() : liveConnections;
 
   // Build a map from broker_connection_id / credential_id → BrokerConnection
   // so each group row can look up its live status in O(1).
@@ -217,6 +229,7 @@ export function JournalAccountsOverview() {
    * is safe as the universal default here.
    */
   async function handleConnect(groupKey: string) {
+    if (isDemo) return; // never fire OAuth in demo mode
     if (connectingKey !== null) return; // already connecting another row
     setConnectingKey(groupKey);
     try {
@@ -232,9 +245,11 @@ export function JournalAccountsOverview() {
   }
 
   // Combined loading: both hooks must finish for a meaningful render.
-  const isLoading = portfoliosLoading || connectionsLoading;
+  // Demo mode never shows a loading/error state — the sample data is
+  // available synchronously.
+  const isLoading = isDemo ? false : (portfoliosLoading || connectionsLoading);
   // Only surface portfolio errors (connections are enrichment-only).
-  const isError = Boolean(portfoliosError);
+  const isError = isDemo ? false : Boolean(portfoliosError);
   const error = portfoliosError ?? connectionsError;
   void connectionsError; // consumed via isError / error above
 

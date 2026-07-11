@@ -17,11 +17,15 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
 import { nextSessionOpen, formatSessionOpen } from '@/lib/futuresSession';
 import { useAutomationEvents, parseEnforcementEvent, humanizeCheck } from '@/features/automation/hooks/useAutomationEvents';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import { useSubscription } from '@/hooks/useSubscription';
+import { getDemoPortfolios } from '@/utils/demoCopierData';
 
 // ── Patch interface ─────────────────────────────────────────────────────────
 
@@ -235,12 +239,22 @@ function usePortfolioRisk() {
 // ── ManageRiskTab (container) ───────────────────────────────────────────────
 
 export const ManageRiskTab = memo(function ManageRiskTab() {
-  const { portfolios, isLoading } = usePortfolios();
+  const navigate = useNavigate();
+  const { isDemo } = useCopierDemoMode();
+  const { isPremium } = useSubscription();
+  const { portfolios: livePortfolios, isLoading: liveLoading } = usePortfolios();
+  const portfolios = isDemo ? getDemoPortfolios() : livePortfolios;
+  const isLoading = isDemo ? false : liveLoading;
   const { updatePortfolioRisk, isUpdating } = usePortfolioRisk();
 
   const tradovatePortfolios = portfolios.filter(
     (p) => p.source === 'tradovate' && p.is_active,
   );
+
+  // Demo write-redirect: any "save" action in demo mode routes the user to
+  // either the live copier overview (already-paid, no broker connected) or
+  // the upgrade page (free tier) instead of touching the DB.
+  const onDemoSave = () => navigate(isPremium ? '/app/copy-trade/overview' : '/app/upgrade');
 
   if (isLoading) {
     return (
@@ -267,6 +281,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   // Broadcast handler: applies the same patch to every Tradovate account.
   // agentOnly fields are broadcast as-is (they come from the global card's form).
   const handleBroadcast = async (patch: PortfolioRiskPatch, agentOnly: AgentOnlyRiskFields) => {
+    if (isDemo) { onDemoSave(); return; }
     await Promise.all(
       tradovatePortfolios.map((p) =>
         updatePortfolioRisk({
@@ -296,6 +311,8 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
         isSaving={isUpdating}
         saveLabel="Apply to all accounts"
         successMessage={`Applied to ${accountCount} account${accountCount === 1 ? '' : 's'}`}
+        demo={isDemo}
+        onDemoSave={onDemoSave}
       />
 
       {/* ── Per-account section divider ─────────────────────────── */}
@@ -321,6 +338,8 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
             })
           }
           isSaving={isUpdating}
+          demo={isDemo}
+          onDemoSave={onDemoSave}
         />
       ))}
     </div>
@@ -333,12 +352,16 @@ interface PortfolioRiskCardProps {
   portfolio: Portfolio;
   onSave: (patch: PortfolioRiskPatch, agentOnly: AgentOnlyRiskFields) => Promise<unknown>;
   isSaving: boolean;
+  demo?: boolean;
+  onDemoSave?: () => void;
 }
 
 const PortfolioRiskCard = memo(function PortfolioRiskCard({
   portfolio,
   onSave,
   isSaving,
+  demo,
+  onDemoSave,
 }: PortfolioRiskCardProps) {
   // ── Breach-lock detection (read-only — the agent enforces this) ──────────
   // A risk breach can lock an account (flatten + block all trading until the
@@ -439,6 +462,8 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
       successMessage="Risk limits saved"
       lockInfo={lockInfo}
       manualLockEffective={manualLocked}
+      demo={demo}
+      onDemoSave={onDemoSave}
     />
   );
 });
@@ -463,6 +488,11 @@ interface RiskCardProps {
    * expired) — disables the Lock button so it can never be manually
    * unlocked. Omitted/false for global mode. */
   manualLockEffective?: boolean;
+  /** True when rendering with sample/demo data — blocks all DB/RPC writes
+   * and reads (the account has no real automation_risk_rules row). */
+  demo?: boolean;
+  /** Redirect action used in place of a real save while `demo` is true. */
+  onDemoSave?: () => void;
 }
 
 const RiskCard = memo(function RiskCard({
@@ -478,6 +508,8 @@ const RiskCard = memo(function RiskCard({
   successMessage,
   lockInfo,
   manualLockEffective = false,
+  demo = false,
+  onDemoSave,
 }: RiskCardProps) {
   // ── Loss limits ──────────────────────────────────────────────
   const [lossPerTrade, setLossPerTrade] = useState<string>(initial.lossPerTrade);
@@ -514,7 +546,7 @@ const RiskCard = memo(function RiskCard({
   // Fetch the active risk rule for this account on load.
   // Runs once per card when tradovateAccountId is known (per-account mode only).
   useEffect(() => {
-    if (tradovateAccountId == null) return;
+    if (tradovateAccountId == null || demo) return;
     supabase
       .from('automation_risk_rules')
       .select('max_position_usd, max_trades_per_day, tilt_loss_streak, tilt_cooldown_minutes')
@@ -571,6 +603,7 @@ const RiskCard = memo(function RiskCard({
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (demo) { onDemoSave?.(); return; }
     const wasLocked = initial.killSwitch && initial.killSwitchLockedUntil != null;
     const killSwitchLockedUntil: string | null =
       killSwitch && !wasLocked
