@@ -23,11 +23,15 @@ import { useWhopCheckout } from "@/hooks/useWhopCheckout";
 import { useSubscriptionManagement } from "@/hooks/useSubscriptionManagement";
 import type { PlanName, BillingInterval } from "@/lib/whop-config";
 
-// 🔥 v2.0: REMOVED 'free' - Only 2 plans now
+// 🔥 Purchasable plan ids (checkout / account_type). 'basic' ($24.99) is
+// legacy-only — dead as a purchase target since 2026-06, zero subscribers.
 type PlanId = 'basic' | 'premium';
+// Display id for the offered plan CARDS. 'free' is shown for context but is
+// never purchasable (no checkout path — it's the default, no-plan state).
+type DisplayPlanId = PlanId | 'free';
 
 interface Plan {
-  id: PlanId;
+  id: DisplayPlanId;
   name: string;
   monthlyPrice: number;
   yearlyPrice: number;
@@ -46,36 +50,27 @@ interface Plan {
   trialDays?: number; // 🔥 NEW: Trial support
 }
 
-// 🔥 v2.0: Only 2 plans - Basic (with trial) and Premium (no trial)
+// 🔥 Canonical offered plans — Free + Trader only (Basic $24.99 removed as a
+// purchase target 2026-07; copy aligned with the canonical journal Pricing
+// reference). Legacy 'basic' accounts are handled separately in getPlanTier.
 const plans: Plan[] = [
   {
-    id: "basic",
-    name: "Basic",
-    monthlyPrice: 24.99,
-    yearlyPrice: 229,
-    yearlyMonthlyEquivalent: 19.08,
-    description: "Every tool serious traders need",
-    trialDays: 14, // 🔥 14-day free trial
+    id: "free",
+    name: "Free",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    yearlyMonthlyEquivalent: 0,
+    description: "Start your trading journey",
     features: [
-      "14-day free trial",
-      "25 trades / month",
-      "Full performance analytics & equity curve",
-      "Strategy builder & playbooks",
-      "Trading sessions & tagging",
-      "Advanced statistics & metrics",
-      "Risk/Reward calculator",
-      "Trade screenshots & notes",
-      "Full FINOTAUR Academy (300+ lessons)",
-      "Email support",
+      "10 trades to uncover your first leak",
+      "Manual logging + AI screenshot import (5/day)",
+      "Core performance stats & P&L calendar",
+      "Community access",
+      "Preview every Trader feature with sample data",
     ],
-    cta: "Start 14-Day Free Trial",
+    cta: "Current Plan",
     featured: false,
-    savings: "Yearly — save ~3 months",
-    tier: 1,
-    badge: {
-      text: "14-Day Free Trial",
-      icon: Clock,
-    },
+    tier: 0,
   },
   {
     id: "premium",
@@ -84,18 +79,18 @@ const plans: Plan[] = [
     yearlyPrice: 409,
     yearlyMonthlyEquivalent: 34.08,
     description: "Unlimited trades + your AI trading coach",
-    trialDays: 0, // 🔥 No trial - payment from day 0
+    trialDays: 0, // 🔥 No trial - payment from day 0 (matches PaymentPopup.tsx)
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — never hit a cap",
-      "Your FINOTAUR Score — one number that grades your real edge",
-      "Daily AI briefing — ranked insights on what to fix first",
-      "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
-      "Leak Finder — AI names the exact mistake costing you money",
-      "Behavioral & risk alerts before you tilt",
-      "Custom AI reports & backtesting",
+      "Broker auto-sync — Tradovate, NinjaTrader, Interactive Brokers",
+      "Trade Copier — mirror trades across accounts",
+      "Leak Detector — AI names the exact mistake costing you money",
+      "Shadow — what-if analysis on every closed trade",
+      "Revenge Radar — tilt detection before it burns your account",
+      "Prop-firm Risk Management — live trailing-drawdown dashboard",
+      "Custom AI reports & Strategy Backtesting",
       "Priority support",
-      "Early access to new features",
     ],
     cta: "Upgrade to Trader",
     featured: true,
@@ -106,8 +101,12 @@ const plans: Plan[] = [
 
 // Helper to get plan tier
 const getPlanTier = (planId: string): number => {
-  // 🔥 v2.0: Handle legacy 'free' users - treat them as tier 0 (no plan)
+  // Handle legacy 'free'/no-plan users - treat them as tier 0
   if (planId === 'free' || !planId) return 0;
+  // 🔥 Legacy grandfathered 'basic' accounts: no longer an offered plan (not
+  // in `plans` above), but existing subscribers still need a real tier so
+  // upgrade comparisons against Trader work correctly.
+  if (planId === 'basic') return 1;
   const plan = plans.find(p => p.id === planId);
   return plan?.tier ?? 0;
 };
@@ -266,7 +265,8 @@ const ChangePasswordModal = ({
 
 // ============================================
 // 🔥 UPGRADE PLAN MODAL - WITH WHOP INTEGRATION
-// 🔥 v2.0: Only 2 plans - Basic & Premium
+// 🔥 Offered plans: Free & Trader. Legacy 'basic' accounts are still
+// compared correctly (see getPlanTier) but Basic is not purchasable here.
 // ============================================
 const UpgradePlanModal = ({ 
   isOpen, 
@@ -300,6 +300,9 @@ const UpgradePlanModal = ({
   const needsPlanSelection = !currentPlan || currentPlan === 'free' || currentPlan === 'trial';
 
   const getDisplayPrice = useCallback((plan: Plan) => {
+    if (plan.id === 'free') {
+      return { price: "$0", period: "forever" };
+    }
     if (billingInterval === 'monthly') {
       return { 
         price: `$${plan.monthlyPrice.toFixed(2)}`, 
@@ -314,7 +317,17 @@ const UpgradePlanModal = ({
     }
   }, [billingInterval]);
 
-  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade' | 'select' | 'blocked_interval'; label: string } => {
+  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade' | 'select' | 'blocked_interval' | 'included'; label: string } => {
+    // 🔥 Free is never purchasable — informational card only. Show it as the
+    // user's current plan when they have no paid plan, otherwise as a
+    // non-actionable "Included" note (paying users aren't "downgrading to
+    // free" through this flow — cancellation is a separate action).
+    if (plan.id === 'free') {
+      return currentTier === 0
+        ? { type: 'current', label: 'Current Plan' }
+        : { type: 'included', label: 'Included' };
+    }
+
     // 🔥 v2.0: For users without a plan, show "Select" or "Start Trial"
     if (needsPlanSelection) {
       return { 
@@ -351,7 +364,11 @@ const UpgradePlanModal = ({
     return { type: 'downgrade', label: `Downgrade to ${plan.name}` };
   }, [currentPlan, currentTier, currentBillingInterval, billingInterval, subscriptionCancelAtPeriodEnd, pendingDowngradePlan, needsPlanSelection]);
 
-  const handlePlanSelect = useCallback(async (planId: PlanId) => {
+  const handlePlanSelect = useCallback(async (planId: DisplayPlanId) => {
+    // Free is display-only — never a purchase target, no-op defensively even
+    // though the card's button is already disabled.
+    if (planId === 'free') return;
+
     // Allow same plan if upgrading from monthly to yearly
     const isSamePlanYearlyUpgrade = planId === currentPlan && currentBillingInterval === 'monthly' && billingInterval === 'yearly';
     
@@ -483,8 +500,8 @@ const UpgradePlanModal = ({
               {needsPlanSelection ? 'Choose Your Plan' : 'Change Your Plan'}
             </h3>
             <p className="text-sm text-zinc-400 mt-1">
-              {needsPlanSelection 
-                ? 'Start with a 14-day free trial on Basic, or go Trader for unlimited access'
+              {needsPlanSelection
+                ? 'Start free with 10 trades, or go Trader for unlimited access'
                 : 'Choose the best plan for your trading journey'
               }
             </p>
@@ -552,7 +569,7 @@ const UpgradePlanModal = ({
             </div>
           </div>
 
-          {/* 🔥 v2.0: Only 2 Pricing Cards - Basic & Premium */}
+          {/* 🔥 2 Pricing Cards - Free & Trader */}
           <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
             {plans.map((plan) => {
               const displayPrice = getDisplayPrice(plan);
@@ -563,6 +580,8 @@ const UpgradePlanModal = ({
               const isPendingDowngrade = action.type === 'pending_downgrade';
               const isSelect = action.type === 'select';
               const isBlockedInterval = action.type === 'blocked_interval';
+              // 🔥 Free card for a paying user — non-actionable, but not "current" either.
+              const isIncluded = action.type === 'included';
               const hasTrial = plan.trialDays != null && plan.trialDays > 0;
               
               return (
@@ -614,7 +633,7 @@ const UpgradePlanModal = ({
                     </div>
                   )}
 
-                  {/* 🔥 Trial Badge for Basic */}
+                  {/* 🔥 Trial ribbon — currently unused (Trader has no trial: trialDays=0) */}
                   {hasTrial && billingInterval === 'monthly' && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
                     <div className="absolute -top-3 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -649,7 +668,7 @@ const UpgradePlanModal = ({
                   <div className="text-center mb-3 mt-2">
                     <h4 className="text-lg font-bold mb-1 text-white">{plan.name}</h4>
                     <div className="flex flex-col items-center justify-center gap-0.5 mb-1.5">
-                      {/* 🔥 Show trial pricing for Basic */}
+                      {/* 🔥 Trial pricing block — currently unused (Trader has no trial) */}
                       {hasTrial && isSelect ? (
                         <>
                           <div className="flex items-baseline gap-1">
@@ -704,11 +723,11 @@ const UpgradePlanModal = ({
                     </div>
                   )}
 
-                  <button 
+                  <button
                     onClick={() => handlePlanSelect(plan.id)}
-                    disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade || action.type === 'blocked_interval'}
+                    disabled={isCurrentPlan || isIncluded || isProcessingDowngrade || isPendingDowngrade || action.type === 'blocked_interval'}
                     className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                      isCurrentPlan
+                      isCurrentPlan || isIncluded
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         : isPendingDowngrade
                         ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
