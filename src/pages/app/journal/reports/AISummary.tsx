@@ -29,6 +29,7 @@ import CreditsBanner from '@/components/journal/reports/CreditsBanner';
 import RecapCard from '@/components/journal/reports/RecapCard';
 import LeakCounterfactualChart from '@/components/journal/reports/LeakCounterfactualChart';
 import LeakActionPlan, { AddRuleButton } from '@/components/journal/reports/LeakActionPlan';
+import { ReportsFinoExplains } from '@/components/journal/reports/ReportsFinoExplains';
 
 // ---------------------------------------------------------------------------
 // Formatting helpers
@@ -258,7 +259,7 @@ function SkeletonState() {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function AISummary() {
+function AISummaryInner() {
   const { data: trades = [], isLoading } = useTrades();
   const [showAllEvidence, setShowAllEvidence] = useState(false);
 
@@ -484,5 +485,20 @@ export default function AISummary() {
 
       <AIRecapsSection demo={demoActive} />
     </div>
+  );
+}
+
+/**
+ * Route wrapper: renders Fino Explains ABOVE the page body so that — inside the
+ * <JournalFeatureGate feature="ai-summary"> wrapper — the order reads
+ * gate preview banner → Fino Explains → report. ReportsLayout deliberately
+ * suppresses its own Fino Explains on this tab (see finoInPage there).
+ */
+export default function AISummary() {
+  return (
+    <>
+      <ReportsFinoExplains />
+      <AISummaryInner />
+    </>
   );
 }

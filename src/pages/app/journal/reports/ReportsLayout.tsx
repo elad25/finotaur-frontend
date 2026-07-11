@@ -1,6 +1,6 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import ReportsTabsNav from '@/components/journal/reports/ReportsTabsNav';
-import { FinoExplains } from '@/components/fino/FinoExplains';
+import { ReportsFinoExplains } from '@/components/journal/reports/ReportsFinoExplains';
 
 /**
  * JournalReportsLayout — shared layout for all /app/journal/reports/* sub-routes.
@@ -8,19 +8,16 @@ import { FinoExplains } from '@/components/fino/FinoExplains';
  * Pages manage their own padding (px-4 md:px-6 py-6) — no double-padding here.
  */
 export default function JournalReportsLayout() {
+  const { pathname } = useLocation();
+  // On the AI Summary tab, Fino Explains is rendered INSIDE the route (below
+  // the gate's "Leak Detector — Preview" banner) so the order reads
+  // tabs → preview banner → Fino Explains. Every other tab renders it here.
+  const finoInPage = pathname.startsWith('/app/journal/reports/ai-summary');
+
   return (
     <>
       <ReportsTabsNav />
-      <div className="relative px-4 pt-4 sm:px-6">
-        <FinoExplains
-          title="What are the Journal Reports?"
-          className="ml-auto w-fit"
-        >
-          Your trading, fully X-rayed. This analytics suite breaks your performance down every way
-          that matters — win rate, risk, day-by-day, by strategy and by setup — so you can see
-          what's working and what's costing you.
-        </FinoExplains>
-      </div>
+      {!finoInPage && <ReportsFinoExplains />}
       <Outlet />
     </>
   );
