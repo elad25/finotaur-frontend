@@ -3,7 +3,7 @@
 // 🔥 THE TRADER — unified, auto-rotating tabbed showcase
 // Merges the former stacked journal/AI/copier blocks + the standalone
 // JournalToolsTabs pill-tab idiom into ONE tabbed section. Auto-advances
-// every 6s, pauses on hover, stops permanently on manual tab click.
+// every 8s, pauses on hover, stops permanently on manual tab click.
 // Real product screenshots throughout — no illustrations, no mockups.
 // ================================================
 
@@ -285,7 +285,7 @@ const ROTATION_SEQUENCE: TraderTabKey[] = [
   'risk',
 ];
 
-const AUTOROTATE_MS = 6000;
+const AUTOROTATE_MS = 8000;
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -367,9 +367,9 @@ const TraderSection = () => {
   const activePillar = pillars.find((p) => p.subKeys.includes(activeTabKey))!;
   const hasSubRow = activePillar.subKeys.length > 1;
 
-  // Auto-rotation: advance every 6s through the LIVE-only sequence, looping.
-  // Paused on hover, stopped for good once the visitor manually picks a pill
-  // at either level.
+  // Auto-rotation: advance every 8s through the LIVE-only sequence, looping.
+  // Paused on hover (anywhere in the tab area — pills or panel), stopped for
+  // good once the visitor manually picks a pill at either level.
   useEffect(() => {
     if (autoRotateStopped || isPaused) return;
     const id = window.setInterval(() => {
@@ -436,10 +436,10 @@ const TraderSection = () => {
       </div>
 
       {/* ===== TAB AREA ===== */}
-      <div>
-        {/* Pill rows — hovering either row pauses auto-rotation (click intent);
-            hovering the panel below does NOT, so rotation stays visible while reading */}
-        <div onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
+      {/* Hovering anywhere in the tab area — either pill row or the panel below —
+          pauses auto-rotation; leaving it resumes. */}
+      <div onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
+        <div>
           {/* Primary row — 4 pillar pills, always visible */}
           <div
             role="tablist"
@@ -516,6 +516,7 @@ const TraderSection = () => {
                 const tab = tabs.find((t) => t.key === key)!;
                 const Icon = tab.icon;
                 const isActive = tab.key === activeTabKey;
+                const isSoon = tab.status === 'soon';
                 return (
                   <button
                     key={tab.key}
@@ -524,8 +525,12 @@ const TraderSection = () => {
                     aria-selected={isActive}
                     aria-controls={`trader-tabpanel-${tab.key}`}
                     id={`trader-tab-${tab.key}`}
+                    aria-label={isSoon ? `${tab.label} — soon` : tab.label}
+                    title={isSoon ? `${tab.label} — soon` : tab.label}
                     onClick={() => handleTabClick(tab.key)}
-                    className={`group relative overflow-hidden inline-flex items-center gap-2.5 px-5 py-3 rounded-[12px] border transition-all duration-200 ease-out ${
+                    className={`group relative overflow-hidden flex items-center justify-center w-11 h-11 rounded-[12px] border transition-all duration-200 ease-out ${
+                      isSoon ? 'opacity-60 hover:opacity-90' : ''
+                    } ${
                       isActive
                         ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
                         : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
@@ -545,12 +550,6 @@ const TraderSection = () => {
                         aria-hidden="true"
                       />
                     </span>
-                    <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
-                    {tab.status === 'soon' && (
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-1.5 py-0.5">
-                        Soon
-                      </span>
-                    )}
 
                     {/* Progress affordance — animated fill while auto-rotating, static once stopped. */}
                     {isActive && !autoRotateStopped && (
