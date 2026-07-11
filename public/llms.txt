@@ -41,7 +41,6 @@ It is built for retail traders who want Bloomberg-terminal-quality tooling at re
 ## Key pages
 
 - [Homepage](https://www.finotaur.com/): product overview
-- [Trading Journal](https://www.finotaur.com/journal): the broker-connected journal
 - [About](https://www.finotaur.com/about): company and mission
 - [Pricing](https://www.finotaur.com/pricing): current plans and what each tier includes
 - [Academy](https://www.finotaur.com/academy): free trading education (300+ lessons)

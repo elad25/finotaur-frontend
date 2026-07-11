@@ -43,7 +43,7 @@ const footerLinks = {
   product: [
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
-    { label: "Journal", href: "/journal", isRoute: true },
+    { label: "Journal", href: "/#pricing", isRoute: true },
     { label: "Academy", href: "/academy", isRoute: true },
     { label: "Stock Research", href: "/research", isRoute: true },
     { label: "FAQ", href: "/#faq", isRoute: true },

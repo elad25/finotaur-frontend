@@ -29,7 +29,6 @@ const PRESERVED_ENTRIES = [
   { loc: "/about",                               lastmod: TODAY, changefreq: "monthly", priority: "0.8" },
   { loc: "/contact",                             lastmod: TODAY, changefreq: "monthly", priority: "0.5" },
   { loc: "/links",                               lastmod: TODAY, changefreq: "weekly",  priority: "0.7" },
-  { loc: "/journal",                             lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
   { loc: "/warzone-preview",                     lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
   { loc: "/blog",                                lastmod: TODAY, changefreq: "daily",   priority: "0.8" },
   { loc: "/glossary",                            lastmod: TODAY, changefreq: "weekly",  priority: "0.7" },

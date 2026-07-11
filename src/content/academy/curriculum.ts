@@ -140,7 +140,7 @@ const F_JOURNAL: FinotaurLink = {
   blurb:
     "Finotaur's Journal tags every trade by style and setup, and its AI coach flags tilt, blind spots, and broken rules — turning the discipline in this chapter into measurable feedback.",
   ctaLabel: "Explore the Journal",
-  ctaHref: "/journal",
+  ctaHref: "/register",
 };
 
 const F_OPTIONS: FinotaurLink = {
@@ -196,7 +196,7 @@ const F_PROP: FinotaurLink = {
   blurb:
     "Passing and keeping a prop-firm account is a discipline game. Finotaur's Journal tracks your daily loss, drawdown, and rule adherence, and the Funding area connects you to broker and prop options.",
   ctaLabel: "Explore the Journal",
-  ctaHref: "/journal",
+  ctaHref: "/register",
 };
 
 const F_SENTIMENT: FinotaurLink = {
@@ -212,7 +212,7 @@ const F_PLAN: FinotaurLink = {
   blurb:
     "A plan is only as good as your follow-through. Finotaur's Backtesting engine proves your edge and the Journal tracks every rule, so your system actually improves over time.",
   ctaLabel: "Explore the Journal",
-  ctaHref: "/journal",
+  ctaHref: "/register",
 };
 
 // ---------------------------------------------------------------------
