@@ -48,17 +48,21 @@ export function FloorProfileGate({ children }: FloorProfileGateProps) {
             border: '1px solid rgba(201,166,70,0.2)',
           }}
         >
-          {/* Logo — FINOTAUR bull, blended naturally into the card (no container) */}
+          {/* Logo — FINOTAUR bull in a gold-bordered square; the asset's black
+              background is keyed out via mix-blend-mode so the card shows through
+              (no mask, sharp edges) */}
           <div className="flex justify-center">
-            <img
-              src="/BULL%20ONLY.png"
-              alt="FINOTAUR"
-              className="h-24 w-auto object-contain"
-              style={{
-                maskImage: 'radial-gradient(ellipse at center, black 56%, transparent 82%)',
-                WebkitMaskImage: 'radial-gradient(ellipse at center, black 56%, transparent 82%)',
-              }}
-            />
+            <div
+              className="flex h-28 w-28 shrink-0 items-center justify-center rounded-2xl"
+              style={{ border: '1px solid rgba(201,166,70,0.5)' }}
+            >
+              <img
+                src="/favicon.png"
+                alt="FINOTAUR"
+                className="w-[92px] h-auto object-contain"
+                style={{ mixBlendMode: 'lighten' }}
+              />
+            </div>
           </div>
 
           {/* Heading */}
