@@ -157,6 +157,7 @@ export default function TradingArena() {
             assetClass={assetClass}
             onSelect={handleSymbolSelect}
             variant="toolbar"
+            compact
             filterToAssetClass={false}
           />
 

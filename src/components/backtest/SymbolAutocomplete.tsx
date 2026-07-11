@@ -19,6 +19,7 @@ export function SymbolAutocomplete({
   assetClass,
   onSelect,
   variant = 'toolbar',
+  compact = false,
   filterToAssetClass = false,
   filterSymbols,
 }: {
@@ -26,6 +27,8 @@ export function SymbolAutocomplete({
   assetClass?: AssetClass;
   onSelect: (symbol: string) => void;
   variant?: 'toolbar' | 'field';
+  /** Toolbar-variant only: a tighter, narrower input for cramped headers. */
+  compact?: boolean;
   filterToAssetClass?: boolean;
   /** Optional extra predicate applied on top of `filterToAssetClass` — e.g.
    *  restricting futures suggestions to symbols with a populated data cache. */
@@ -120,7 +123,7 @@ export function SymbolAutocomplete({
         className={
           variant === 'field'
             ? 'w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium uppercase text-white placeholder:normal-case placeholder:text-gray-600 focus:border-[#C9A646] focus:outline-none'
-            : 'w-32 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm font-medium uppercase text-zinc-200 placeholder:normal-case placeholder:text-zinc-600 focus:border-[#C9A646] focus:outline-none'
+            : `${compact ? 'w-[68px] px-2 py-1 text-xs' : 'w-32 px-3 py-1.5 text-sm'} rounded-md border border-zinc-800 bg-zinc-900 font-medium uppercase text-zinc-200 placeholder:normal-case placeholder:text-zinc-600 focus:border-[#C9A646] focus:outline-none`
         }
       />
       {open && (
