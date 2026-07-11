@@ -72,7 +72,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
         src="/finotaur-bull-watermark.png"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none select-none absolute right-[-4%] top-1/2 z-0 h-[165%] w-auto max-w-none -translate-y-1/2 -scale-x-100 opacity-[0.22] mix-blend-screen"
+        className="pointer-events-none select-none absolute right-[-21%] bottom-[-63%] z-0 h-[175%] w-auto max-w-none -scale-x-100 opacity-[0.24] mix-blend-screen"
       />
 
       <div className="relative z-10 flex flex-col gap-ds-3">
@@ -119,7 +119,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
             <span
               className={cn(
                 'font-sans text-[34px] font-bold leading-none',
-                isNegative ? 'text-num-negative' : 'text-num-neutral',
+                isNegative ? 'text-num-negative' : 'text-status-success',
               )}
             >
               {formatPnl(trade_pnl as number)}
@@ -130,7 +130,12 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
           )}
 
           {rHidden ? null : (
-            <span className="font-mono tabular-nums text-[15px] font-semibold text-gold-primary">
+            <span
+              className={cn(
+                'font-mono tabular-nums text-[15px] font-semibold',
+                rIsNegative ? 'text-num-negative' : 'text-status-success',
+              )}
+            >
               {rIsNegative ? '−' : '+'}
               {Math.abs(trade_r as number).toFixed(1)}R
             </span>
