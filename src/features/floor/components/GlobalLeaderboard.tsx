@@ -593,18 +593,26 @@ interface CompRulesBlockProps {
   minTrades: number;
 }
 
-const SCORING_METRICS = [
-  { abbr: 'RR', label: 'Risk / Reward', icon: TrendingUp },
+// Primary metric — Profit Factor is what actually drives rank (quality,
+// never P&L). WR/RR are supporting inputs shown alongside it.
+const PRIMARY_SCORING_METRIC = {
+  abbr: 'PF',
+  label: 'Profit Factor',
+  subtitle: 'Win rate × risk-reward',
+  icon: TrendingUp,
+};
+
+const SUPPORTING_SCORING_METRICS = [
   { abbr: 'WR', label: 'Win Rate', icon: BarChart2 },
-  { abbr: 'EV', label: 'Expectancy', icon: Zap },
+  { abbr: 'RR', label: 'Risk / Reward', icon: Zap },
 ];
 
 const PRIZES = [
   {
     tag: 'GRAND PRIZE',
-    title: 'Full Premium Access',
-    subtitle: 'Free for an entire year — no strings attached',
-    detail: 'Unlimited AI features, full journal, all analytics',
+    title: '1st: $500 cash + 1 Year of Trader',
+    subtitle: '2nd-5th: 1 Year of Trader free',
+    detail: null,
     icon: Trophy,
     gold: true,
   },
@@ -622,11 +630,6 @@ const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBloc
     },
     {
       n: '02',
-      title: 'Active on 15+ of 30 days',
-      sub: 'Consistency is the whole point',
-    },
-    {
-      n: '03',
       title: 'Real broker-verified trades only',
       sub: 'Connect a broker to qualify',
     },
@@ -713,8 +716,35 @@ const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBloc
         >
           Scored By
         </p>
-        <div className="grid grid-cols-3 gap-2">
-          {SCORING_METRICS.map(({ abbr, label, icon: Icon }) => (
+
+        {/* Primary — Profit Factor drives rank */}
+        <div
+          className="flex items-center gap-3 rounded-[14px] px-4 py-4 mb-2"
+          style={{
+            background: 'rgba(201,166,70,0.08)',
+            border: '0.5px solid rgba(201,166,70,0.3)',
+          }}
+        >
+          <PRIMARY_SCORING_METRIC.icon
+            className="h-4 w-4 shrink-0"
+            style={{ color: '#C9A646' }}
+          />
+          <div className="min-w-0">
+            <span
+              className="text-[8px] font-bold tracking-[0.15em] uppercase"
+              style={{ color: 'rgba(201,166,70,0.55)' }}
+            >
+              {PRIMARY_SCORING_METRIC.abbr} — {PRIMARY_SCORING_METRIC.label}
+            </span>
+            <p className="text-[11px] mt-0.5" style={{ color: '#999' }}>
+              {PRIMARY_SCORING_METRIC.subtitle}
+            </p>
+          </div>
+        </div>
+
+        {/* Supporting metrics */}
+        <div className="grid grid-cols-2 gap-2">
+          {SUPPORTING_SCORING_METRICS.map(({ abbr, label, icon: Icon }) => (
             <div
               key={abbr}
               className="flex flex-col items-center justify-center gap-[6px] rounded-[14px] py-5"
@@ -773,15 +803,14 @@ const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBloc
           >
             Grand Prize
           </p>
-          <p className="text-[20px] font-black text-white leading-tight">Full Premium Access</p>
+          <p className="text-[20px] font-black text-white leading-tight">
+            1st: $500 cash + 1 Year of Trader
+          </p>
           <p
             className="mt-1 text-[12px] font-semibold"
             style={{ color: '#C9A646' }}
           >
-            Free for an entire year — no strings attached
-          </p>
-          <p className="mt-1 text-[11px]" style={{ color: '#555' }}>
-            Unlimited AI features, full journal, all analytics
+            2nd-5th: 1 Year of Trader free
           </p>
         </div>
 

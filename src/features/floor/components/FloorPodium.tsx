@@ -1,13 +1,14 @@
 // src/components/floor/FloorPodium.tsx
 // =====================================================
 // Podium display for the top 3 Floor competitors.
-// Champion = full-width dark hero card, Profit Factor as the hero number
-// (quality, never a dollar figure).
-// Runner-up + Third = 2-column grid below, PF-prominent.
+// Champion = full-width GOLD prestige hero card (gradient border, trophy,
+// gold radial tint, watermark) — Profit Factor as the hero number (quality,
+// never a dollar figure).
+// Runner-up + Third = 2-column grid below, silver/bronze tinted, PF-prominent.
 // Gold-on-black palette (#C9A646 / #E8C766 / #0A0A0A / #141414).
 // =====================================================
 
-import { Crown } from 'lucide-react';
+import { Crown, Trophy } from 'lucide-react';
 import { getRowRR, type FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 
 // ── Avatar helper ──────────────────────────────────────────────────────────────
@@ -16,13 +17,19 @@ function PodiumAvatar({
   name,
   avatarUrl,
   size,
+  ringColor,
+  ringWidth = '1.5px',
 }: {
   name: string;
   avatarUrl: string | null;
   size: number;
+  /** Override for the champion's solid gold ring — defaults to the subtle rgba ring used elsewhere. */
+  ringColor?: string;
+  ringWidth?: string;
 }) {
   const initial = (name || '?').trim().charAt(0).toUpperCase();
   const dim = `${size}px`;
+  const border = `${ringWidth} solid ${ringColor ?? 'rgba(201,166,70,0.5)'}`;
 
   if (avatarUrl) {
     return (
@@ -34,7 +41,7 @@ function PodiumAvatar({
         style={{
           width: dim,
           height: dim,
-          border: '1.5px solid rgba(201,166,70,0.5)',
+          border,
         }}
       />
     );
@@ -49,7 +56,7 @@ function PodiumAvatar({
         height: dim,
         fontSize: `${Math.round(size * 0.38)}px`,
         background: 'rgba(201,166,70,0.15)',
-        border: '1.5px solid rgba(201,166,70,0.45)',
+        border: ringColor ? border : '1.5px solid rgba(201,166,70,0.45)',
         color: '#E8C766',
       }}
     >
@@ -72,73 +79,120 @@ function ChampionCard({ row }: { row: FloorLeaderboardRow }) {
   const rr = getRowRR(row);
 
   return (
+    // Gradient-border wrapper (padding trick): the outer div paints the
+    // gold gradient border, the inner div holds the actual dark-glass card.
     <div
-      className="rounded-[16px] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
+      className="rounded-[18px]"
       style={{
-        background:
-          'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.02) 100%)',
-        border: '1px solid rgba(201,166,70,0.4)',
+        padding: '2px',
+        background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+        boxShadow: '0 12px 50px rgba(201,166,70,0.45), inset 0 2px 0 rgba(255,255,255,0.12)',
       }}
     >
-      {/* Left: crown pill + identity */}
-      <div className="flex items-center gap-4 min-w-0">
-        <PodiumAvatar name={nickname} avatarUrl={row.avatar_url} size={56} />
+      <div
+        className="relative overflow-hidden rounded-[16px] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
+        style={{
+          background:
+            'radial-gradient(ellipse at top left, rgba(201,166,70,0.18), transparent 60%), ' +
+            'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.02) 100%), #0A0A0A',
+        }}
+      >
+        {/* Oversized trophy watermark — championship presence, behind the PF number */}
+        <Trophy
+          aria-hidden="true"
+          className="pointer-events-none absolute"
+          style={{
+            right: '-24px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '180px',
+            height: '180px',
+            color: '#C9A646',
+            opacity: 0.06,
+            zIndex: 0,
+          }}
+        />
 
-        <div className="min-w-0">
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide mb-1.5"
+        {/* Left: trophy + avatar + identity */}
+        <div className="relative flex items-center gap-4 min-w-0" style={{ zIndex: 1 }}>
+          <Trophy
+            aria-hidden="true"
             style={{
-              background: 'rgba(201,166,70,0.18)',
-              border: '1px solid rgba(201,166,70,0.35)',
-              color: '#E8C766',
+              width: '44px',
+              height: '44px',
+              color: '#C9A646',
+              filter: 'drop-shadow(0 0 10px rgba(201,166,70,0.65))',
+              flexShrink: 0,
             }}
-          >
-            <Crown className="h-[10px] w-[10px]" />
-            Champion
-          </span>
+          />
 
+          <PodiumAvatar
+            name={nickname}
+            avatarUrl={row.avatar_url}
+            size={56}
+            ringColor="#C9A646"
+            ringWidth="2px"
+          />
+
+          <div className="min-w-0">
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide mb-1.5"
+              style={{
+                background: 'rgba(201,166,70,0.18)',
+                border: '1px solid rgba(201,166,70,0.35)',
+                color: '#E8C766',
+              }}
+            >
+              <Crown className="h-[10px] w-[10px]" />
+              Champion
+            </span>
+
+            <p
+              className="font-black truncate leading-snug"
+              style={{ fontSize: '30px', color: '#fff' }}
+            >
+              {nickname}
+            </p>
+
+            <p className="text-[12px] mt-0.5" style={{ color: '#888' }}>
+              Ranked #1
+            </p>
+          </div>
+        </div>
+
+        {/* Right: Profit Factor hero number + stat row */}
+        <div
+          className="relative flex-shrink-0 text-left sm:text-right w-full sm:w-auto"
+          style={{ zIndex: 1 }}
+        >
           <p
-            className="font-semibold truncate leading-snug"
-            style={{ fontSize: '24px', color: '#fff' }}
+            className="text-[11px] font-medium uppercase tracking-wide"
+            style={{ color: '#888' }}
           >
-            @{nickname}
+            Profit Factor
+          </p>
+          <p
+            className="tabular-nums font-black leading-none mt-1"
+            style={{ fontSize: '44px', color: '#C9A646' }}
+          >
+            {row.profit_factor !== null ? row.profit_factor.toFixed(2) : '—'}
           </p>
 
-          <p className="text-[12px] mt-0.5" style={{ color: '#888' }}>
-            Ranked #1
+          <p className="text-[12px] mt-2" style={{ color: '#777' }}>
+            Win{' '}
+            <span style={{ color: '#aaa' }}>{statLabel(row.win_rate, '%')}</span>
+            {' · '}Trades{' '}
+            <span style={{ color: '#aaa' }}>{row.trade_count}</span>
+            {' · '}Days{' '}
+            <span style={{ color: '#aaa' }}>
+              {statLabel(row.active_days ?? null)}
+            </span>
+            {' · '}RR{' '}
+            <span style={{ color: '#aaa' }}>
+              {rr !== null ? `${rr.toFixed(1)}R` : '—'}
+            </span>
           </p>
         </div>
-      </div>
-
-      {/* Right: Profit Factor hero number + stat row */}
-      <div className="flex-shrink-0 text-left sm:text-right w-full sm:w-auto">
-        <p
-          className="text-[11px] font-medium uppercase tracking-wide"
-          style={{ color: '#888' }}
-        >
-          Profit Factor
-        </p>
-        <p
-          className="tabular-nums font-black leading-none mt-1"
-          style={{ fontSize: '44px', color: '#C9A646' }}
-        >
-          {row.profit_factor !== null ? row.profit_factor.toFixed(2) : '—'}
-        </p>
-
-        <p className="text-[12px] mt-2" style={{ color: '#777' }}>
-          Win{' '}
-          <span style={{ color: '#aaa' }}>{statLabel(row.win_rate, '%')}</span>
-          {' · '}Trades{' '}
-          <span style={{ color: '#aaa' }}>{row.trade_count}</span>
-          {' · '}Days{' '}
-          <span style={{ color: '#aaa' }}>
-            {statLabel(row.active_days ?? null)}
-          </span>
-          {' · '}RR{' '}
-          <span style={{ color: '#aaa' }}>
-            {rr !== null ? `${rr.toFixed(1)}R` : '—'}
-          </span>
-        </p>
       </div>
     </div>
   );
@@ -159,14 +213,17 @@ function SubPodiumCard({
   const isRunnerUp = slot === 'runner-up';
 
   const romanLabel = isRunnerUp ? 'II' : 'III';
-  const slotColor = isRunnerUp ? '#9aa0a6' : '#b87333';
+  // Subtle metal identity — silver for runner-up, bronze for third. Clearly
+  // quieter than the champion card (no gradient border, no trophy, no glow).
+  const slotBorderColor = isRunnerUp ? 'rgba(203,213,225,0.5)' : 'rgba(205,127,50,0.5)';
+  const slotTextColor = isRunnerUp ? '#cbd5e1' : '#cd7f32';
 
   return (
     <div
       className="rounded-[14px] p-4 flex flex-col gap-3"
       style={{
         background: '#141414',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: `1px solid ${slotBorderColor}`,
       }}
     >
       {/* Rank pill */}
@@ -174,8 +231,8 @@ function SubPodiumCard({
         className="inline-flex w-fit items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest"
         style={{
           background: 'rgba(255,255,255,0.05)',
-          color: slotColor,
-          border: `1px solid ${slotColor}55`,
+          color: slotTextColor,
+          border: `1px solid ${slotBorderColor}`,
         }}
       >
         {romanLabel}
@@ -188,7 +245,7 @@ function SubPodiumCard({
           className="text-sm font-medium truncate"
           style={{ color: '#e0e0e0' }}
         >
-          @{nickname}
+          {nickname}
         </span>
       </div>
 
