@@ -712,32 +712,10 @@ export default function TradeCopier() {
             per-account cards render frameless and full-width (no gold frame,
             no p-ds-6 inset) so they spread wider across the page. */}
         {activeTab === 'manage-risk' && (
-          isDemo ? (
-            <>
-              {!isPreview && <CopierDemoBanner className="rounded-lg" />}
-              <SectionCard>
-                <div className="text-center py-16 space-y-4">
-                  <Shield className="w-12 h-12 text-zinc-700 mx-auto" />
-                  <div>
-                    <h2 className="text-base font-semibold text-ink-primary">Risk management</h2>
-                    <p className="text-ink-secondary text-sm mt-1 max-w-md mx-auto">
-                      Set daily loss limits, max contracts, and auto-lock rules for each account.
-                      Connect a broker account to configure your live risk rules.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => (isPremium ? setShowAddBroker(true) : navigate('/app/upgrade'))}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-4 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
-                  >
-                    {isPremium ? 'Connect your broker' : 'Upgrade to Trader'}
-                  </button>
-                </div>
-              </SectionCard>
-            </>
-          ) : (
+          <>
+            {isDemo && !isPreview && <CopierDemoBanner className="rounded-lg" />}
             <ManageRiskTab />
-          )
+          </>
         )}
 
         {/* ── Tab 4: FINOTAUR Agent (install + device pairing) ── */}
