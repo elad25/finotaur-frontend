@@ -220,7 +220,7 @@ export function ReportSlideFrame({
     <div className="relative space-y-ds-5 rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-6">
       <div>
         <Eyebrow>{pill}</Eyebrow>
-        <h2 className="mt-2 text-2xl font-semibold text-ink-primary">{title}</h2>
+        <h2 className="mt-2 font-display text-3xl font-medium uppercase tracking-[0.08em] text-ink-primary">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-ink-secondary">{subtitle}</p>}
       </div>
 

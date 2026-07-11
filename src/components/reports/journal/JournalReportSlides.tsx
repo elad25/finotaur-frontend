@@ -6,11 +6,6 @@
 import { useState, useMemo, type ReactNode } from 'react';
 import {
   ResponsiveContainer,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
   BarChart,
   Bar,
   Cell,
@@ -31,6 +26,7 @@ import type {
   AdvancedStatTile,
   ConsistencyStatCard,
   DayOfWeekRow,
+  EdgeScoreMetric,
   JournalReportData,
   PatternClassification,
   StatusBadge,
@@ -324,97 +320,136 @@ function scoreStatus(score: number): StatusBadge {
   return 'WATCH OUT';
 }
 
-function EdgeScoreBar({ score }: { score: number }) {
+/** English verdict word per metric, colored to match the ledger's status language. */
+function metricVerdict(status: StatusBadge): { word: string; className: string } {
+  switch (status) {
+    case 'GREAT':
+      return { word: 'Strength', className: 'text-gold-primary' };
+    case 'GOOD':
+      return { word: 'Solid', className: 'text-gold-primary' };
+    case 'NEEDS WORK':
+      return { word: 'Weak', className: 'text-status-warning' };
+    case 'WATCH OUT':
+    default:
+      return { word: 'Critical', className: 'text-num-negative' };
+  }
+}
+
+/** Position vs. the pro benchmark zone — score >= 66 is the pro zone. */
+function vsProLabel(score: number): string {
+  if (score >= 66) return 'Above';
+  if (score >= 33) return 'Below';
+  return 'Far below';
+}
+
+const OVERALL_VERDICT: Record<StatusBadge, string> = {
+  GREAT: 'Durable edge — protect it with the same risk discipline.',
+  GOOD: 'A real edge is forming — tighten the weak metrics.',
+  'NEEDS WORK': 'The edge is fragile — the weak metrics are erasing it.',
+  'WATCH OUT': 'No durable edge yet — risk control comes first.',
+};
+
+/** Mini benchmark bar fill color per status — matches the ledger's verdict colors. */
+function scoreBarFillClass(status: StatusBadge): string {
+  switch (status) {
+    case 'GREAT':
+    case 'GOOD':
+      return 'bg-gold-primary/80';
+    case 'NEEDS WORK':
+      return 'bg-status-warning/80';
+    case 'WATCH OUT':
+    default:
+      return 'bg-num-negative/80';
+  }
+}
+
+const EDGE_LEDGER_HEADERS = [
+  { label: 'METRIC', className: 'col-span-4' },
+  { label: 'VALUE', className: 'col-span-2 text-right' },
+  { label: 'SCORE', className: 'col-span-2 text-right' },
+  { label: 'VS PRO', className: 'col-span-2 text-right' },
+  { label: 'VERDICT', className: 'col-span-2 text-right' },
+];
+
+/** One ledger row — metric label + tooltip, raw value, mini benchmark bar +
+ *  score, position vs. the pro zone, and a one-word verdict. */
+function EdgeLedgerRow({ metric, isLast }: { metric: EdgeScoreMetric; isLast: boolean }) {
+  const status = scoreStatus(metric.score);
+  const tooltipCopy = EDGE_METRIC_TOOLTIP[metric.key] ?? metric.label;
+  const verdict = metricVerdict(status);
+  const clampedScore = Math.max(0, Math.min(100, metric.score));
+
   return (
-    <div
-      className="h-2 w-full overflow-hidden rounded-full"
-      style={{ background: 'linear-gradient(90deg, #E24B4A 0%, #eab308 50%, #C9A646 100%)' }}
-    >
-      <div className="relative h-full w-full">
-        <div
-          className="absolute top-0 h-full w-[3px] bg-ink-primary"
-          style={{ left: `${Math.max(0, Math.min(100, score))}%` }}
-        />
+    <div className={cn('grid grid-cols-12 items-center gap-ds-2 py-ds-3', !isLast && 'border-b border-border-ds-subtle')}>
+      <div className="col-span-4 flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-sm text-ink-primary">{metric.label}</span>
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={tooltipCopy}
+                onClick={(e) => e.preventDefault()}
+                className="inline-flex flex-shrink-0 items-center justify-center"
+              >
+                <HelpCircle className="h-3 w-3 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[220px] text-xs">
+              {tooltipCopy}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className="font-mono text-sm tabular-nums text-ink-primary">{metric.rawLabel}</span>
+      </div>
+
+      <div className="col-span-2 flex items-center justify-end gap-ds-2">
+        <span className="relative hidden h-1 w-12 overflow-hidden rounded-full bg-white/[0.06] sm:inline-block">
+          <span className={cn('absolute left-0 top-0 h-full rounded-full', scoreBarFillClass(status))} style={{ width: `${clampedScore}%` }} />
+          <span className="absolute left-[66%] top-0 h-full w-px bg-white/20" />
+        </span>
+        <span className="font-mono text-sm tabular-nums text-ink-primary">{Math.round(metric.score)}</span>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className="text-xs text-ink-secondary">{vsProLabel(metric.score)}</span>
+      </div>
+
+      <div className="col-span-2 text-right">
+        <span className={cn('font-serif text-sm italic', verdict.className)}>{verdict.word}</span>
       </div>
     </div>
   );
 }
 
 export function EdgeScoreSlideContent({ data }: { data: JournalReportData }) {
-  const radarData = data.edgeScore.metrics.map((m) => ({ label: m.label, value: m.score }));
   const overallStatus = scoreStatus(data.edgeScore.overall);
 
   return (
-    <div className="space-y-ds-5">
-      <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2">
-        <div className="space-y-ds-4">
-          <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
-            <ResponsiveContainer width="100%" height={220}>
-              <RadarChart data={radarData} outerRadius="72%" margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
-                <PolarGrid stroke="rgba(255,255,255,0.10)" />
-                <PolarAngleAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.62)', fontSize: 10 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                <Radar dataKey="value" stroke="#C9A646" strokeWidth={2} fill="#C9A646" fillOpacity={0.28} isAnimationActive={false} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
-            <p className="text-xs text-ink-secondary">Your Edge Score</p>
-            <p className="mt-ds-1 font-mono text-3xl tabular-nums text-gold-primary">{data.edgeScore.overall.toFixed(1)}</p>
-            <div className="mt-ds-3">
-              <EdgeScoreBar score={data.edgeScore.overall} />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-ds-3">
-          <p className="text-xs text-ink-secondary">Your FINO Edge Score combines 6 key metrics:</p>
-          {data.edgeScore.metrics.map((m) => {
-            const status = scoreStatus(m.score);
-            const tooltipCopy = EDGE_METRIC_TOOLTIP[m.key] ?? m.label;
-            return (
-              <div key={m.key} className="flex items-center justify-between gap-ds-2 rounded-[8px] bg-surface-2 px-ds-3 py-ds-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-xs text-ink-secondary">{m.label}</span>
-                  <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={tooltipCopy}
-                          onClick={(e) => e.preventDefault()}
-                          className="inline-flex flex-shrink-0 items-center justify-center"
-                        >
-                          <HelpCircle className="h-3 w-3 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[220px] text-xs">
-                        {tooltipCopy}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-ds-2">
-                  <span className="font-mono text-xs tabular-nums text-ink-tertiary">{m.rawLabel}</span>
-                  <span className={cn('rounded-sm px-1.5 py-0.5 text-[10px] font-semibold tabular-nums', statusBadgeClasses(status))}>
-                    {Math.round(m.score)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+    <div className="grid grid-cols-1 gap-ds-6 md:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]">
+      <div className="flex flex-col items-center justify-center text-center md:border-r md:border-border-ds-subtle md:pr-ds-6">
+        <p className="font-mono text-7xl font-light tabular-nums leading-none text-ink-primary">{data.edgeScore.overall.toFixed(1)}</p>
+        <p className="mt-ds-2 text-[10px] uppercase tracking-[0.2em] text-ink-tertiary">Edge Score &middot; of 100</p>
+        <span className={cn('mt-ds-3 rounded-full px-ds-3 py-1 text-[11px] font-semibold tracking-wide', statusBadgeClasses(overallStatus))}>
+          {overallStatus}
+        </span>
+        <p className="mt-ds-4 max-w-[220px] font-serif text-lg italic leading-snug text-ink-secondary">{OVERALL_VERDICT[overallStatus]}</p>
       </div>
 
-      <div className="flex items-center justify-between rounded-[12px] border-[0.5px] border-gold-border bg-gold-primary/[0.06] px-ds-4 py-ds-3">
-        <span className="text-sm text-ink-secondary">Overall Edge Score</span>
-        <div className="flex items-center gap-ds-2">
-          <span className="font-mono text-lg tabular-nums text-gold-primary">{data.edgeScore.overall.toFixed(1)}</span>
-          <span className={cn('rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(overallStatus))}>
-            {overallStatus}
-          </span>
+      <div>
+        <div className="grid grid-cols-12 items-center gap-ds-2 border-b border-border-ds-subtle pb-ds-2">
+          {EDGE_LEDGER_HEADERS.map((h) => (
+            <span key={h.label} className={cn('text-[10px] uppercase tracking-[0.15em] text-ink-tertiary', h.className)}>
+              {h.label}
+            </span>
+          ))}
         </div>
+        {data.edgeScore.metrics.map((m, i) => (
+          <EdgeLedgerRow key={m.key} metric={m} isLast={i === data.edgeScore.metrics.length - 1} />
+        ))}
       </div>
     </div>
   );
