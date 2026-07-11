@@ -360,13 +360,16 @@ const TraderSection = () => {
         </p>
       </div>
 
-      {/* ===== TAB AREA — pause auto-rotation while the pointer is anywhere in here ===== */}
-      <div onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
-        {/* Tab pills */}
+      {/* ===== TAB AREA ===== */}
+      <div>
+        {/* Tab pills — hovering the pill bar pauses auto-rotation (click intent);
+            hovering the panel below does NOT, so rotation stays visible while reading */}
         <div
           role="tablist"
           aria-label="The Trader — feature showcase"
           className="flex flex-wrap justify-center gap-3 mb-10"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
         >
           {tabs.map((tab, index) => {
             const Icon = tab.icon;
