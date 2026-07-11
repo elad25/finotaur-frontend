@@ -12,7 +12,6 @@ import TraderSection from '@/components/landing-new/TraderSection';
 import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
 import ChampionshipStrip from '@/components/landing-new/ChampionshipStrip';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
-import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
 import InvestorSection from '@/components/landing-new/InvestorSection';
 import FinotaurPlanSection from '@/components/landing-new/FinotaurPlanSection';
 import Testimonials from '@/components/landing-new/Testimonials';
@@ -133,7 +132,6 @@ const LandingPage = () => {
       <JournalToolsTabs />
       <ChampionshipStrip />
       <PartnershipRow />
-      <DesignPhilosophy />
       <InvestorSection />
       <FinotaurPlanSection />
       <Testimonials />
