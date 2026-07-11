@@ -34,6 +34,9 @@ export interface OAuthTokenResponse {
   tokenType: string;            // Usually "Bearer"
   providerUserId: string | null;
   raw: Record<string, unknown>; // Original response for debugging
+  // Tradovate serves LIVE + DEMO from one authorize portal; the adapter
+  // auto-detects which env the token belongs to and reports it back.
+  detectedEnvironment?: BrokerEnvironment;
 }
 
 export interface OAuthRefreshParams {
@@ -51,6 +54,10 @@ export interface OAuthUserInfo {
     name: string;
     isPropFirm: boolean;
   }>;
+  // Which Tradovate env the token resolved to (auto-detected).
+  detectedEnvironment?: BrokerEnvironment;
+  // Non-fatal diagnostic payload from /auth/me (JWT sub, merged userId, etc.).
+  _debugMe?: Record<string, unknown>;
 }
 
 export interface BrokerAuthAdapter {
