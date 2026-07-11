@@ -28,7 +28,7 @@
  * No PaperTradeRail on this tab — matches MarketScanner, which has none either.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
 import { fetchWallsHistory } from '@/pages/app/crypto/_shared/api';
@@ -142,7 +142,11 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const [autoFloorUsd, setAutoFloorUsd] = useState<number>(FLOOR_DEFAULT);
   const floorUsd = floorMode === 'auto' ? autoFloorUsd : floorMode;
 
-  const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(5);
+  // Default to "All" (0) so the heatmap is fully populated on first paint —
+  // a nonzero default hides most bins before the user ever touches the
+  // control, which (combined with the sparse-depth-coverage sliver below)
+  // made the tab look nearly empty on open.
+  const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(0);
 
   // Seed the adaptive floor from server-side 72h wall history on mount
   // (component is keyed by symbol, so this naturally reruns per symbol).
@@ -176,10 +180,21 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- timeTick intentionally drives recompute
   }, [interval, timeTick]);
 
+  // Depth-slice coverage is frequently much shorter than the natural
+  // VISIBLE_BARS window (the server serves recent windows fine but times
+  // out on older ones), so the natural window opens on a heatmap sliver at
+  // its right edge. `depthSnapFromSec` holds a one-time correction (an
+  // absolute `from`, seconds) once we've observed how far back real depth
+  // data actually goes — null means "no correction yet / not needed".
+  const [depthSnapFromSec, setDepthSnapFromSec] = useState<number | null>(null);
+  const depthSnapAttemptedRef = useRef(false);
+
   const focusRange = useMemo(
-    () => ({ from: to - VISIBLE_BARS * intervalSeconds(interval), to }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [to, interval],
+    () => ({
+      from: depthSnapFromSec ?? to - VISIBLE_BARS * intervalSeconds(interval),
+      to,
+    }),
+    [to, interval, depthSnapFromSec],
   );
 
   // Snap the time axis to focusRange once per interval change (NOT on every
@@ -188,6 +203,9 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const [timeFitToken, setTimeFitToken] = useState(0);
   useEffect(() => {
     setTimeFitToken((t) => t + 1);
+    // Interval changed — re-arm the depth-coverage snap for the new interval.
+    depthSnapAttemptedRef.current = false;
+    setDepthSnapFromSec(null);
   }, [interval]);
 
   // Native-vs-aggregate resolution for the candlestick series (see
@@ -214,6 +232,36 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
     floorUsd,
     isLive: book.status === 'live',
   });
+
+  // Snap the initial visible window to where depth-slice data actually
+  // exists. The server serves recent depth windows fine but times out
+  // (query_failed) on older ones, so coverage is usually much shorter than
+  // VISIBLE_BARS — without this the heatmap opens as a thin sliver at the
+  // pane's right edge. Runs at most once per (symbol, interval): symbol
+  // change re-mounts this component (key= in LiquidityTab), and the
+  // interval-change effect above re-arms depthSnapAttemptedRef. Once
+  // decided (snap or no-op), it never fires again — so it never fights a
+  // user's subsequent pan.
+  useEffect(() => {
+    if (depthSnapAttemptedRef.current) return;
+    const firstReal = depthMatrix.columns.find((col) => (col.flags & 1) === 0);
+    if (!firstReal) return; // no decoded depth data yet — wait for more
+
+    depthSnapAttemptedRef.current = true;
+
+    const ivSeconds = intervalSeconds(interval);
+    const naturalFromSec = to - VISIBLE_BARS * ivSeconds;
+    const earliestSec = Math.floor(firstReal.t / 1000);
+    if (earliestSec <= naturalFromSec) return; // depth already covers the natural window
+
+    const marginBars = 3;
+    const minBars = 20; // never zoom tighter than ~20 bars
+    const flooredFromSec = to - minBars * ivSeconds;
+    const snappedFromSec = Math.min(flooredFromSec, earliestSec - marginBars * ivSeconds);
+
+    setDepthSnapFromSec(snappedFromSec);
+    setTimeFitToken((t) => t + 1);
+  }, [depthMatrix.columns, to, interval]);
 
   const handleFloorSelect = useCallback((mode: 'auto' | number) => {
     setFloorMode(mode);
