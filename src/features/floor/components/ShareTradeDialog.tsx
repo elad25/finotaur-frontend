@@ -471,19 +471,19 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
                   checked={hidePnl}
                   onChange={setHidePnl}
                   label="Hide P&L"
-                  description="P&L amount is hidden from viewers — shown as •••"
+                  description="Shown as •••"
                 />
                 <ToggleRow
                   checked={showSetupOnly}
                   onChange={setShowSetupOnly}
                   label="Show setup only"
-                  description="Entry and exit prices are hidden — only setup and result direction visible."
+                  description="Entry & exit hidden"
                 />
                 <ToggleRow
                   checked={revealSize}
                   onChange={setRevealSize}
                   label="Reveal position size"
-                  description="Shows the number of contracts / shares traded. Hidden by default."
+                  description="Show contracts / shares"
                 />
               </div>
 

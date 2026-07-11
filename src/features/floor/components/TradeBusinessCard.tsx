@@ -2,17 +2,20 @@
 // Branded FINOTAUR "business card" — renders a trade's DATA ONLY (no chart),
 // gold-on-black, for posts shared with show_chart = false.
 //
-// Reuses the SAME redaction rules as AttachedTradeCard in SharedTradeCard.tsx:
-//   hide_pnl || trade_pnl === null           → P&L shown as "•••"
-//   show_setup_only || trade_entry === null  → entry shown as "•••"
-//   show_setup_only || trade_exit === null   → exit shown as "•••"
-//   !reveal_size || trade_size === null      → size hidden entirely
+// Feed-independent: takes a plain TradeCardData (see
+// @/features/floor/lib/tradeCardData). Redaction (hide_pnl / show_setup_only /
+// reveal_size) is already applied by the caller via tradeCardFromFeedItem /
+// tradeCardFromShareable — a null field here always means "hidden", never 0.
 //
 // Does NOT render the author header, reactions, or comments — those stay in
 // the surrounding SharedTradeCard.
+//
+// forwardRef: the outer div is the export target for html2canvas
+// (see useTradeCardImage / ShareTradeActions).
 
+import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
-import type { GlobalFeedItem } from '@/features/floor/types/community';
+import type { TradeCardData } from '@/features/floor/lib/tradeCardData';
 
 /** Dollar value with U+2212 for negative — matches SharedTradeCard's formatPnl. */
 function formatPnl(value: number): string {
@@ -30,38 +33,37 @@ function shortDate(iso: string): string {
 }
 
 export interface TradeBusinessCardProps {
-  item: GlobalFeedItem;
+  data: TradeCardData;
 }
 
-export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
+export const TradeBusinessCard = forwardRef<HTMLDivElement, TradeBusinessCardProps>(
+  function TradeBusinessCard({ data }, ref) {
   const {
-    trade_symbol,
-    trade_side,
-    trade_pnl,
-    trade_entry,
-    trade_exit,
-    trade_size,
-    trade_close_at,
-    hide_pnl,
-    show_setup_only,
-    reveal_size,
-    trade_strategy_category,
-    trade_r,
-  } = item;
+    symbol: trade_symbol,
+    side: trade_side,
+    pnl: trade_pnl,
+    entry: trade_entry,
+    exit: trade_exit,
+    size: trade_size,
+    closeAt: trade_close_at,
+    r: trade_r,
+    strategyCategory: trade_strategy_category,
+  } = data;
 
   if (!trade_symbol) return null;
 
-  const pnlHidden = hide_pnl || trade_pnl === null;
+  const pnlHidden = trade_pnl === null;
   const isNegative = trade_pnl !== null && trade_pnl < 0;
-  const rHidden = hide_pnl || trade_r === null;
+  const rHidden = trade_r === null;
   const rIsNegative = trade_r !== null && trade_r < 0;
-  const entryHidden = show_setup_only || trade_entry === null;
-  const exitHidden = show_setup_only || trade_exit === null;
+  const entryHidden = trade_entry === null;
+  const exitHidden = trade_exit === null;
   const isLong = trade_side === 'LONG';
   const isShort = trade_side === 'SHORT';
 
   return (
     <div
+      ref={ref}
       className={cn(
         'relative overflow-hidden rounded-[12px] p-ds-5',
         'bg-surface-base border border-[rgba(201,166,70,0.35)]',
@@ -101,7 +103,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
               )}
             >
               {trade_side}
-              {reveal_size && trade_size !== null && ` · ${trade_size} contract${trade_size === 1 ? '' : 's'}`}
+              {trade_size !== null && ` · ${trade_size} contract${trade_size === 1 ? '' : 's'}`}
             </span>
           </div>
         )}
@@ -191,4 +193,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
       </div>
     </div>
   );
-}
+  },
+);
+
+TradeBusinessCard.displayName = 'TradeBusinessCard';

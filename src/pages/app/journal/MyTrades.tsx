@@ -30,7 +30,8 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
-import { ShareTradeDialog, type ShareableTrade } from "@/features/floor/components/ShareTradeDialog";
+import { type ShareableTrade } from "@/features/floor/components/ShareTradeDialog";
+import { ShareTradeActions } from "@/features/floor/components/ShareTradeActions";
 import { isManualTrade } from "@/lib/trades/isManualTrade";
 import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
@@ -3245,7 +3246,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
       {/* Share Trade Dialog — mounted at modal-body level (not inside the
           'chart' tab block) so switching tabs doesn't unmount it. */}
       {shareableTrade && (
-        <ShareTradeDialog trade={shareableTrade} open={shareOpen} onOpenChange={setShareOpen} />
+        <ShareTradeActions trade={shareableTrade} open={shareOpen} onOpenChange={setShareOpen} />
       )}
 
       {/* Delete Dialog */}
