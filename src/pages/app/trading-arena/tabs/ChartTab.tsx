@@ -47,8 +47,6 @@ import { DEFAULT_FOOTPRINT_CONFIG } from '@/components/charting/orderflow/types'
 import { resolveImbalancePreset, type FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import {
-  OrderFlowControls,
-  DEFAULT_ORDER_FLOW_CONTROLS,
   type OrderFlowControlsState,
   type RowDensity,
 } from '../components/OrderFlowControls';
@@ -59,6 +57,10 @@ interface ChartTabProps {
   interval: Interval;
   /** Detected asset class for the current symbol. Controls chart source and rail enabled state. */
   assetClass: string;
+  /** Order Flow controls — lifted up to TradingArena (rendered in the Arena
+   *  toolbar's "Chart ▾" dropdown), passed down here as a controlled prop. */
+  controls: OrderFlowControlsState;
+  onControlsChange: (next: OrderFlowControlsState) => void;
 }
 
 // Singleton — BinanceSource is stateless; one instance is fine.
@@ -122,7 +124,7 @@ function densityMultiplier(density: RowDensity): number {
 // own minimum-tick floor so suggestRowSize never divides by zero.
 const FALLBACK_TICK_SIZE = 0.01;
 
-export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
+export function ChartTab({ symbol, interval, assetClass, controls, onControlsChange }: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
 
   const isCrypto = assetClass === 'crypto';
@@ -131,9 +133,6 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
   // won't match a Binance pair — lastPrice will stay null, disabling the rail.
   const book = useBinanceOrderBook(symbol);
   const livePrice = book.lastPrice;
-
-  // ── Order Flow controls state ────────────────────────────────────────────
-  const [controls, setControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
   // ── Row size: auto-suggested from the loaded window's average PER-BAR
   // high/low range, refined on each bar load (onBarsLoad below), adjusted by
@@ -223,14 +222,8 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
     <div className="flex flex-1 min-h-0 w-full">
       {/* Chart pane */}
       <div className="relative flex flex-1 min-w-0 flex-col">
-        <OrderFlowControls
-          state={controls}
-          onChange={setControls}
-          disabled={!isCrypto}
-          statusNote={statusNote}
-          historyLimitedNote={historyLimitedNote}
-        />
-
+        {/* Order Flow controls now live in the Arena toolbar's "Chart ▾"
+            dropdown (see ArenaToolbar.tsx) — no longer rendered here. */}
         <div className="relative flex-1 min-h-0">
           {isCrypto ? (
             <FinotaurChart

@@ -31,7 +31,6 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import {
   TRADING_ARENA_TABS,
-  ARENA_INTERVALS,
   toTabId,
   type TabId,
 } from './types';
@@ -41,39 +40,17 @@ import { TapeTab }         from './tabs/TapeTab';
 import { CvdTab }          from './tabs/CvdTab';
 import { LockedTab }       from './tabs/LockedTab';
 import { FuturesChartTab } from './tabs/FuturesChartTab';
+import { ArenaToolbar } from './components/ArenaToolbar';
+import {
+  DEFAULT_ORDER_FLOW_CONTROLS,
+  type OrderFlowControlsState,
+} from './components/OrderFlowControls';
 
 // ---------------------------------------------------------------------------
 // Default symbol and interval
 // ---------------------------------------------------------------------------
 const DEFAULT_SYMBOL = 'BTCUSDT';
 const DEFAULT_INTERVAL: Interval = '15m';
-
-interface IntervalSelectorProps {
-  value: Interval;
-  onChange: (v: Interval) => void;
-}
-
-function IntervalSelector({ value, onChange }: IntervalSelectorProps) {
-  return (
-    <div className="flex items-center gap-1" role="group" aria-label="Select interval">
-      {ARENA_INTERVALS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={cn(
-            'h-7 min-w-[32px] rounded px-2 text-[11px] font-semibold transition-all duration-150',
-            value === opt.value
-              ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border border-[rgba(201,166,70,0.45)]'
-              : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border border-transparent',
-          )}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 interface TabSwitcherProps {
   active: TabId;
@@ -144,6 +121,10 @@ export default function TradingArena() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [interval, setIntervalValue] = useState<Interval>(DEFAULT_INTERVAL);
   const [assetClass, setAssetClass] = useState<AssetClass>('crypto');
+
+  // Order Flow controls — lifted up from ChartTab so the Arena toolbar's
+  // "Chart ▾" dropdown (rendered here, above <main>) can host them.
+  const [ofControls, setOfControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
   const handleSymbolSelect = useCallback((picked: string) => {
     const detected = detectAssetClass(picked);
@@ -232,16 +213,6 @@ export default function TradingArena() {
             variant="toolbar"
             filterToAssetClass={false}
           />
-
-          {/* Divider */}
-          <span
-            className="w-px h-5 flex-shrink-0"
-            style={{ background: 'rgba(201,166,70,0.12)' }}
-            aria-hidden="true"
-          />
-
-          {/* Interval selector */}
-          <IntervalSelector value={interval} onChange={setIntervalValue} />
         </div>
 
         {/* Right: tab switcher */}
@@ -250,10 +221,26 @@ export default function TradingArena() {
         </div>
       </header>
 
+      {/* ── Single-row controls strip (Timeframe / Indicators / Chart) ──── */}
+      <ArenaToolbar
+        interval={interval}
+        onIntervalChange={setIntervalValue}
+        activeTab={activeTab}
+        controls={ofControls}
+        onControlsChange={setOfControls}
+        chartControlsDisabled={assetClass !== 'crypto'}
+      />
+
       {/* ── Content area ─────────────────────────────────────────── */}
       <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
         {activeTab === 'chart' && (
-          <ChartTab symbol={symbol} interval={interval} assetClass={assetClass} />
+          <ChartTab
+            symbol={symbol}
+            interval={interval}
+            assetClass={assetClass}
+            controls={ofControls}
+            onControlsChange={setOfControls}
+          />
         )}
         {activeTab === 'order-flow' && (
           <OrderFlowTab symbol={symbol} />
