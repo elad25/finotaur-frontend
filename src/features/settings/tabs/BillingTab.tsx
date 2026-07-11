@@ -408,17 +408,17 @@ export const BillingTab = () => {
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to cancel journal subscription");
+      if (!response.ok) throw new Error(data.error || "Failed to cancel Trader subscription");
 
       await refreshProfile();
       await submitCancelFeedbackSafe(journalInfo.name, 'journal');
       setCancelReasonId('');
       setCancelFeedbackText('');
       setShowJournalCancelDialog(false);
-      toast.success(data.message || 'Trading Journal subscription will be cancelled at period end');
+      toast.success(data.message || 'Trader subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling journal:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to cancel journal subscription');
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel Trader subscription');
     } finally {
       setCancellingJournal(false);
     }
@@ -448,13 +448,13 @@ export const BillingTab = () => {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Trading Journal subscription reactivated!');
+        toast.success('Trader subscription reactivated!');
         await refreshProfile();
       } else {
-        toast.error(data.error || 'Failed to reactivate journal subscription');
+        toast.error(data.error || 'Failed to reactivate Trader subscription');
       }
     } catch (error) {
-      toast.error('Failed to reactivate journal subscription');
+      toast.error('Failed to reactivate Trader subscription');
     } finally {
       setReactivatingJournal(false);
     }
@@ -611,7 +611,7 @@ export const BillingTab = () => {
         {/* Row 2 — Trading Journal */}
         <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
           <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-          <span className="text-xs text-zinc-500 w-20 shrink-0">Journal</span>
+          <span className="text-xs text-zinc-500 w-20 shrink-0">Trader</span>
           <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', journalInfo.color)}>
             {journalInfo.name}
           </span>
@@ -1134,10 +1134,10 @@ export const BillingTab = () => {
                 <BookOpen className="w-6 h-6 text-blue-400" />
               </div>
               <DialogTitle className="text-xl font-semibold text-white mb-1">
-                Cancel Trading Journal?
+                Cancel Trader?
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
-                Your {journalInfo.name} Trading Journal subscription will be cancelled at the end of your billing period. You'll keep full access until {formatDate(profile?.subscription_expires_at)}.
+                Your Trader subscription will be cancelled at the end of your billing period. You'll keep full access until {formatDate(profile?.subscription_expires_at)}.
               </DialogDescription>
             </div>
           </div>
@@ -1179,7 +1179,7 @@ export const BillingTab = () => {
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Keep My Journal Subscription
+              Keep My Trader Subscription
             </button>
 
             <button
