@@ -5,8 +5,10 @@
  *   Left  — FinotaurChart (BinanceSource, crypto only) or a placeholder for
  *            non-crypto symbols, with Order Flow controls above it and
  *            optional CVD/Delta sub-panes below it.
- *   Right — 320 px PaperTradeRail (paper-trading panel driven by live tick
- *            price from useBinanceOrderBook).
+ *   Right — Resizable (280-560 px, default 320 px) PaperTradeRail
+ *            (paper-trading panel driven by live tick price from
+ *            useBinanceOrderBook). Width is dragged via a handle on its
+ *            left border and persisted to localStorage.
  *
  * useBinanceOrderBook is called unconditionally (rules of hooks). For non-crypto
  * symbols it connects to Binance with a malformed pair and will sit in 'error'
@@ -34,7 +36,7 @@
  *   marker icons                 z-index 20  — topmost
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import type { Indicator, Interval } from '@/components/charting/types';
@@ -123,6 +125,31 @@ function densityMultiplier(density: RowDensity): number {
 // Fallback tick size when no bars are loaded yet — matches FlowBinStore's
 // own minimum-tick floor so suggestRowSize never divides by zero.
 const FALLBACK_TICK_SIZE = 0.01;
+
+// ── Resizable right rail (Task 1) ────────────────────────────────────────
+const RAIL_MIN_WIDTH = 280;
+const RAIL_MAX_WIDTH = 560;
+const RAIL_DEFAULT_WIDTH = 320;
+const RAIL_WIDTH_STORAGE_KEY = 'arena-rail-width';
+
+function clampRailWidth(width: number): number {
+  return Math.min(RAIL_MAX_WIDTH, Math.max(RAIL_MIN_WIDTH, width));
+}
+
+// Lazy initializer — localStorage access is guarded since it can throw
+// (privacy mode, disabled storage, etc.).
+function readStoredRailWidth(): number {
+  try {
+    const stored = localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!Number.isNaN(parsed)) return clampRailWidth(parsed);
+    }
+  } catch {
+    // localStorage unavailable — fall back to the default width.
+  }
+  return RAIL_DEFAULT_WIDTH;
+}
 
 export function ChartTab({ symbol, interval, assetClass, controls, onControlsChange }: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
@@ -238,6 +265,55 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
 
   const showSubPanes = isCrypto && (controls.showCvd || controls.showDelta);
 
+  // ── Resizable right rail (Task 1) ──────────────────────────────────────
+  const [railWidth, setRailWidth] = useState<number>(readStoredRailWidth);
+  const [isDraggingRail, setIsDraggingRail] = useState(false);
+  const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const railWidthRef = useRef(railWidth);
+  railWidthRef.current = railWidth;
+
+  const handleRailHandleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      dragStartRef.current = { startX: e.clientX, startWidth: railWidth };
+      setIsDraggingRail(true);
+    },
+    [railWidth],
+  );
+
+  useEffect(() => {
+    if (!isDraggingRail) return;
+
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      // Rail is on the right — dragging the handle LEFT (clientX decreases)
+      // should INCREASE the rail width.
+      const next = clampRailWidth(start.startWidth + (start.startX - e.clientX));
+      setRailWidth(next);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingRail(false);
+      try {
+        localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(railWidthRef.current));
+      } catch {
+        // localStorage unavailable — width just won't persist across reloads.
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingRail]);
+
   return (
     <div className="flex flex-1 min-h-0 w-full">
       {/* Chart pane */}
@@ -299,8 +375,22 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
         )}
       </div>
 
+      {/* Drag handle — resizes the paper-trading rail (280-560 px). */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        onMouseDown={handleRailHandleMouseDown}
+        className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+          isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+        }`}
+      />
+
       {/* Paper-trading right rail */}
-      <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+      <div
+        className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
+        style={{ width: railWidth }}
+      >
         <PaperTradeRail
           key={symbol}
           symbol={symbol}
