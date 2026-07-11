@@ -547,7 +547,7 @@ const TraderSection = () => {
             type="button"
             onClick={handlePrevArrow}
             aria-label="Previous feature"
-            className="absolute left-1 lg:-left-5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
+            className="absolute -left-3 md:-left-14 xl:-left-16 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -555,7 +555,7 @@ const TraderSection = () => {
             type="button"
             onClick={handleNextArrow}
             aria-label="Next feature"
-            className="absolute right-1 lg:-right-5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
+            className="absolute -right-3 md:-right-14 xl:-right-16 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>

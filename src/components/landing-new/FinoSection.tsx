@@ -43,6 +43,100 @@ function renderChatText(text: string) {
   );
 }
 
+// FINO mascot codec pick: Safari / iOS WebKit can't render VP9-alpha WebM
+// transparently, so those browsers get the animated-WebP-with-alpha fallback
+// instead. Everything Chromium/Gecko keeps the smaller, smoother VP9 WebM.
+// (Mirrors the pattern in src/pages/app/home/HomePage.tsx — same assets,
+// same waist-up crop technique, scaled up for this section's empty space.)
+const finoUsesWebpFallback =
+  typeof navigator !== 'undefined' &&
+  /AppleWebKit/.test(navigator.userAgent) &&
+  !/Chrome|Chromium|Android/.test(navigator.userAgent);
+
+/** Half-body FINO, "thinking" — real animated asset (video/animated-webp),
+ * never a static image with CSS motion. Waist-up crop: media is scaled
+ * taller than the fixed-height box and top-anchored, so overflow-hidden
+ * clips the legs and we read a bigger half-body bust (face + horns + gold
+ * medallion + cape). A staggered thought-bubble trail rises diagonally
+ * toward the chat to signal "thinking". */
+const FinoThinking = () => {
+  return (
+    <div className="relative mt-ds-6 flex items-start gap-3">
+      <style>{`
+        @keyframes fino-thought-pulse {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.8; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .fino-thought-dot { animation: none !important; opacity: 0.6 !important; }
+        }
+      `}</style>
+      <div className="relative h-52 w-52 flex-shrink-0 overflow-hidden flex items-start justify-center">
+        {finoUsesWebpFallback ? (
+          <img
+            src="/fino/fino-safari-v4.webp"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="h-[280px] w-auto max-w-none object-contain object-top"
+          />
+        ) : (
+          <video
+            src="/fino/fino-home-natural-v4.webm"
+            poster="/fino/fino-home-natural-v4-poster.png"
+            autoPlay
+            muted
+            loop
+            playsInline
+            aria-hidden="true"
+            draggable={false}
+            className="h-[280px] w-auto max-w-none object-contain object-top"
+          />
+        )}
+      </div>
+
+      {/* Thought-bubble trail — three dots of increasing size, rising
+          diagonally up-right of FINO's head toward the chat. Rendered
+          flex-col-reverse so the smallest dot sits nearest the head (bottom)
+          and the largest drifts furthest up-right (top), each pulsing in
+          sequence outward. Hidden below md where the diagonal positioning
+          gets cramped next to the copy. */}
+      <div
+        aria-hidden="true"
+        className="hidden md:flex flex-col-reverse items-start gap-2.5 mt-1"
+      >
+        <span
+          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40"
+          style={{
+            width: 6,
+            height: 6,
+            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
+            animationDelay: '0s',
+          }}
+        />
+        <span
+          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 ml-3"
+          style={{
+            width: 9,
+            height: 9,
+            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
+            animationDelay: '0.4s',
+          }}
+        />
+        <span
+          className="fino-thought-dot rounded-full bg-gold-primary/30 border border-gold-primary/40 ml-5"
+          style={{
+            width: 13,
+            height: 13,
+            animation: 'fino-thought-pulse 2.2s ease-in-out infinite',
+            animationDelay: '0.8s',
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
 const FinoChatMock = () => {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-gold-border shadow-card-featured bg-section-card-deep">
@@ -127,6 +221,7 @@ const FinoSection = () => {
               </li>
             ))}
           </ul>
+          <FinoThinking />
         </div>
         <FinoChatMock />
       </motion.div>
