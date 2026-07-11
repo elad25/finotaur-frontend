@@ -10,17 +10,17 @@ import { FinoExplains } from '@/components/fino/FinoExplains';
 export default function JournalReportsLayout() {
   return (
     <>
+      <ReportsTabsNav />
       <div className="relative px-4 pt-4 sm:px-6">
         <FinoExplains
           title="What are the Journal Reports?"
-          className="mt-ds-3 ml-auto w-fit"
+          className="ml-auto w-fit"
         >
           Your trading, fully X-rayed. This analytics suite breaks your performance down every way
           that matters — win rate, risk, day-by-day, by strategy and by setup — so you can see
           what's working and what's costing you.
         </FinoExplains>
       </div>
-      <ReportsTabsNav />
       <Outlet />
     </>
   );

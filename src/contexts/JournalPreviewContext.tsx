@@ -39,6 +39,7 @@ export function useJournalPreview(): JournalPreviewContextValue {
 export const FREE_PREVIEW_JOURNAL_PATHS = [
   '/app/journal/trade-compare',
   '/app/journal/revenge-radar',
+  '/app/journal/reports/ai-summary',
 ];
 
 export const isFreePreviewJournalPath = (pathname: string): boolean =>
