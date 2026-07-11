@@ -1,14 +1,31 @@
 // src/components/landing-new/TraderSection.tsx
 // ================================================
-// 🔥 THE TRADER — unified journal + AI + copier showcase
-// Replaces ProductShowcase as the flagship "journal" zone on the landing page.
+// 🔥 THE TRADER — unified, auto-rotating tabbed showcase
+// Merges the former stacked journal/AI/copier blocks + the standalone
+// JournalToolsTabs pill-tab idiom into ONE tabbed section. Auto-advances
+// every 6s, pauses on hover, stops permanently on manual tab click.
 // Real product screenshots throughout — no illustrations, no mockups.
-// Two flagship moments (Leak Detector AI, Trade Copier) get the AISection-style
-// gold-lit card treatment; everything else uses the shared two-column idiom.
 // ================================================
 
-import { motion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Brain,
+  Flame,
+  RotateCcw,
+  BookOpen,
+  BarChart3,
+  Copy,
+  ShieldCheck,
+  LineChart,
+  PlayCircle,
+  Lock,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
 import { SectionShell } from './_shared/SectionShell';
 import { SectionEyebrow } from './_shared/SectionEyebrow';
@@ -25,30 +42,198 @@ import copierShot from '@/assets/landing/copier.webp';
 import riskManagementShot from '@/assets/landing/risk-management.webp';
 
 // ---------------------------------------------------------------------------
+// Tab data — copy/bullets carried over verbatim from the former stacked
+// blocks (Dashboard / Calendar / Leak Detector / 2x2 grid / Copier + Risk)
+// and from the former JournalToolsTabs (Backtesting / Trade Replay).
+// ---------------------------------------------------------------------------
+type TraderTabKey =
+  | 'dashboard'
+  | 'calendar'
+  | 'leak'
+  | 'revenge'
+  | 'shadow'
+  | 'playbooks'
+  | 'breakdowns'
+  | 'copier'
+  | 'risk'
+  | 'backtesting'
+  | 'replay';
+
+interface TraderTab {
+  key: TraderTabKey;
+  icon: LucideIcon;
+  label: string;
+  status: 'live' | 'soon';
+  heading: string;
+  description?: string;
+  bullets?: string[];
+  image?: { src: string; alt: string; glow?: boolean };
+}
+
+const tabs: TraderTab[] = [
+  {
+    key: 'dashboard',
+    icon: LayoutDashboard,
+    label: 'Dashboard',
+    status: 'live',
+    heading: 'Every trade. Auto-synced. Scored.',
+    bullets: [
+      'Connects to your broker — no manual entry',
+      'FINO Score grades your consistency, drawdown and expectancy',
+      'Equity curve and daily P&L at institutional depth',
+    ],
+    image: {
+      src: journalDashboard,
+      alt: 'Finotaur journal dashboard showing net P&L of +$26,594, 49.6% win rate, 1.73 profit factor, a FINO Score of 78.19, and the full equity curve',
+      glow: true,
+    },
+  },
+  {
+    key: 'calendar',
+    icon: CalendarDays,
+    label: 'Calendar',
+    status: 'live',
+    heading: 'Your month, at a glance.',
+    description:
+      "Green days aren't luck. The calendar shows every session's P&L, trade count and weekly R — so patterns stop hiding between trades.",
+    image: {
+      src: journalCalendar,
+      alt: 'Finotaur journal calendar view showing a full month of daily P&L, trade counts and weekly summaries',
+    },
+  },
+  {
+    key: 'leak',
+    icon: Brain,
+    label: 'Leak Detector',
+    status: 'live',
+    heading: 'AI that finds your most expensive habit.',
+    description:
+      'The Leak Detector reads every trade and names the exact pattern draining your account — and what following your own rule was worth.',
+    image: {
+      src: leakDetector,
+      alt: "Finotaur Leak Detector identifying the user's #1 leak — banking winners too early, costing −$102,662 — with a rule card and actual-vs-rule equity comparison",
+      glow: true,
+    },
+  },
+  {
+    key: 'revenge',
+    icon: Flame,
+    label: 'Revenge Radar',
+    status: 'live',
+    heading: 'Catches tilt before it costs you.',
+    description:
+      'Revenge Radar flags the trade you took to get even — and puts a dollar figure on exactly what tilt has cost you this month.',
+    image: {
+      src: revengeRadar,
+      alt: 'Finotaur Revenge Radar screen analyzing the cost of revenge trading',
+    },
+  },
+  {
+    key: 'shadow',
+    icon: RotateCcw,
+    label: 'Shadow',
+    status: 'live',
+    heading: 'What your trades could have been.',
+    description:
+      "Shadow replays your account against the discipline you didn't follow, so you can see the exact cost of breaking your own rules.",
+    image: {
+      src: shadowShot,
+      alt: 'Finotaur Shadow screen comparing cumulative P&L across trading scenarios',
+    },
+  },
+  {
+    key: 'playbooks',
+    icon: BookOpen,
+    label: 'Playbooks',
+    status: 'live',
+    heading: 'Know which setup actually pays.',
+    description:
+      "Every strategy you tag gets its own win rate, expectancy and sample size — so you can size into what works and cut what doesn't.",
+    image: {
+      src: strategiesShot,
+      alt: 'Finotaur My Strategies screen showing ICT MSS at 67% win rate and other tracked setups',
+    },
+  },
+  {
+    key: 'breakdowns',
+    icon: BarChart3,
+    label: 'Breakdowns',
+    status: 'live',
+    heading: 'Your edge by day, hour and symbol.',
+    description:
+      'See exactly when and where your P&L comes from, down to the session, the hour and the ticker.',
+    image: {
+      src: dayOfWeekShot,
+      alt: 'Finotaur By Day of Week screen showing best and worst trading days by P&L',
+    },
+  },
+  {
+    key: 'copier',
+    icon: Copy,
+    label: 'Trade Copier',
+    status: 'live',
+    heading: 'Trade one account. Mirror them all.',
+    bullets: [
+      'Tradovate and NinjaTrader, connected in minutes',
+      'Per-account risk locks and an instant kill switch',
+      'One click flattens everything, everywhere',
+    ],
+    image: {
+      src: copierShot,
+      alt: 'Finotaur Trade Copier screen showing a Master Group mirroring an Apex evaluation account and a live Tradovate account, with automation on and a kill switch',
+      glow: true,
+    },
+  },
+  {
+    key: 'risk',
+    icon: ShieldCheck,
+    label: 'Risk Manager',
+    status: 'live',
+    heading: 'Risk that enforces itself.',
+    description:
+      'Loss limits per trade, per day, per week — on breach, new copies pause automatically. Set once, applied to every account.',
+    image: {
+      src: riskManagementShot,
+      alt: 'Finotaur Copier Risk Management screen showing per-account loss limits, profit targets, an automatic pause-new-copies on breach, and a $1,500 daily loss limit override',
+    },
+  },
+  {
+    key: 'backtesting',
+    icon: LineChart,
+    label: 'Backtesting',
+    status: 'soon',
+    heading: 'Test your setup. See if it has edge.',
+    description:
+      'Run your strategy against years of intraday data. Get equity curve, drawdown profile, and expectancy — before you risk a dollar.',
+    bullets: [
+      'Multi-year intraday replay',
+      'Equity curve & drawdown',
+      'Trade-by-trade audit log',
+      'Strategy parameter sweeps',
+    ],
+  },
+  {
+    key: 'replay',
+    icon: PlayCircle,
+    label: 'Trade Replay',
+    status: 'soon',
+    heading: 'Re-watch the chart, bar by bar.',
+    description:
+      'Step through any trade exactly as it printed. Spot the hesitation, the early exit, the level you should have respected — then annotate it for next time.',
+    bullets: [
+      'Synced with your fills',
+      'Variable playback speed',
+      'Drawing tools & annotations',
+      'Share with your accountability space',
+    ],
+  },
+];
+
+const AUTOROTATE_MS = 6000;
+
+// ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
-
-/** Small gold "chip" label — matches AISection's FLAGSHIP tag idiom. */
-function EyebrowChip({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="inline-flex items-center gap-2 font-sans text-[9px] font-semibold uppercase tracking-[0.35em] px-3 py-1.5 rounded-sm mb-4"
-      style={{
-        color: '#FFE6A0',
-        border: '1px solid rgba(255,230,160,0.3)',
-        background:
-          'linear-gradient(90deg, rgba(255,220,140,0.12) 0%, rgba(201,166,70,0.06) 100%)',
-      }}
-    >
-      <span
-        className="w-1 h-1 rounded-full"
-        style={{ background: 'rgba(255,220,140,1)', boxShadow: '0 0 8px rgba(255,220,140,0.8)' }}
-        aria-hidden="true"
-      />
-      {children}
-    </span>
-  );
-}
 
 /** Product screenshot — rounded corners, subtle border, optional gold glow for flagship shots. */
 function ProductShot({
@@ -81,38 +266,6 @@ function ProductShot({
   );
 }
 
-/** Gold-lit flagship card frame — same "top light bar" treatment as AISection's AI Engine card. */
-function FlagshipFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="relative overflow-hidden rounded-xl p-6 md:p-10"
-      style={{
-        background:
-          'linear-gradient(135deg, rgba(20,20,20,0.85) 0%, rgba(12,12,12,0.7) 100%) padding-box, linear-gradient(135deg, rgba(230,195,100,0.4) 0%, rgba(201,166,70,0.15) 50%, rgba(230,195,100,0.3) 100%) border-box',
-        border: '1.5px solid transparent',
-        boxShadow:
-          '0 40px 100px rgba(0,0,0,0.65), 0 0 60px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,230,160,0.1)',
-      }}
-    >
-      {/* Top-edge gold light bar */}
-      <span
-        className="absolute left-1/2 -translate-x-1/2 pointer-events-none"
-        style={{
-          top: '-1px',
-          width: '70%',
-          height: '2px',
-          borderRadius: '2px',
-          background:
-            'linear-gradient(90deg, transparent 0%, rgba(255,220,140,0.3) 20%, rgba(255,230,160,0.9) 50%, rgba(255,220,140,0.3) 80%, transparent 100%)',
-          filter: 'blur(0.5px)',
-        }}
-        aria-hidden="true"
-      />
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
-}
-
 /** Bulleted list matching the gold-dot idiom used across landing-new sections. */
 function BulletList({ items }: { items: string[] }) {
   return (
@@ -127,35 +280,21 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-/** Small supporting card for the 2x2 grid — screenshot + one-line caption. */
-function MiniCard({
-  src,
-  alt,
-  caption,
-  delay = 0,
-}: {
-  src: string;
-  alt: string;
-  caption: string;
-  delay?: number;
-}) {
+/** Panel text block (heading + description + optional bullets) shared by both layouts. */
+function PanelCopy({ tab, children }: { tab: TraderTab; children?: ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.5, delay }}
-      className="rounded-[12px] bg-surface-1 p-ds-4"
-    >
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        decoding="async"
-        className="w-full max-w-full h-auto rounded-[12px] border border-border-ds-subtle mb-ds-3"
-      />
-      <p className="text-sm text-ink-secondary font-sans">{caption}</p>
-    </motion.div>
+    <div>
+      <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
+        {tab.heading}
+      </h3>
+      {tab.description && (
+        <p className="font-sans font-light text-ink-secondary text-base leading-relaxed mb-5">
+          {tab.description}
+        </p>
+      )}
+      {tab.bullets && <BulletList items={tab.bullets} />}
+      {children}
+    </div>
   );
 }
 
@@ -163,8 +302,51 @@ function MiniCard({
 // TraderSection
 // ---------------------------------------------------------------------------
 const TraderSection = () => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [autoRotateStopped, setAutoRotateStopped] = useState(false);
+  const preloadedRef = useRef<Set<string>>(new Set());
+
+  const activeTab = tabs[activeIndex];
+
+  // Auto-rotation: advance every 6s, looping. Paused on hover, stopped for
+  // good once the visitor manually picks a tab.
+  useEffect(() => {
+    if (autoRotateStopped || isPaused) return;
+    const id = window.setInterval(() => {
+      setActiveIndex((i) => (i + 1) % tabs.length);
+    }, AUTOROTATE_MS);
+    return () => window.clearInterval(id);
+  }, [autoRotateStopped, isPaused]);
+
+  // Preload the NEXT tab's screenshot so the fade-in never shows a blank
+  // frame while the browser fetches it. (Chosen over eagerly mounting every
+  // panel's <img> — keeps the DOM light and still keeps lazy-loading intact
+  // for panels a visitor never reaches via manual clicks.)
+  useEffect(() => {
+    const next = tabs[(activeIndex + 1) % tabs.length];
+    if (next.image && !preloadedRef.current.has(next.image.src)) {
+      preloadedRef.current.add(next.image.src);
+      const img = new Image();
+      img.src = next.image.src;
+    }
+  }, [activeIndex]);
+
+  function handleTabClick(index: number) {
+    setActiveIndex(index);
+    setAutoRotateStopped(true);
+  }
+
   return (
     <SectionShell id="the-trader" atmosphere="subtle" beam={false}>
+      {/* Progress-bar keyframe — scoped inline since it's a one-off, not a DS token. */}
+      <style>{`
+        @keyframes trader-tab-progress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
+
       {/* ===== HEADER ===== */}
       <div className="text-center mb-16">
         <SectionEyebrow>The Trader</SectionEyebrow>
@@ -178,172 +360,114 @@ const TraderSection = () => {
         </p>
       </div>
 
-      {/* ===== BLOCK 1 — flagship: journal dashboard (image left / copy right) ===== */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center mb-24 md:mb-32"
-      >
-        <ProductShot
-          src={journalDashboard}
-          alt="Finotaur journal dashboard showing net P&L of +$26,594, 49.6% win rate, 1.73 profit factor, a FINO Score of 78.19, and the full equity curve"
-          glow
-        />
-        <div>
-          <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
-            Every trade. Auto-synced. Scored.
-          </h3>
-          <BulletList
-            items={[
-              'Connects to your broker — no manual entry',
-              'FINO Score grades your consistency, drawdown and expectancy',
-              'Equity curve and daily P&L at institutional depth',
-            ]}
-          />
+      {/* ===== TAB AREA — pause auto-rotation while the pointer is anywhere in here ===== */}
+      <div onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
+        {/* Tab pills */}
+        <div
+          role="tablist"
+          aria-label="The Trader — feature showcase"
+          className="flex flex-wrap justify-center gap-3 mb-10"
+        >
+          {tabs.map((tab, index) => {
+            const Icon = tab.icon;
+            const isActive = tab.key === activeTab.key;
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                type="button"
+                aria-selected={isActive}
+                aria-controls={`trader-tabpanel-${tab.key}`}
+                id={`trader-tab-${tab.key}`}
+                onClick={() => handleTabClick(index)}
+                className={`group relative overflow-hidden inline-flex items-center gap-2.5 px-5 py-3 rounded-[12px] border transition-all duration-200 ease-out ${
+                  isActive
+                    ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
+                    : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
+                }`}
+              >
+                <span
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                    isActive
+                      ? 'bg-gradient-to-br from-gold-primary/30 to-gold-primary/10 border border-gold-primary/40'
+                      : 'bg-section-card-deep border border-gold-border group-hover:border-gold-primary/25'
+                  }`}
+                >
+                  <Icon
+                    className={`h-3.5 w-3.5 ${
+                      isActive ? 'text-gold-primary' : 'text-ink-tertiary group-hover:text-gold-primary/70'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </span>
+                <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
+                {tab.status === 'soon' && (
+                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-1.5 py-0.5">
+                    Soon
+                  </span>
+                )}
+
+                {/* Progress affordance — animated fill while auto-rotating, static once stopped. */}
+                {isActive && !autoRotateStopped && (
+                  <span
+                    key={activeIndex}
+                    className="absolute left-0 bottom-0 h-[2px] bg-gold-primary rounded-full"
+                    style={{
+                      animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
+                      animationPlayState: isPaused ? 'paused' : 'running',
+                    }}
+                    aria-hidden="true"
+                  />
+                )}
+                {isActive && autoRotateStopped && (
+                  <span
+                    className="absolute left-0 bottom-0 h-[2px] w-full bg-gold-primary rounded-full"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
-      </motion.div>
 
-      {/* ===== BLOCK 2 — calendar (copy left / image right) ===== */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center mb-24 md:mb-32"
-      >
-        <div className="lg:order-1">
-          <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
-            Your month, at a glance.
-          </h3>
-          <p className="font-sans font-light text-ink-secondary text-base leading-relaxed">
-            Green days aren't luck. The calendar shows every session's P&L, trade count and
-            weekly R — so patterns stop hiding between trades.
-          </p>
-        </div>
-        <div className="lg:order-2">
-          <ProductShot
-            src={journalCalendar}
-            alt="Finotaur journal calendar view showing a full month of daily P&L, trade counts and weekly summaries"
-          />
-        </div>
-      </motion.div>
-
-      {/* ===== BLOCK 3 — flagship: Leak Detector (AI) ===== */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
-        className="mb-24 md:mb-32"
-      >
-        <FlagshipFrame>
-          <div className="max-w-3xl mx-auto text-center mb-8">
-            <EyebrowChip>AI on your trades</EyebrowChip>
-            <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
-              AI that finds your most expensive habit.
-            </h3>
-            <p className="font-sans font-light text-ink-secondary text-base leading-relaxed">
-              The Leak Detector reads every trade and names the exact pattern draining your
-              account — and what following your own rule was worth.
-            </p>
-          </div>
-          <ProductShot
-            src={leakDetector}
-            alt="Finotaur Leak Detector identifying the user's #1 leak — banking winners too early, costing −$102,662 — with a rule card and actual-vs-rule equity comparison"
-            glow
-            className="max-w-4xl mx-auto"
-          />
-        </FlagshipFrame>
-      </motion.div>
-
-      {/* ===== BLOCK 4 — 2x2 supporting grid ===== */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-24 md:mb-32"
-      >
-        <MiniCard
-          src={revengeRadar}
-          alt="Finotaur Revenge Radar screen analyzing the cost of revenge trading"
-          caption="Revenge Radar — catches tilt before it costs you"
-          delay={0}
-        />
-        <MiniCard
-          src={shadowShot}
-          alt="Finotaur Shadow screen comparing cumulative P&L across trading scenarios"
-          caption="Shadow — what your trades could have been"
-          delay={0.08}
-        />
-        <MiniCard
-          src={strategiesShot}
-          alt="Finotaur My Strategies screen showing ICT MSS at 67% win rate and other tracked setups"
-          caption="Playbooks — know which setup actually pays"
-          delay={0.16}
-        />
-        <MiniCard
-          src={dayOfWeekShot}
-          alt="Finotaur By Day of Week screen showing best and worst trading days by P&L"
-          caption="Breakdowns — your edge by day, hour and symbol"
-          delay={0.24}
-        />
-      </motion.div>
-
-      {/* ===== BLOCK 5 — flagship: Trade Copier ===== */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
-        className="mb-16"
-      >
-        <FlagshipFrame>
-          <div className="max-w-3xl mx-auto text-center mb-8">
-            <EyebrowChip>Trade copier</EyebrowChip>
-            <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
-              Trade one account. Mirror them all.
-            </h3>
-          </div>
-          <ProductShot
-            src={copierShot}
-            alt="Finotaur Trade Copier screen showing a Master Group mirroring an Apex evaluation account and a live Tradovate account, with automation on and a kill switch"
-            glow
-            className="max-w-5xl mx-auto mb-8"
-          />
-          <div className="max-w-xl mx-auto mb-12">
-            <BulletList
-              items={[
-                'Tradovate and NinjaTrader, connected in minutes',
-                'Per-account risk locks and an instant kill switch',
-                'One click flattens everything, everywhere',
-              ]}
-            />
-          </div>
-
-          {/* Second shot — Risk Management sub-screen */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center max-w-5xl mx-auto">
-            <div>
-              <h4 className="font-wordmark font-medium text-xl lg:text-2xl text-ink-primary leading-tight mb-3">
-                Risk that enforces itself.
-              </h4>
-              <p className="font-sans font-light text-ink-secondary text-base leading-relaxed">
-                Loss limits per trade, per day, per week — on breach, new copies pause
-                automatically. Set once, applied to every account.
-              </p>
-            </div>
-            <ProductShot
-              src={riskManagementShot}
-              alt="Finotaur Copier Risk Management screen showing per-account loss limits, profit targets, an automatic pause-new-copies on breach, and a $1,500 daily loss limit override"
-            />
-          </div>
-        </FlagshipFrame>
-      </motion.div>
+        {/* Tab panel */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab.key}
+            id={`trader-tabpanel-${activeTab.key}`}
+            role="tabpanel"
+            aria-labelledby={`trader-tab-${activeTab.key}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+          >
+            {activeTab.image ? (
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-10 lg:gap-14 items-center">
+                <PanelCopy tab={activeTab} />
+                <ProductShot
+                  src={activeTab.image.src}
+                  alt={activeTab.image.alt}
+                  glow={activeTab.image.glow}
+                />
+              </div>
+            ) : (
+              <div className="max-w-xl mx-auto text-center py-6">
+                <div className="inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-2.5 py-1 mb-5">
+                  <Lock className="h-3 w-3" aria-hidden="true" />
+                  Coming Soon
+                </div>
+                <div className="text-left inline-block w-full">
+                  <PanelCopy tab={activeTab} />
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       {/* ===== FINAL CTA ===== */}
-      <div className="text-center">
+      <div className="text-center mt-16">
         <Link to="/register">
           <Button variant="gold" size="xl">
             Start 14-day free trial

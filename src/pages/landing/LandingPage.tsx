@@ -9,7 +9,7 @@ import Navbar from '@/components/landing-new/Navbar';
 import Hero from '@/components/landing-new/Hero';
 import SocialProof from '@/components/landing-new/SocialProof';
 import TraderSection from '@/components/landing-new/TraderSection';
-import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
+import FinoSection from '@/components/landing-new/FinoSection';
 import ChampionshipStrip from '@/components/landing-new/ChampionshipStrip';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
 import InvestorSection from '@/components/landing-new/InvestorSection';
@@ -129,7 +129,7 @@ const LandingPage = () => {
       <Hero />
       <SocialProof />
       <TraderSection />
-      <JournalToolsTabs />
+      <FinoSection />
       <ChampionshipStrip />
       <PartnershipRow />
       <InvestorSection />
