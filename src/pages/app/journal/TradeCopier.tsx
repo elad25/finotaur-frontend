@@ -644,14 +644,16 @@ export default function TradeCopier() {
                   <Link2 className="h-3.5 w-3.5" />
                   Connect a broker
                 </button>
-                <a
-                  href="/downloads/finotaur-agent.zip"
-                  download
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gradient-to-r from-[#C9A646] to-[#E8C56A] px-3 py-2 text-xs font-semibold text-black transition-all hover:opacity-90"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Download desktop agent
-                </a>
+                {!isDemo && (
+                  <a
+                    href="/downloads/finotaur-agent.zip"
+                    download
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gradient-to-r from-[#C9A646] to-[#E8C56A] px-3 py-2 text-xs font-semibold text-black transition-all hover:opacity-90"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download desktop agent
+                  </a>
+                )}
               </div>
             </div>
 
