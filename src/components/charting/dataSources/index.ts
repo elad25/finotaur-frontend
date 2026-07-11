@@ -13,7 +13,8 @@
  * BEFORE passing into FinotaurChart.
  */
 
-import type { Interval } from '../types';
+import type { Bar, ChartDataSource, Interval } from '../types';
+import type { UTCTimestamp } from 'lightweight-charts';
 import { YahooFinanceSource } from './YahooFinanceSource';
 import { BinanceSource } from './BinanceSource';
 import { DatabentoCacheSource } from './DatabentoCacheSource';
@@ -231,6 +232,52 @@ export function pickDataSource(raw: string | null | undefined) {
   if (raw && isCryptoSymbol(raw)) return binanceSource;
   if (raw && isDatabentoCachedSymbol(raw)) return databentoCacheSource;
   return yahooSource;
+}
+
+// ---------------------------------------------------------------------------
+// Databento → Yahoo fallback (recent-trade coverage)
+// ---------------------------------------------------------------------------
+
+/**
+ * Composite source for Databento-cached futures roots. Databento's CME license
+ * only serves bars whose end is >=24h old, and the daily cache ingest lags
+ * ~1-2 days — so a freshly-journaled futures trade has NO Databento bars at its
+ * timestamp yet. This wrapper detects that gap (Databento returns nothing that
+ * reaches the trade) and falls back to Yahoo's near-real-time continuous-front
+ * data (`NQ=F` etc.) so recent trades still chart correctly. Historical trades
+ * that ARE covered by the cache keep using Databento unchanged.
+ */
+export class DatabentoYahooFallbackSource implements ChartDataSource {
+  constructor(
+    private readonly yahooSymbol: string,
+    private readonly coverageDeadlineSec: number,
+  ) {}
+
+  async getBars(
+    symbol: string,
+    interval: Interval,
+    from: UTCTimestamp,
+    to: UTCTimestamp,
+  ): Promise<Bar[]> {
+    let dbBars: Bar[] = [];
+    try {
+      dbBars = await databentoCacheSource.getBars(symbol, interval, from, to);
+    } catch {
+      dbBars = [];
+    }
+    const covered =
+      dbBars.length > 0 &&
+      (dbBars[dbBars.length - 1].time as number) >= this.coverageDeadlineSec;
+    if (covered) return dbBars;
+
+    // Databento cache doesn't reach the trade — use Yahoo (near-real-time).
+    try {
+      return await yahooSource.getBars(this.yahooSymbol, interval, from, to);
+    } catch {
+      // Yahoo failed too — return whatever Databento had (better than empty).
+      return dbBars;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
