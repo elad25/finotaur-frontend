@@ -22,6 +22,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { authenticate } from '../_shared/dualAuth.ts';
 import { getBrokerAuthAdapter } from '../_shared/broker-auth/registry.ts';
 import type { BrokerName, BrokerEnvironment } from '../_shared/broker-auth/interface.ts';
+import { TradovateAccountListError } from '../_shared/broker-auth/tradovate-adapter.ts';
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -38,6 +39,7 @@ interface BrokerConnectionRow {
   status: string;
   auth_method: string | null;
   connection_data: { vault_secret_id?: string } | null;
+  account_id: string | null;
 }
 
 // Shape of the token payload stored in Vault
@@ -93,7 +95,7 @@ Deno.serve(async (req: Request) => {
   // Fetch connection row
   const { data: conn, error: fetchError } = await supabaseAdmin
     .from('broker_connections')
-    .select('id, user_id, broker, environment, status, auth_method, connection_data')
+    .select('id, user_id, broker, environment, status, auth_method, connection_data, account_id')
     .eq('id', connection_id)
     .maybeSingle();
 
@@ -238,6 +240,53 @@ Deno.serve(async (req: Request) => {
 
     if (rpcError) {
       throw new Error(`oauth_vault_upsert_atomic failed: ${rpcError.message}`);
+    }
+
+    // Self-healing: if this row never got accounts populated (Bug C symptom),
+    // retry account discovery with the fresh token. Many "stuck" rows recover here.
+    if (!connection.account_id) {
+      try {
+        const userInfo = await adapter.getUserInfo(newTokens.accessToken, connection.environment);
+        if (userInfo.accounts && userInfo.accounts.length > 0) {
+          const primary = userInfo.accounts[0];
+          await supabaseAdmin
+            .from('broker_connections')
+            .update({
+              account_id: primary.id,
+              account_name: primary.name,
+              oauth_provider_user_id: userInfo.providerUserId,
+              is_prop_firm: primary.isPropFirm ?? false,
+              connection_name: `${connection.environment} - ${primary.name}`,
+            })
+            .eq('id', connection.id);
+          console.log('[oauth-refresh] self-healed connection', connection.id, '→', primary.id);
+
+          // Also upsert portfolios so they appear in the journal dropdown.
+          for (const acc of userInfo.accounts) {
+            try {
+              await supabaseAdmin.rpc('upsert_portfolio_from_tradovate', {
+                p_user_id:              connection.user_id,
+                p_tradovate_account_id: Number(acc.id),
+                p_account_spec:         `${acc.name}${acc.id}`,
+                p_account_name:         acc.name,
+                p_environment:          connection.environment,
+                p_credential_id:        connection.id,
+                p_connection_label:     null,
+              });
+            } catch (portfolioErr) {
+              console.warn('[oauth-refresh] self-heal portfolio upsert failed:', String(portfolioErr));
+            }
+          }
+        }
+      } catch (discoverErr) {
+        // Discovery failure is non-fatal — token refresh already succeeded.
+        // TradovateAccountListError (empty account list) and generic errors both handled here.
+        if (discoverErr instanceof TradovateAccountListError) {
+          console.warn('[oauth-refresh] self-heal account discovery: account list still empty (non-fatal):', String(discoverErr));
+        } else {
+          console.warn('[oauth-refresh] self-heal account discovery failed (non-fatal):', String(discoverErr));
+        }
+      }
     }
 
     console.log('[oauth-refresh] token refreshed successfully', {
