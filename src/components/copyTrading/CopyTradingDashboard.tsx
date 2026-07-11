@@ -1258,6 +1258,12 @@ export function CopyTradingDashboard() {
             </button>
           </div>
         </div>
+        {openPositionsCount > 0 && (
+          <p className="mt-ds-2 flex items-center justify-end gap-ds-1 text-xs font-medium text-amber-400">
+            <AlertOctagon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+            Flatten your {openPositionsCount} open position{openPositionsCount === 1 ? '' : 's'} to enable Lock all accounts.
+          </p>
+        )}
         <AutomationLockedBanner />
       </div>
 
