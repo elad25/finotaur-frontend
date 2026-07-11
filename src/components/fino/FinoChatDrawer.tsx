@@ -24,7 +24,6 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
-import FinoSessionReviewCard from '@/components/fino/FinoSessionReviewCard';
 import { FinoActionBar } from '@/components/fino/FinoActionBar';
 import FinoTradeConfirmCard from '@/components/fino/FinoTradeConfirmCard';
 import { aiCopilotApi } from '@/services/aiCopilotApi';
@@ -361,8 +360,6 @@ function FinoChatPanel({
               openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
               beforeMessages={
                 <div className="-mx-4">
-                  {/* Session Review card — sits above the chat thread, never throws */}
-                  <FinoSessionReviewCard />
                   {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
                   <FinoActionBar />
 
