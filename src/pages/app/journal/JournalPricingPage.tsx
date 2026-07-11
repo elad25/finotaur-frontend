@@ -33,41 +33,14 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: '$0',
     description: 'Start your trading journey',
     features: [
-      'Automatic broker sync — leading brokers supported',
-      '1 broker connection',
       '10 trades to uncover your first leak',
-      'Trade journal (manual + auto-import)',
-      'Core performance stats',
-      'Trading calendar',
+      'Manual logging + AI screenshot import (5/day)',
+      'Core performance stats & P&L calendar',
       'Community access',
-      'Mobile app',
+      'Preview every Trader feature with sample data',
     ],
     cta: 'Start Free',
     featured: false,
-  },
-  {
-    id: 'basic',
-    name: 'Basic',
-    monthlyPrice: '$24.99',
-    yearlyPrice: '$229',
-    yearlyMonthlyEquivalent: '$19.08',
-    description: 'Every tool serious traders need',
-    features: [
-      'Everything in Free, plus:',
-      '25 trades / month',
-      '1 broker connection',
-      'Full performance analytics & equity curve',
-      'Strategy builder & playbooks',
-      'Trading sessions & tagging',
-      'Advanced statistics & metrics',
-      'Risk/Reward calculator',
-      'Trade screenshots & notes',
-      'Full FINOTAUR Academy (300+ lessons)',
-      'Email support',
-    ],
-    cta: 'Start 14-Day Free Trial',
-    featured: false,
-    savings: 'Yearly — save ~3 months',
   },
   {
     id: 'premium',
@@ -79,15 +52,14 @@ const plans: Plan[] = [
     features: [
       'Everything in Free, plus:',
       'Unlimited trades — never hit a cap',
-      'Connect multiple brokers',
-      'Your FINOTAUR Score — one number that grades your real edge',
-      'Daily AI briefing — ranked insights on what to fix first',
-      'Pattern of the Week — your biggest recurring edge or leak, surfaced automatically',
-      'Leak Finder — AI names the exact mistake costing you money',
-      'Behavioral & risk alerts before you tilt',
-      'Custom AI reports & backtesting',
+      'Broker auto-sync — Tradovate, NinjaTrader, Interactive Brokers',
+      'Trade Copier — mirror trades across accounts',
+      'Leak Detector — AI names the exact mistake costing you money',
+      'Shadow — what-if analysis on every closed trade',
+      'Revenge Radar — tilt detection before it burns your account',
+      'Prop-firm Risk Management — live trailing-drawdown dashboard',
+      'Custom AI reports & Strategy Backtesting',
       'Priority support',
-      'Early access to new features',
     ],
     cta: 'Upgrade to Trader',
     featured: true,
@@ -221,7 +193,7 @@ export default function JournalPricingPage() {
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {plans.map((plan) => {
             const displayPrice = getDisplayPrice(plan);
             const isCurrentPlan = plan.id === currentPlan;

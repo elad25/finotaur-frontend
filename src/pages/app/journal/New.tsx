@@ -211,7 +211,7 @@ function TradeLimitModal({
               </>
             ) : (
               <>
-                <span className="flex items-center gap-1"><span className="text-yellow-400">📅</span> 25 trades/month</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">📅</span> 10 trades lifetime</span>
                 <span className="flex items-center gap-1"><span className="text-yellow-400">∞</span> Unlimited (Trader)</span>
                 <span className="flex items-center gap-1"><span className="text-yellow-400">↗</span> Analytics</span>
                 <span className="flex items-center gap-1"><span className="text-yellow-400">✦</span> AI insights</span>

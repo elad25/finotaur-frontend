@@ -574,30 +574,21 @@ type BillingInterval = 'monthly' | 'yearly';
 
 const plans = [
   {
-    id: "basic",
-    name: "Basic",
-    monthlyPrice: "$24.99",
-    yearlyPrice: "$229",
-    yearlyMonthlyEquivalent: "$19.08",
-    description: "Essential tools + automatic broker sync",
-    trialDays: 14,
+    id: "free",
+    name: "Free",
+    monthlyPrice: "$0",
+    yearlyPrice: "$0",
+    yearlyMonthlyEquivalent: "$0",
+    description: "Start your trading journey",
     features: [
-      "14-day free trial",
-      "Automatic broker sync — leading brokers supported",
-      "25 trades / month",
-      "1 broker connection",
-      "Full performance analytics & equity curve",
-      "Strategy builder & playbooks",
-      "Trading sessions & tagging",
-      "Advanced statistics & metrics",
-      "Risk/Reward calculator",
-      "Trade screenshots & notes",
-      "Full FINOTAUR Academy (300+ lessons)",
-      "Email support",
+      "10 trades to uncover your first leak",
+      "Manual logging + AI screenshot import (5/day)",
+      "Core performance stats & P&L calendar",
+      "Community access",
+      "Preview every Trader feature with sample data",
     ],
-    cta: "Start 14-Day Free Trial",
+    cta: "Start Free",
     featured: false,
-    savings: "Yearly — save ~3 months",
   },
   {
     id: "premium",
@@ -606,20 +597,20 @@ const plans = [
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited trades + your AI trading coach",
+    trialDays: 14,
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — never hit a cap",
-      "Connect multiple brokers",
-      "Your FINOTAUR Score — one number that grades your real edge",
-      "Daily AI briefing — ranked insights on what to fix first",
-      "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
-      "Leak Finder — AI names the exact mistake costing you money",
-      "Behavioral & risk alerts before you tilt",
-      "Custom AI reports & backtesting",
+      "Broker auto-sync — Tradovate, NinjaTrader, Interactive Brokers",
+      "Trade Copier — mirror trades across accounts",
+      "Leak Detector — AI names the exact mistake costing you money",
+      "Shadow — what-if analysis on every closed trade",
+      "Revenge Radar — tilt detection before it burns your account",
+      "Prop-firm Risk Management — live trailing-drawdown dashboard",
+      "Custom AI reports & Strategy Backtesting",
       "Priority support",
-      "Early access to new features",
     ],
-    cta: "Get Premium",
+    cta: "Upgrade to Trader",
     featured: true,
     savings: "Yearly — save ~3 months",
   },
@@ -700,16 +691,16 @@ const PricingSection = () => {
                     <Shield className="w-6 h-6 text-[#C9A646]" />
                   </div>
                   <div className="text-left flex-1">
-                    <h3 className="text-xl md:text-2xl font-semibold text-white mb-2">Try Basic free for 14 days</h3>
+                    <h3 className="text-xl md:text-2xl font-semibold text-white mb-2">Start free — 10 trades</h3>
                     <p className="text-slate-300 text-lg leading-relaxed">
-                      If Finotaur doesn't show a pattern that's hurting you within 14 days, cancel anytime — no charge.
+                      If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
                     </p>
                   </div>
                 </div>
               </div>
             </motion.div>
 
-            <p className="text-lg text-slate-400">No commitment required • Cancel anytime during trial</p>
+            <p className="text-lg text-slate-400">No credit card required • Cancel your Trader plan anytime</p>
           </motion.div>
 
           {/* Billing Toggle */}
@@ -847,7 +838,7 @@ const PricingSection = () => {
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-500" />
-                <span className="text-sm">14-Day Free Trial on Basic</span>
+                <span className="text-sm">14-Day Trader Trial</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
