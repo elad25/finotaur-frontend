@@ -201,7 +201,12 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
                     <span
                       className={cn(
                         'text-sm font-medium truncate block min-w-0',
-                        isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
+                        // Qualified (met the ≥20-trade + discipline bar) → light
+                        // gold; joined but not yet qualified → grey. Current user
+                        // stays highlighted so they can spot themselves.
+                        isCurrentUser || isQualified
+                          ? 'text-[#E8C766]'
+                          : 'text-[#888]',
                       )}
                     >
                       {nickname}
