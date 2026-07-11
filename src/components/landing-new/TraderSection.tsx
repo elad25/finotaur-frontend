@@ -505,16 +505,17 @@ const TraderSection = () => {
             })}
           </div>
 
-          {/* Secondary row — only when the active pillar has more than one sub-tab */}
+          {/* Secondary row — carousel-dots indicator, only when the active pillar
+              has more than one sub-tab. Active = elongated gold dash (fills while
+              auto-rotating), inactive = small dim dots. */}
           {hasSubRow && (
             <div
               role="tablist"
               aria-label={`${activePillar.label} — features`}
-              className="flex flex-wrap justify-center gap-3 mb-10"
+              className="flex items-center justify-center gap-1.5 mb-10"
             >
               {activePillar.subKeys.map((key) => {
                 const tab = tabs.find((t) => t.key === key)!;
-                const Icon = tab.icon;
                 const isActive = tab.key === activeTabKey;
                 const isSoon = tab.status === 'soon';
                 return (
@@ -528,47 +529,33 @@ const TraderSection = () => {
                     aria-label={isSoon ? `${tab.label} — soon` : tab.label}
                     title={isSoon ? `${tab.label} — soon` : tab.label}
                     onClick={() => handleTabClick(tab.key)}
-                    className={`group relative overflow-hidden flex items-center justify-center w-11 h-11 rounded-[12px] border transition-all duration-200 ease-out ${
-                      isSoon ? 'opacity-60 hover:opacity-90' : ''
-                    } ${
-                      isActive
-                        ? 'bg-gold-primary/[0.08] border-gold-primary/40 text-ink-primary'
-                        : 'bg-section-card-rest border-gold-border text-ink-secondary hover:border-gold-primary/30 hover:text-ink-primary'
-                    }`}
+                    className="group relative flex items-center justify-center p-2.5"
                   >
                     <span
-                      className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                      className={`relative block rounded-full overflow-hidden transition-all duration-base ease-out ${
                         isActive
-                          ? 'bg-gradient-to-br from-gold-primary/30 to-gold-primary/10 border border-gold-primary/40'
-                          : 'bg-section-card-deep border border-gold-border group-hover:border-gold-primary/25'
+                          ? 'w-7 h-1.5 bg-gold-primary/20'
+                          : `w-1.5 h-1.5 ${
+                              isSoon ? 'bg-white/[0.12] group-hover:bg-white/25' : 'bg-white/20 group-hover:bg-white/40'
+                            }`
                       }`}
                     >
-                      <Icon
-                        className={`h-3.5 w-3.5 ${
-                          isActive ? 'text-gold-primary' : 'text-ink-tertiary group-hover:text-gold-primary/70'
-                        }`}
-                        aria-hidden="true"
-                      />
+                      {/* Progress-in-dash — animated fill while auto-rotating, static full gold once stopped. */}
+                      {isActive && !autoRotateStopped && (
+                        <span
+                          key={activeTabKey}
+                          className="absolute inset-y-0 left-0 bg-gradient-gold rounded-full"
+                          style={{
+                            animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
+                            animationPlayState: isPaused ? 'paused' : 'running',
+                          }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      {isActive && autoRotateStopped && (
+                        <span className="absolute inset-0 bg-gradient-gold rounded-full" aria-hidden="true" />
+                      )}
                     </span>
-
-                    {/* Progress affordance — animated fill while auto-rotating, static once stopped. */}
-                    {isActive && !autoRotateStopped && (
-                      <span
-                        key={activeTabKey}
-                        className="absolute left-0 bottom-0 h-[2px] bg-gold-primary rounded-full"
-                        style={{
-                          animation: `trader-tab-progress ${AUTOROTATE_MS}ms linear forwards`,
-                          animationPlayState: isPaused ? 'paused' : 'running',
-                        }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {isActive && autoRotateStopped && (
-                      <span
-                        className="absolute left-0 bottom-0 h-[2px] w-full bg-gold-primary rounded-full"
-                        aria-hidden="true"
-                      />
-                    )}
                   </button>
                 );
               })}
