@@ -149,7 +149,7 @@ const JoinDialog = memo(function JoinDialog({
       >
         <DialogHeader>
           <DialogTitle className="text-white text-lg font-semibold">
-            Register for {competitionTitle}?
+            Join {competitionTitle}?
           </DialogTitle>
         </DialogHeader>
 
@@ -237,7 +237,7 @@ const JoinDialog = memo(function JoinDialog({
               color: '#0A0A0A',
             }}
           >
-            {isPending ? 'Registering…' : 'Register & lock in'}
+            {isPending ? 'Joining…' : 'Join & lock in'}
           </button>
         </div>
       </DialogContent>
@@ -452,33 +452,37 @@ const CompStatusBlock = memo(function CompStatusBlock({
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-semibold text-white">
-                Register for the competition
+                Join the Challenge
               </h3>
               <p className="mt-1 text-[12px]" style={{ color: '#888' }}>
                 Only your real broker-verified trades count.
               </p>
             </div>
+          </div>
+
+          {/* Primary CTA — full width */}
+          <div className="mt-4">
             {isPremium ? (
               <button
                 onClick={() => { resetJoin(); setJoinDialogOpen(true); }}
-                className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
+                className="w-full text-center block rounded-[10px] py-2.5 text-sm font-bold tracking-wide transition-all hover:opacity-90 active:scale-95"
                 style={{
                   background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
                   color: '#0A0A0A',
                 }}
               >
-                Register
+                JOIN THE CHALLENGE
               </button>
             ) : (
               <Link
                 to="/app/all-markets/pricing"
-                className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95 text-center"
+                className="w-full text-center block rounded-[10px] py-2.5 text-sm font-bold tracking-wide transition-all hover:opacity-90 active:scale-95"
                 style={{
                   background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
                   color: '#0A0A0A',
                 }}
               >
-                Upgrade to compete · Trader members enter free
+                UPGRADE TO JOIN · TRADER ENTERS FREE
               </Link>
             )}
           </div>
