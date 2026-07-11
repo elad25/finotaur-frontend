@@ -20,7 +20,7 @@ import {
 import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
 import { useAgentCommand } from '@/features/automation/hooks/useAgentCommand';
 import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
-import { AutomationMasterSwitch } from '@/features/automation/components/AutomationMasterSwitch';
+import { AutomationMasterSwitch, AutomationLockedBanner } from '@/features/automation/components/AutomationMasterSwitch';
 import { useLockAllAccounts } from '@/features/automation/hooks/useLockAllAccounts';
 import { useAccountRiskSummaries } from '@/features/automation/hooks/useAccountRiskSummaries';
 import { EnforcementFeed } from '@/components/copyTrading/EnforcementFeed';
@@ -1272,11 +1272,12 @@ export function CopyTradingDashboard() {
       </div>
       {/* ── Automation control ── */}
       <div className="mb-ds-4">
-        <div className="flex items-center justify-between gap-ds-3 mb-ds-2">
+        <div className="flex items-center justify-between gap-ds-3">
           <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
             Automation control
           </p>
-          <div className="flex items-center gap-ds-2">
+          <div className="flex flex-wrap items-center justify-end gap-ds-2">
+            <AutomationMasterSwitch demo={isDemo} />
             {/* Lock all accounts */}
             <button
               type="button"
@@ -1291,7 +1292,7 @@ export function CopyTradingDashboard() {
             </button>
           </div>
         </div>
-        <AutomationMasterSwitch demo={isDemo} />
+        <AutomationLockedBanner />
       </div>
 
       {/* ── 1. Asset selector + action bar ── */}
