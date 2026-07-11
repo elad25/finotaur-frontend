@@ -811,21 +811,21 @@ const TradeRow = memo(({
             : getOptionContractLabel(trade)
           : trade.symbol}
         {isRiskOnlyMode && (
-          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
+          <span className="ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border border-yellow-400/40 bg-yellow-500/10 text-yellow-200">
             $
           </span>
         )}
         {isForex && (
-          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-normal">
+          <span className="ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border border-purple-400/40 bg-purple-500/10 text-purple-200">
             FX
           </span>
         )}
         {isOption && !isMultiLeg && (
           <span
-            className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+            className={`ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border ${
               trade.option_type === 'CALL'
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-red-500/15 text-red-300'
+                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                : 'border-red-400/40 bg-red-500/10 text-red-200'
             }`}
           >
             {trade.option_type ?? 'OPT'}
@@ -833,12 +833,12 @@ const TradeRow = memo(({
         )}
         {isOption && !isMultiLeg && optionDTE !== null && (
           <span
-            className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+            className={`ml-1 rounded-sm px-1.5 py-0 text-[10px] font-medium border ${
               optionDTE < 0
-                ? 'bg-zinc-700/40 text-zinc-400'
+                ? 'border-border-ds-subtle bg-zinc-700/20 text-ink-secondary'
                 : optionDTE <= 7
-                  ? 'bg-amber-500/20 text-amber-300'
-                  : 'bg-zinc-700/40 text-zinc-300'
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+                  : 'border-border-ds-subtle bg-zinc-700/20 text-ink-secondary'
             }`}
             title="Days to expiration"
           >
@@ -972,8 +972,8 @@ const TradeRow = memo(({
             onPointerDown={(event) => event.stopPropagation()}
           >
             <Select onValueChange={handleAssignStrategy}>
-              <SelectTrigger className="h-8 w-[150px] rounded-md border-zinc-700/70 bg-zinc-950/70 px-2 text-xs text-zinc-300 hover:border-[#C9A646]/60 hover:text-white focus:ring-[#C9A646]/30">
-                <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-[#C9A646]" />
+              <SelectTrigger className="h-7 w-[150px] rounded-md border-border-ds-subtle bg-transparent px-2 text-xs text-ink-secondary hover:border-gold-primary/60 hover:text-gold-primary focus:ring-gold-primary/30">
+                <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-gold-primary" />
                 <SelectValue placeholder="Assign strategy" />
               </SelectTrigger>
               <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
@@ -2059,7 +2059,7 @@ const stats = useMemo<Stats>(() => {
 
       {/* 🔥 Admin Impersonation Indicator */}
       {isImpersonating && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-6 py-2">
+        <div className="mx-6 mt-4 rounded-[12px] border border-yellow-500/30 bg-yellow-500/10 p-ds-3">
           <div className="flex items-center gap-2 text-yellow-400 text-sm">
             <AlertTriangle className="w-4 h-4" />
             <span className="font-medium">Admin Mode: Viewing user's trades</span>
@@ -2183,7 +2183,7 @@ const stats = useMemo<Stats>(() => {
             {!effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
+                className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Trade
@@ -2202,20 +2202,23 @@ const stats = useMemo<Stats>(() => {
             <div className="text-zinc-500">Loading trades...</div>
           </div>
         ) : filteredTrades.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center">
-              <Target className="w-8 h-8 text-zinc-600" />
+          <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5">
+            <div
+              className="w-16 h-16 rounded-md flex items-center justify-center border"
+              style={{ backgroundColor: 'rgba(201,166,70,0.12)', borderColor: 'rgba(201,166,70,0.3)' }}
+            >
+              <Target className="w-8 h-8 text-gold-primary" />
             </div>
             <div className="text-center">
-              <div className="text-zinc-400 font-medium">No trades found</div>
-              <div className="text-zinc-600 text-sm mt-1">
+              <div className="text-ink-primary font-medium">No trades found</div>
+              <div className="text-ink-secondary text-sm mt-1">
                 {searchQuery ? "Try adjusting your search" : "Start by adding your first trade"}
               </div>
             </div>
             {!searchQuery && !effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium mt-2"
+                className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base mt-2"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Your First Trade
@@ -2253,13 +2256,13 @@ const stats = useMemo<Stats>(() => {
                 <div className="flex items-center gap-ds-2">
                   <button
                     type="button"
-                    className="inline-flex h-9 items-center rounded-[10px] border border-gold-primary/40 bg-black px-ds-4 text-sm font-semibold text-gold-primary transition-colors duration-base hover:border-gold-primary"
+                    className="inline-flex h-9 items-center rounded-md border border-border-ds-subtle bg-transparent px-ds-4 text-sm font-semibold text-gold-primary transition-colors duration-base hover:border-gold-primary"
                   >
                     Start my day
                   </button>
                   <button
                     type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-ds-default bg-surface-1 text-gold-primary transition-colors duration-base hover:border-gold-primary/50"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border border-border-ds-subtle bg-transparent text-gold-primary transition-colors duration-base hover:border-gold-primary hover:text-gold-primary"
                     aria-label="Daily view settings"
                   >
                     <Settings className="h-4 w-4" />
@@ -2386,11 +2389,11 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className="text-xl font-bold text-white">{selectedTrade.symbol}</div>
-                      <Badge 
+                      <Badge
                         variant={selectedTrade.side === "LONG" ? "outline" : "destructive"}
-                        className={selectedTrade.side === "LONG" 
-                          ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10 font-medium text-xs px-2 py-0.5" 
-                          : "bg-red-500/20 border-red-500/50 text-red-400 font-medium text-xs px-2 py-0.5"
+                        className={selectedTrade.side === "LONG"
+                          ? "rounded-sm px-2 py-0.5 text-xs font-medium border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+                          : "rounded-sm px-2 py-0.5 text-xs font-medium border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
                         }
                       >
                         {selectedTrade.side}
@@ -2406,9 +2409,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       )}
                     </div>
                     {outcome && (
-                      <Badge 
+                      <Badge
                         variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
-                        className={`font-semibold text-xs px-2 py-0.5 ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
+                        className={`rounded-sm px-2 py-0.5 text-xs font-medium ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
                       >
                         {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
                       </Badge>
@@ -2509,7 +2512,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                         <select
                           value={selectedTrade.exit_reason ?? ''}
                           onChange={(e) => handleSetExitReason(selectedTrade.id, e.target.value)}
-                          className="rounded-md bg-zinc-800 border border-zinc-700 text-white text-xs px-2 py-1 focus:outline-none focus:border-[#C9A646]"
+                          className="rounded-md border border-border-ds-subtle bg-black/40 text-sm text-ink-primary px-2 py-1 focus:outline-none focus:border-gold-primary/60"
                         >
                           <option value="">--</option>
                           <option value="target">Target</option>
@@ -2711,19 +2714,19 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                       value={stopInput}
                                       onChange={(e) => setStopInput(e.target.value)}
                                       placeholder="Stop price"
-                                      className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                      className="w-32 rounded-md border border-border-ds-subtle bg-black/40 px-2 py-1 text-sm text-ink-primary focus:border-gold-primary/60 focus:outline-none"
                                     />
                                     <button
                                       onClick={handleSetR}
                                       disabled={savingR}
-                                      className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                                      className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base px-3 py-1 text-sm disabled:opacity-50"
                                     >
                                       {savingR ? 'Saving…' : 'Save'}
                                     </button>
                                     <button
                                       onClick={() => { setIsSettingR(false); setStopInput(''); }}
                                       disabled={savingR}
-                                      className="rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                      className="rounded-md border border-border-ds-subtle px-3 py-1 text-sm text-ink-secondary hover:border-gold-primary/60 disabled:opacity-50"
                                     >
                                       Cancel
                                     </button>
@@ -2736,7 +2739,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                   </div>
                                   <button
                                     onClick={() => { setIsSettingR(true); setStopInput(''); }}
-                                    className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500"
+                                    className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base px-3 py-1 text-sm"
                                   >
                                     Set R
                                   </button>
@@ -2785,7 +2788,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                 <div>
                                   <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                                     Discipline Tax
-                                    <span title={taxTip} className="cursor-help text-zinc-600">ⓘ</span>
+                                    <span title={taxTip} className="cursor-help">
+                                      <HelpCircle className="w-3.5 h-3.5 text-ink-secondary" />
+                                    </span>
                                   </div>
                                   <div className={`text-sm font-semibold tabular-nums font-mono ${taxColor}`}>
                                     {disciplineTax >= 0 ? '+' : ''}{disciplineTax.toFixed(2)}R

@@ -116,15 +116,7 @@ const BulkActionBar = memo(function BulkActionBar({
         role="toolbar"
         aria-label="Bulk actions"
       >
-        <div
-          className="flex items-center gap-3 rounded-2xl px-4 py-3 shadow-2xl"
-          style={{
-            background: "rgba(14, 14, 14, 0.95)",
-            border: "1px solid rgba(201, 166, 70, 0.3)", // gold-primary/30
-            backdropFilter: "blur(20px)",
-            boxShadow: "0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,166,70,0.15)",
-          }}
-        >
+        <div className="flex items-center gap-3 rounded-[12px] border border-border-ds-subtle bg-surface-1 px-4 py-3 shadow-2xl">
           {/* Selection count badge */}
           <span className="flex h-7 min-w-[2.25rem] items-center justify-center rounded-xl bg-[#C9A646]/15 px-2.5 text-sm font-semibold text-[#C9A646]">
             {count}
