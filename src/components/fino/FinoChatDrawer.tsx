@@ -11,10 +11,9 @@
 // =====================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { X, Plus, Sparkles, Lock, Loader2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { X, Plus, Sparkles, Lock, Loader2, Crown } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
-import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -24,11 +23,19 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
+import FinoQuotaRing from '@/components/fino/FinoQuotaRing';
+import FinoInstantAnswerCard from '@/components/fino/FinoInstantAnswerCard';
 import { FinoActionBar } from '@/components/fino/FinoActionBar';
 import FinoTradeConfirmCard from '@/components/fino/FinoTradeConfirmCard';
 import { aiCopilotApi } from '@/services/aiCopilotApi';
 import type { TradeExtraction } from '@/services/aiCopilotApi';
 import { compressImageFile } from '@/lib/fino/screenshotTrade';
+import { useTrades } from '@/hooks/useTradesData';
+import {
+  matchInstantQuestion,
+  computeInstantAnswer,
+  type InstantAnswer,
+} from '@/lib/finoInstantAnswers';
 
 // Feature flag — gates the screenshot → trade extraction surface (📎 button,
 // paste-to-extract, spinner/error/review cards). Defaults OFF.
@@ -156,10 +163,13 @@ function FinoChatPanel({
       : null;
   const quotaLimit = usage?.unlimited ? null : (serverLimit ?? FINO_TIER_QUOTAS[finoTierKey]);
   const questionsUsedDisplay = usage?.questions_today ?? 0;
-  // The existing loud banner already renders "N of M" + a progress bar +
-  // upgrade CTA for the legacy FREE/BASIC server tiers — don't duplicate it
-  // with the subtle pill below.
-  const usesLoudUsageBanner = !!usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC');
+
+  // Instant Answers — a small set of high-frequency journal questions are
+  // answered from the trader's own trades (client-side, zero AI cost)
+  // instead of hitting the AI. Drawer-scoped fetch (panel only mounts while
+  // the drawer is open). See src/lib/finoInstantAnswers.ts.
+  const { data: trades } = useTrades();
+  const [instantAnswer, setInstantAnswer] = useState<InstantAnswer | null>(null);
 
   // Screenshot → trade extraction state
   const [extractionState, setExtractionState] = useState<ExtractionState>({ phase: 'idle' });
@@ -213,6 +223,29 @@ function FinoChatPanel({
     setExtractionState({ phase: 'idle' });
   }, []);
 
+  // Try the compute-first Instant Answer path before falling back to the AI.
+  // Only intercepts exact matches against INSTANT_QUESTIONS with enough
+  // trade history to compute a real answer — everything else goes to FINO.
+  const handleSend = useCallback(
+    async (message: string) => {
+      const key = matchInstantQuestion(message);
+      if (key) {
+        const ans = computeInstantAnswer(key, trades ?? []);
+        if (ans) {
+          setInstantAnswer(ans);
+          return;
+        }
+      }
+      await sendMessage(message, buildFinoContext(getPageData));
+    },
+    [trades, sendMessage, getPageData],
+  );
+
+  const handleNewConversation = useCallback(() => {
+    setInstantAnswer(null);
+    startNewConversation();
+  }, [startNewConversation]);
+
   // Listen for action events emitted by the SSE stream (via aiCopilotApi case 'action').
   // When the backend requests a screenshot upload, open the existing file picker.
   useEffect(() => {
@@ -233,7 +266,7 @@ function FinoChatPanel({
   return (
     <ErrorBoundary boundary="fino-ai" fallback={<AiToolErrorFallback />}>
       <div className="flex h-full flex-col bg-surface-base">
-        {/* Header */}
+        {/* Header — compact: avatar + name + quota ring, no tagline/badge row */}
         <header className="flex flex-shrink-0 items-center justify-between border-b border-border-ds-subtle bg-surface-base px-5 py-4">
           <div className="flex items-center gap-3">
             <FinoAvatar
@@ -244,23 +277,24 @@ function FinoChatPanel({
               size={36}
               className="h-9 w-9 rounded-full border border-[#C9A646]/40 object-cover"
             />
-            <div>
-              <h2 className="flex items-center gap-1.5 text-sm font-bold">
-                <span className="text-ink-primary">FINO</span>
-                <span className="text-gold-primary">AI</span>
-                <Sparkles className="h-3.5 w-3.5 text-gold-primary" />
-                <span
-                  className="ml-1 rounded-full border border-[#C9A646]/30 bg-[#C9A646]/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.08em] text-gold-primary"
-                  title={`FINO — ${finoTier.tagline}`}
-                >
-                  {finoTier.badge}
-                </span>
-              </h2>
-              <p className="text-[11px] text-ink-tertiary">{finoTier.tagline}</p>
-            </div>
+            <h2 className="flex items-center gap-2 text-sm font-bold">
+              <span className="text-ink-primary">FINO</span>
+              <FinoQuotaRing used={questionsUsedDisplay} limit={quotaLimit} />
+            </h2>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={startNewConversation} title="New chat" className={iconBtn}>
+            {finoTier.upgrade && (
+              <Link
+                to="/app/upgrade"
+                title={finoTier.upgrade.sublabel}
+                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-black"
+                style={{ background: 'linear-gradient(135deg,#C9A646,#F4D97B)' }}
+              >
+                <Crown className="h-3 w-3" />
+                Upgrade
+              </Link>
+            )}
+            <button onClick={handleNewConversation} title="New chat" className={iconBtn}>
               <Plus className="h-4 w-4" />
             </button>
             <button onClick={onClose} aria-label="Close" title="Close" className={iconBtn}>
@@ -269,26 +303,8 @@ function FinoChatPanel({
           </div>
         </header>
 
-        {/* Body — open to all users; soft cap enforced server-side + UsageBanner */}
+        {/* Body — open to all users; soft cap enforced server-side */}
         <>
-          {usesLoudUsageBanner ? (
-            <UsageBanner usage={usage!} upgrade={finoTier.upgrade} />
-          ) : (
-            /* Remaining-questions pill — quota-capped tiers not already
-               covered by the loud UsageBanner above (trader/investor, or
-               free/basic before `usage` has loaded). Prefers the
-               server-reported limit; falls back to FINO_TIER_QUOTAS when the
-               server doesn't return one for this tier. Renders nothing when
-               the tier is unlimited. */
-            quotaLimit !== null && (
-              <div className="flex-shrink-0 border-b border-border-ds-subtle px-4 py-1.5">
-                <span className="inline-flex items-center rounded-full border border-border-ds-subtle bg-surface-1 px-2 py-0.5 text-[10px] font-medium text-ink-tertiary">
-                  {questionsUsedDisplay} of {quotaLimit} questions today
-                </span>
-              </div>
-            )
-          )}
-
           {/* Tier teaser — what FINO can also do on higher plans. Only while the
               conversation is empty AND no screenshot extraction is in
               progress, so it never competes with answers or the extraction
@@ -340,9 +356,7 @@ function FinoChatPanel({
               isLoading={isLoading}
               isStreaming={isStreaming}
               error={error}
-              onSendMessage={async (message: string) => {
-                await sendMessage(message, buildFinoContext(getPageData));
-              }}
+              onSendMessage={handleSend}
               onClearError={clearError}
               limitReached={(!usage?.unlimited && usage?.limit_reached) || false}
               questionsRemaining={usage?.unlimited ? 999 : (usage?.questions_remaining ?? 999)}
@@ -360,6 +374,20 @@ function FinoChatPanel({
               openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
               beforeMessages={
                 <div className="-mx-4">
+                  {/* Instant Answer — compute-first, zero-cost response to a
+                      matched high-frequency question. "Ask FINO why" spends
+                      1 AI question and falls through to the normal chat. */}
+                  {instantAnswer && (
+                    <FinoInstantAnswerCard
+                      answer={instantAnswer}
+                      onDismiss={() => setInstantAnswer(null)}
+                      onAskFino={(q) => {
+                        setInstantAnswer(null);
+                        void sendMessage(q, buildFinoContext(getPageData));
+                      }}
+                    />
+                  )}
+
                   {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
                   <FinoActionBar />
 

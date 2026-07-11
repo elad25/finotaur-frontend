@@ -16,7 +16,7 @@
 import {
   Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart,
   Newspaper, HelpCircle, Compass, FileText, Layers, Radar, Activity, Briefcase,
-  BookOpen,
+  BookOpen, Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PlatformPlan } from '@/hooks/usePlatformAccess';
@@ -134,6 +134,8 @@ export function getFinoHomeChips(tier: FinoTierKey, hasActiveJournal: boolean): 
 
 const FREE_PROMPTS: FinoPromptChip[][] = [
   [
+    { icon: Zap, question: 'Am I overtrading?' },
+    { icon: Zap, question: "What's my win rate this month?" },
     { icon: HelpCircle, question: 'What moved the market today?' },
     { icon: TrendingUp, question: 'Explain what unusual options activity means' },
     { icon: Newspaper, question: 'What are the key economic events this week?' },
@@ -148,6 +150,8 @@ const FREE_PROMPTS: FinoPromptChip[][] = [
 
 const TRADER_PROMPTS: FinoPromptChip[][] = [
   [
+    { icon: Zap, question: 'Am I overtrading?' },
+    { icon: Zap, question: "What's my win rate this month?" },
     { icon: BookOpen, question: 'Show my best setups' },
     { icon: HelpCircle, question: "Review yesterday's trades" },
     { icon: Compass, question: 'What mistakes am I repeating?' },
