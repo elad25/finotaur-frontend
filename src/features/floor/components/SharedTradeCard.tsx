@@ -35,6 +35,7 @@ import {
 } from '@/features/floor/hooks/useGlobalFeed';
 import { TradeChart } from '@/components/journal/TradeChart';
 import { TradeBusinessCard } from '@/features/floor/components/TradeBusinessCard';
+import { tradeCardFromFeedItem } from '@/features/floor/lib/tradeCardData';
 import type {
   GlobalFeedItem,
   GlobalComment,
@@ -605,7 +606,7 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
           undefined/true → existing chart+data card (default behavior). */}
       {item.attached_trade_id && (
         item.show_chart === false ? (
-          <TradeBusinessCard item={item} />
+          <TradeBusinessCard data={tradeCardFromFeedItem(item)} />
         ) : (
           <AttachedTradeCard item={item} />
         )

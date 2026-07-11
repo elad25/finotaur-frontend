@@ -13,7 +13,7 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
 import { Loader2, ArrowLeft, AlertCircle, Pencil, X, ClipboardList, Share2 } from 'lucide-react';
-import { ShareTradeDialog } from '@/features/floor/components/ShareTradeDialog';
+import { ShareTradeActions } from '@/features/floor/components/ShareTradeActions';
 import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
@@ -1321,9 +1321,9 @@ export default function JournalTradeDetail() {
         )
       )}
 
-      {/* Share trade dialog — mounted here so it overlays the full page */}
+      {/* Share trade actions menu — mounted here so it overlays the full page */}
       {trade && (
-        <ShareTradeDialog
+        <ShareTradeActions
           trade={{
             id: trade.id,
             symbol: trade.symbol,
