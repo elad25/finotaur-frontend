@@ -1,15 +1,17 @@
 /**
  * Trading Arena — full-screen trading workstation (admin + beta only).
  *
- * Tab restructure (2026-07): the tab bar is now exactly 3 tabs — Chart,
- * Footprint, Liquidity. The former Tape / CVD / Options / Futures / Forex
+ * Tab restructure (2026-07): the tab bar is exactly 3 tabs — Chart,
+ * Order Flow, Liquidity. The former Tape / CVD / Options / Futures / Forex
  * tabs were removed from navigation (files kept on disk, just unrouted —
  * see tabs/TapeTab.tsx, tabs/CvdTab.tsx, tabs/LockedTab.tsx,
- * tabs/FuturesChartTab.tsx). The former Order Flow tab (BookmapChart) is
- * superseded by the new Liquidity tab (DepthMatrixLayer-based); legacy
- * 'order-flow' deep links still resolve there — see types.ts's toTabId.
- * Futures capability (admin-only Databento preview) now lives INSIDE the
- * Footprint tab, switched by detected asset class — see tabs/FootprintTab.tsx.
+ * tabs/FuturesChartTab.tsx). Chart is a PLAIN candlestick chart — no order
+ * flow overlay. The Order Flow tab (slug 'order-flow', component
+ * tabs/FootprintTab.tsx — renamed from "Footprint" in the tab bar/nav, file
+ * kept as-is) is the dedicated full-detail footprint chart; legacy
+ * 'footprint' / 'orderflow' deep links still resolve there — see
+ * types.ts's toTabId. Futures capability (admin-only Databento preview)
+ * lives INSIDE the Order Flow tab, switched by detected asset class.
  *
  * Phase 0 scaffold (still applies):
  *   - Full viewport, no app chrome (added to HIDE_CHROME_ROUTES via
@@ -17,9 +19,9 @@
  *   - Slim custom top bar: title + back control, asset selector,
  *     interval selector, tab switcher.
  *   - Tabs (URL-driven via :section param):
- *       Chart      → FinotaurChart + BinanceSource
- *       Footprint  → dedicated full-detail order-flow footprint (crypto + futures)
- *       Liquidity  → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
+ *       Chart       → FinotaurChart + BinanceSource, plain candlesticks
+ *       Order Flow  → dedicated full-detail order-flow footprint (crypto + futures)
+ *       Liquidity   → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
  *
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
@@ -42,10 +44,6 @@ import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
 import { AccountSelector } from './components/AccountSelector';
-import {
-  DEFAULT_ORDER_FLOW_CONTROLS,
-  type OrderFlowControlsState,
-} from './components/OrderFlowControls';
 
 // ---------------------------------------------------------------------------
 // Default symbol and interval
@@ -84,10 +82,6 @@ export default function TradingArena() {
   // only for now — NOT wired into the paper-trading engine or order routing;
   // the Arena stays 100% paper (real execution is out of scope here).
   const [accountId, setAccountId] = useState<string | null>(null);
-
-  // Order Flow controls — lifted up from ChartTab so the Arena toolbar's
-  // "Chart ▾" dropdown (rendered here, above <main>) can host them.
-  const [ofControls, setOfControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
   const handleSymbolSelect = useCallback((picked: string) => {
     const detected = detectAssetClass(picked);
@@ -172,15 +166,12 @@ export default function TradingArena() {
             aria-hidden="true"
           />
 
-          {/* Controls (Timeframe / Indicators / Chart) */}
+          {/* Controls (Timeframe / Indicators) */}
           <ArenaToolbar
             interval={interval}
             onIntervalChange={setIntervalValue}
             intervalCapability={intervalCapability}
             activeTab={activeTab}
-            controls={ofControls}
-            onControlsChange={setOfControls}
-            chartControlsDisabled={assetClass !== 'crypto'}
           />
         </div>
 
@@ -197,11 +188,9 @@ export default function TradingArena() {
             symbol={symbol}
             interval={interval}
             assetClass={assetClass}
-            controls={ofControls}
-            onControlsChange={setOfControls}
           />
         )}
-        {activeTab === 'footprint' && (
+        {activeTab === 'order-flow' && (
           <FootprintTab
             symbol={symbol}
             interval={interval}

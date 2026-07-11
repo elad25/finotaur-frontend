@@ -275,7 +275,7 @@ export const domains: Record<string, Domain> = {
 
   // ===========================================================================
   // TRADING ARENA — admin + beta only (Phase 0 scaffold).
-  // Full-screen workstation: exactly 3 tabs — Chart, Footprint, Liquidity.
+  // Full-screen workstation: exactly 3 tabs — Chart, Order Flow, Liquidity.
   // Hidden from regular users via beta: true (same mechanism as copy-trade).
   // ===========================================================================
   'trading-arena': {
@@ -289,7 +289,7 @@ export const domains: Record<string, Domain> = {
     ],
     sidebar: [
       { label: 'Chart',      path: '/app/trading-arena/chart',      icon: Crosshair, beta: true },
-      { label: 'Footprint',  path: '/app/trading-arena/footprint',  icon: Grid3x3,   beta: true },
+      { label: 'Order Flow', path: '/app/trading-arena/order-flow', icon: Grid3x3,   beta: true },
       { label: 'Liquidity',  path: '/app/trading-arena/liquidity',  icon: Droplet,   beta: true },
     ],
   },
