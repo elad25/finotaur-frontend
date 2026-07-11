@@ -39,9 +39,9 @@ export default function FinoQuotaRing({
   const dashoffset = CIRCUMFERENCE * (1 - fraction);
 
   const color = remaining === 0 ? '#EF4444' : remaining === 1 ? '#F59E0B' : '#C9A646';
-  const textColorClass =
-    remaining === 0 ? 'text-[#EF4444]' : remaining === 1 ? 'text-[#F59E0B]' : 'text-ink-primary';
 
+  // No number inside the ring — the arc length alone conveys how many
+  // questions are left (full → empty), with the exact count on hover.
   return (
     <div
       className="relative flex h-[30px] w-[30px] items-center justify-center"
@@ -73,9 +73,6 @@ export default function FinoQuotaRing({
           }}
         />
       </svg>
-      <span className={`absolute text-[10px] font-bold tabular-nums ${textColorClass}`}>
-        {remaining}
-      </span>
     </div>
   );
 }
