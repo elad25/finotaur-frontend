@@ -551,6 +551,84 @@ const buildTradeSummaries = (
     .sort((a, b) => b.key.localeCompare(a.key));
 };
 
+// 🎯 Small presentational donut for the Win Rate StatsCard.
+// Pure SVG, reads only the already-computed win-rate percent — no data logic here.
+const WinRateDonut = ({ percent }: { percent: number }) => {
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const size = 56;
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (safePercent / 100) * circumference;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0 -rotate-90"
+      aria-hidden="true"
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        className="text-white/10"
+        stroke="currentColor"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        className="text-gold-primary"
+        stroke="currentColor"
+      />
+    </svg>
+  );
+};
+
+// 🎯 Small presentational sparkline for the Net P&L StatsCard.
+// Pure SVG, reads only an already-computed cumulative-equity series.
+const PnlSparkline = ({ data }: { data: number[] }) => {
+  if (data.length < 2) return null;
+
+  const width = 88;
+  const height = 34;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return [x, y] as const;
+  });
+
+  const linePoints = points.map(([x, y]) => `${x},${y}`).join(' ');
+  const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden="true">
+      <polygon points={areaPoints} className="fill-emerald-400/10" stroke="none" />
+      <polyline
+        points={linePoints}
+        fill="none"
+        className="stroke-emerald-400"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
 const StatsCard = memo(({
   icon: Icon,
@@ -560,6 +638,8 @@ const StatsCard = memo(({
   color,
   valueColor,
   loading,
+  donutPercent,
+  sparklineData,
 }: {
   icon: any;
   title: string;
@@ -568,30 +648,18 @@ const StatsCard = memo(({
   color: string;
   valueColor?: string;
   loading?: boolean;
+  donutPercent?: number;
+  sparklineData?: number[];
 }) => (
-  <div 
-    className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02]"
-    style={{
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      boxShadow: `0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`,
-      backdropFilter: 'blur(12px)',
-    }}
-  >
-    {/* Top glow from icon color */}
-    <div 
-      className="absolute -top-10 -left-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-30 transition-opacity duration-300"
-      style={{ background: color.replace('0.1', '0.8'), filter: 'blur(32px)' }}
-    />
-
-    <div className="relative p-5">
+  <div className="rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5 transition-colors duration-base hover:border-border-ds-default">
+    <div className="flex items-center justify-between mb-ds-4">
       {/* Title row */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.15em]">
+      <div className="flex items-center justify-between flex-1 min-w-0">
+        <div className="text-[10px] font-semibold text-ink-secondary uppercase tracking-[0.15em]">
           {title}
         </div>
-        <div 
-          className="inline-flex items-center justify-center w-8 h-8 rounded-xl transition-transform duration-300 group-hover:scale-110"
+        <div
+          className="inline-flex items-center justify-center w-8 h-8 rounded-xl shrink-0"
           style={{
             background: color.replace('0.1', '0.15'),
             border: `1px solid ${color.replace('0.1', '0.3')}`,
@@ -600,28 +668,29 @@ const StatsCard = memo(({
           <Icon className="w-4 h-4" style={{ color: color.replace('0.1', '1') }} strokeWidth={1.8} />
         </div>
       </div>
-
-      {/* Value — large and dominant */}
-      {loading ? (
-        <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
-      ) : (
-        <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
-          {value}
-        </div>
-      )}
-
-      {!loading && subtitle && (
-        <div className="text-xs text-zinc-600 font-medium">
-          {subtitle}
-        </div>
-      )}
     </div>
 
-    {/* Subtle bottom border glow */}
-    <div 
-      className="absolute bottom-0 left-4 right-4 h-px opacity-40"
-      style={{ background: `linear-gradient(90deg, transparent, ${color.replace('0.1', '0.8')}, transparent)` }}
-    />
+    <div className="flex items-end justify-between gap-ds-3">
+      <div className="min-w-0">
+        {/* Value — large and dominant */}
+        {loading ? (
+          <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
+        ) : (
+          <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-ink-primary'}`}>
+            {value}
+          </div>
+        )}
+
+        {!loading && subtitle && (
+          <div className="text-xs text-ink-secondary font-medium">
+            {subtitle}
+          </div>
+        )}
+      </div>
+
+      {!loading && donutPercent !== undefined && <WinRateDonut percent={donutPercent} />}
+      {!loading && sparklineData && sparklineData.length > 0 && <PnlSparkline data={sparklineData} />}
+    </div>
   </div>
 ));
 
@@ -768,23 +837,23 @@ const TradeRow = memo(({
 
       {/* Side */}
       <TableCell>
-        <Badge 
+        <Badge
           variant={trade.side === "LONG" ? "outline" : "destructive"}
           className={trade.side === "LONG"
-            ? "text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-            : "text-xs border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
+            ? "rounded-sm px-2 py-0.5 text-xs font-medium border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+            : "rounded-sm px-2 py-0.5 text-xs font-medium border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
           }
         >
           {trade.side}
         </Badge>
       </TableCell>
-      
+
       {/* Session */}
       <TableCell>
         {trade.session ? (
-          <Badge 
+          <Badge
             variant="outline"
-            className={`text-xs ${getSessionColor(trade.session)}`}
+            className={`rounded-sm px-2 py-0.5 text-xs font-medium ${getSessionColor(trade.session)}`}
           >
             {formatSessionDisplay(trade.session)}
           </Badge>
@@ -842,7 +911,7 @@ const TradeRow = memo(({
       <TableCell>
         <Badge
           variant={outcome === "WIN" || outcome === "LOSS" ? "outline" : "secondary"}
-          className={`text-xs ${
+          className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
             outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" :
             outcome === "LOSS" ? "border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20" :
             outcome === "OPEN" && isRiskOnlyMode ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : ""
@@ -1510,6 +1579,29 @@ const stats = useMemo<Stats>(() => {
     };
   }, [displayTrades, oneR, rBasisMode]);
 
+  // 🎯 Cumulative-equity series for the Net P&L StatsCard sparkline (visual-only).
+  // Reuses the exact same source (closed trades from displayTrades) and pnl
+  // accessor (getTradeData(...).pnl) as the stats calc above — no new data logic.
+  const pnlSparklineData = useMemo(() => {
+    const closed = displayTrades.filter(t => {
+      if (t.input_mode === 'risk-only') {
+        return t.pnl !== null && t.pnl !== undefined;
+      }
+      return t.exit_price != null;
+    });
+
+    const chronological = [...closed].sort(
+      (a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime(),
+    );
+
+    let running = 0;
+    return chronological.map(trade => {
+      const { pnl } = getTradeData(trade, oneR, rBasisMode);
+      running += pnl;
+      return running;
+    });
+  }, [displayTrades, oneR, rBasisMode]);
+
   // ✅ 5. 🚀 OPTIMIZED: Filtered trades - memoized
   const filteredTrades = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -1981,6 +2073,7 @@ const stats = useMemo<Stats>(() => {
               subtitle={stats.closedCount > 0 ? `${stats.wins} / ${stats.closedCount} trades` : undefined}
               color="rgba(16, 185, 129, 0.1)"
               loading={isStatsLoading}
+              donutPercent={stats.winRate}
             />
 
             <StatsCard
@@ -1991,6 +2084,7 @@ const stats = useMemo<Stats>(() => {
               color="rgba(234, 179, 8, 0.1)"
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
               loading={isStatsLoading}
+              sparklineData={pnlSparklineData}
             />
 
             <StatsCard
