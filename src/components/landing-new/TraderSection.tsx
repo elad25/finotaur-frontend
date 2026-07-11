@@ -21,9 +21,8 @@ import {
   BarChart3,
   Copy,
   ShieldCheck,
-  LineChart,
-  PlayCircle,
-  Lock,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
@@ -55,19 +54,17 @@ type TraderTabKey =
   | 'playbooks'
   | 'breakdowns'
   | 'copier'
-  | 'risk'
-  | 'backtesting'
-  | 'replay';
+  | 'risk';
 
 interface TraderTab {
   key: TraderTabKey;
   icon: LucideIcon;
   label: string;
-  status: 'live' | 'soon';
+  status: 'live';
   heading: string;
   description?: string;
   bullets?: string[];
-  image?: { src: string; alt: string; glow?: boolean };
+  image: { src: string; alt: string; glow?: boolean };
 }
 
 const tabs: TraderTab[] = [
@@ -197,36 +194,6 @@ const tabs: TraderTab[] = [
       alt: 'Finotaur Copier Risk Management screen showing per-account loss limits, profit targets, an automatic pause-new-copies on breach, and a $1,500 daily loss limit override',
     },
   },
-  {
-    key: 'backtesting',
-    icon: LineChart,
-    label: 'Backtesting',
-    status: 'soon',
-    heading: 'Test your setup. See if it has edge.',
-    description:
-      'Run your strategy against years of intraday data. Get equity curve, drawdown profile, and expectancy — before you risk a dollar.',
-    bullets: [
-      'Multi-year intraday replay',
-      'Equity curve & drawdown',
-      'Trade-by-trade audit log',
-      'Strategy parameter sweeps',
-    ],
-  },
-  {
-    key: 'replay',
-    icon: PlayCircle,
-    label: 'Trade Replay',
-    status: 'soon',
-    heading: 'Re-watch the chart, bar by bar.',
-    description:
-      'Step through any trade exactly as it printed. Spot the hesitation, the early exit, the level you should have respected — then annotate it for next time.',
-    bullets: [
-      'Synced with your fills',
-      'Variable playback speed',
-      'Drawing tools & annotations',
-      'Share with your accountability space',
-    ],
-  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -248,7 +215,7 @@ const pillars: Pillar[] = [
     key: 'journal',
     icon: LayoutDashboard,
     label: 'Trade Journal',
-    subKeys: ['dashboard', 'calendar', 'breakdowns', 'playbooks', 'backtesting', 'replay'],
+    subKeys: ['dashboard', 'calendar', 'breakdowns', 'playbooks'],
   },
   {
     key: 'ai',
@@ -270,9 +237,9 @@ const pillars: Pillar[] = [
   },
 ];
 
-// Auto-rotation sequence — LIVE panels only, flattened across pillars in
-// Journal → AI Insights → Copier → Risk order. SOON panels (Backtesting,
-// Trade Replay) are reachable only via a manual sub-tab click.
+// Auto-rotation & manual-navigation sequence — flattened across pillars in
+// Journal → AI Insights → Copier → Risk order. Arrow controls and dot/pill
+// clicks all navigate through this same sequence, by numeric index.
 const ROTATION_SEQUENCE: TraderTabKey[] = [
   'dashboard',
   'calendar',
@@ -358,26 +325,26 @@ function PanelCopy({ tab, children }: { tab: TraderTab; children?: ReactNode }) 
 // TraderSection
 // ---------------------------------------------------------------------------
 const TraderSection = () => {
-  const [activeTabKey, setActiveTabKey] = useState<TraderTabKey>(ROTATION_SEQUENCE[0]);
+  // Rotation position is driven purely by a numeric index into
+  // ROTATION_SEQUENCE — never by re-deriving "next" from a captured key,
+  // which is what caused the stale-closure bug (advanced once, then stuck).
+  const [seqIndex, setSeqIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [autoRotateStopped, setAutoRotateStopped] = useState(false);
   const preloadedRef = useRef<Set<string>>(new Set());
 
+  const activeTabKey = ROTATION_SEQUENCE[seqIndex];
   const activeTab = tabs.find((t) => t.key === activeTabKey)!;
   const activePillar = pillars.find((p) => p.subKeys.includes(activeTabKey))!;
   const hasSubRow = activePillar.subKeys.length > 1;
 
-  // Auto-rotation: advance every 8s through the LIVE-only sequence, looping.
-  // Paused on hover (anywhere in the tab area — pills or panel), stopped for
-  // good once the visitor manually picks a pill at either level.
+  // Auto-rotation: advance every 8s through the sequence, looping. Paused on
+  // hover (anywhere in the tab area — pills or panel), stopped for good once
+  // the visitor manually picks a pill/dot/arrow.
   useEffect(() => {
     if (autoRotateStopped || isPaused) return;
     const id = window.setInterval(() => {
-      setActiveTabKey((key) => {
-        const idx = ROTATION_SEQUENCE.indexOf(key);
-        const nextIdx = idx === -1 ? 0 : (idx + 1) % ROTATION_SEQUENCE.length;
-        return ROTATION_SEQUENCE[nextIdx];
-      });
+      setSeqIndex((i) => (i + 1) % ROTATION_SEQUENCE.length);
     }, AUTOROTATE_MS);
     return () => window.clearInterval(id);
   }, [autoRotateStopped, isPaused]);
@@ -387,19 +354,23 @@ const TraderSection = () => {
   // panel's <img> — keeps the DOM light and still keeps lazy-loading intact
   // for panels a visitor never reaches via manual clicks.)
   useEffect(() => {
-    const idx = ROTATION_SEQUENCE.indexOf(activeTabKey);
-    const nextKey = ROTATION_SEQUENCE[idx === -1 ? 0 : (idx + 1) % ROTATION_SEQUENCE.length];
-    const next = tabs.find((t) => t.key === nextKey);
+    const nextIdx = (seqIndex + 1) % ROTATION_SEQUENCE.length;
+    const next = tabs.find((t) => t.key === ROTATION_SEQUENCE[nextIdx]);
     if (next?.image && !preloadedRef.current.has(next.image.src)) {
       preloadedRef.current.add(next.image.src);
       const img = new Image();
       img.src = next.image.src;
     }
-  }, [activeTabKey]);
+  }, [seqIndex]);
+
+  function goToKey(key: TraderTabKey) {
+    const idx = ROTATION_SEQUENCE.indexOf(key);
+    setSeqIndex(idx === -1 ? 0 : idx);
+    setAutoRotateStopped(true);
+  }
 
   function handleTabClick(key: TraderTabKey) {
-    setActiveTabKey(key);
-    setAutoRotateStopped(true);
+    goToKey(key);
   }
 
   function handlePillarClick(pillar: Pillar) {
@@ -408,8 +379,19 @@ const TraderSection = () => {
     // as-is — otherwise jump to the pillar's first sub-tab (or its single
     // panel, for Copier/Risk).
     if (!pillar.subKeys.includes(activeTabKey)) {
-      setActiveTabKey(pillar.subKeys[0]);
+      const idx = ROTATION_SEQUENCE.indexOf(pillar.subKeys[0]);
+      setSeqIndex(idx === -1 ? 0 : idx);
     }
+  }
+
+  function handlePrevArrow() {
+    setSeqIndex((i) => (i - 1 + ROTATION_SEQUENCE.length) % ROTATION_SEQUENCE.length);
+    setAutoRotateStopped(true);
+  }
+
+  function handleNextArrow() {
+    setSeqIndex((i) => (i + 1) % ROTATION_SEQUENCE.length);
+    setAutoRotateStopped(true);
   }
 
   return (
@@ -517,7 +499,6 @@ const TraderSection = () => {
               {activePillar.subKeys.map((key) => {
                 const tab = tabs.find((t) => t.key === key)!;
                 const isActive = tab.key === activeTabKey;
-                const isSoon = tab.status === 'soon';
                 return (
                   <button
                     key={tab.key}
@@ -526,18 +507,14 @@ const TraderSection = () => {
                     aria-selected={isActive}
                     aria-controls={`trader-tabpanel-${tab.key}`}
                     id={`trader-tab-${tab.key}`}
-                    aria-label={isSoon ? `${tab.label} — soon` : tab.label}
-                    title={isSoon ? `${tab.label} — soon` : tab.label}
+                    aria-label={tab.label}
+                    title={tab.label}
                     onClick={() => handleTabClick(tab.key)}
                     className="group relative flex items-center justify-center p-2.5"
                   >
                     <span
                       className={`relative block rounded-full overflow-hidden transition-all duration-base ease-out ${
-                        isActive
-                          ? 'w-7 h-1.5 bg-gold-primary/20'
-                          : `w-1.5 h-1.5 ${
-                              isSoon ? 'bg-white/[0.12] group-hover:bg-white/25' : 'bg-white/20 group-hover:bg-white/40'
-                            }`
+                        isActive ? 'w-7 h-1.5 bg-gold-primary/20' : 'w-1.5 h-1.5 bg-white/20 group-hover:bg-white/40'
                       }`}
                     >
                       {/* Progress-in-dash — animated fill while auto-rotating, static full gold once stopped. */}
@@ -563,19 +540,37 @@ const TraderSection = () => {
           )}
         </div>
 
-        {/* Tab panel */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab.key}
-            id={`trader-tabpanel-${activeTab.key}`}
-            role="tabpanel"
-            aria-labelledby={hasSubRow ? `trader-tab-${activeTab.key}` : `trader-tab-pillar-${activePillar.key}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+        {/* Tab panel — wrapped in a relative container so the prev/next
+            arrows can sit vertically centered on either side. */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={handlePrevArrow}
+            aria-label="Previous feature"
+            className="absolute left-1 lg:-left-5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
           >
-            {activeTab.image ? (
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextArrow}
+            aria-label="Next feature"
+            className="absolute right-1 lg:-right-5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors hover:border-gold-primary/40 hover:text-gold-primary"
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab.key}
+              id={`trader-tabpanel-${activeTab.key}`}
+              role="tabpanel"
+              aria-labelledby={hasSubRow ? `trader-tab-${activeTab.key}` : `trader-tab-pillar-${activePillar.key}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+            >
               <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-10 lg:gap-14 items-center">
                 <PanelCopy tab={activeTab} />
                 <ProductShot
@@ -584,19 +579,9 @@ const TraderSection = () => {
                   glow={activeTab.image.glow}
                 />
               </div>
-            ) : (
-              <div className="max-w-xl mx-auto text-center py-6">
-                <div className="inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-gold-primary/80 bg-gold-primary/5 border border-gold-primary/30 rounded-sm px-2.5 py-1 mb-5">
-                  <Lock className="h-3 w-3" aria-hidden="true" />
-                  Coming Soon
-                </div>
-                <div className="text-left inline-block w-full">
-                  <PanelCopy tab={activeTab} />
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* ===== FINAL CTA ===== */}
