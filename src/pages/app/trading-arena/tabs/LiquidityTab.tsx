@@ -34,13 +34,14 @@ import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
 import { fetchWallsHistory } from '@/pages/app/crypto/_shared/api';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
-import type { Interval } from '@/components/charting/types';
+import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
 import { cn } from '@/lib/utils';
+import { intervalToSeconds, resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
 
 interface LiquidityTabProps {
   symbol: string;
-  interval: Interval;
+  interval: ArenaInterval;
   assetClass: AssetClass;
 }
 
@@ -79,20 +80,17 @@ function computeAutoFloor(notionals: number[]): number {
   return Math.min(AUTO_FLOOR_MAX, Math.max(AUTO_FLOOR_MIN, Math.round(p)));
 }
 
-// Bar-interval helpers — copied from MarketScanner.tsx.
-function intervalSeconds(iv: Interval): number {
-  switch (iv) {
-    case '1m':  return 60;
-    case '5m':  return 5 * 60;
-    case '15m': return 15 * 60;
-    case '1h':  return 60 * 60;
-    case '4h':  return 4 * 60 * 60;
-    case '1d':  return 24 * 60 * 60;
-    default:    return 60;
-  }
+// Bar-interval helpers — `intervalSeconds`/`intervalMs` now delegate to the
+// arbitrary-interval-capable `intervalToSeconds` (utils/intervals.ts) instead
+// of a fixed switch, so custom Trading Arena timeframes size the lookback
+// window and DepthMatrixLayer's column width correctly. Kept as thin local
+// wrappers (same names MarketScanner.tsx's own copy uses) to minimize the
+// diff against that file's pattern.
+function intervalSeconds(iv: ArenaInterval): number {
+  return intervalToSeconds(iv);
 }
 
-function intervalMs(iv: Interval): number {
+function intervalMs(iv: ArenaInterval): number {
   return intervalSeconds(iv) * 1000;
 }
 
@@ -100,7 +98,7 @@ function intervalMs(iv: Interval): number {
 // returns the FIRST 1000 bars after `from`, so the window MUST stay under
 // the 1000-bar cap or the chart shows stale history instead of the present.
 const BARS_LOOKBACK = 600;
-function lookbackSeconds(iv: Interval): number {
+function lookbackSeconds(iv: ArenaInterval): number {
   return BARS_LOOKBACK * intervalSeconds(iv);
 }
 
@@ -134,7 +132,7 @@ export function LiquidityTab({ symbol, interval, assetClass }: LiquidityTabProps
 
 interface LiquidityBodyProps {
   symbol: string;
-  interval: Interval;
+  interval: ArenaInterval;
 }
 
 function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
@@ -190,6 +188,20 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const [timeFitToken, setTimeFitToken] = useState(0);
   useEffect(() => {
     setTimeFitToken((t) => t + 1);
+  }, [interval]);
+
+  // Native-vs-aggregate resolution for the candlestick series (see
+  // utils/intervals.ts) — arbitrary custom timeframes Binance doesn't serve
+  // natively are wrapped in AggregatingSource.
+  const { candleDataSource, candleInterval } = useMemo(() => {
+    const plan = resolveIntervalPlan('binance', interval);
+    if (plan.kind === 'native') {
+      return { candleDataSource: binanceSource, candleInterval: plan.interval };
+    }
+    return {
+      candleDataSource: new AggregatingSource(binanceSource, plan.targetSeconds, plan.baseInterval),
+      candleInterval: plan.baseInterval,
+    };
   }, [interval]);
 
   const depthMatrix = useDepthSlices({
@@ -297,10 +309,10 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
       <div className="flex-1 min-h-0">
         <FinotaurChart
           symbol={symbol}
-          interval={interval}
+          interval={candleInterval}
           from={from}
           to={to}
-          dataSource={binanceSource}
+          dataSource={candleDataSource}
           theme="dark"
           height="100%"
           focusRange={focusRange}

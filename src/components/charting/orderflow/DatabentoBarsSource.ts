@@ -42,7 +42,20 @@ const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
 };
 
 export class DatabentoBarsSource implements ChartDataSource {
-  constructor(private readonly store: FlowBinStore) {}
+  constructor(
+    private readonly store: FlowBinStore,
+    /**
+     * Optional fixed bucket size in seconds — when provided, overrides the
+     * `interval` param entirely. Added for the Trading Arena's arbitrary
+     * custom timeframes (e.g. 45m/3h/17m), which aren't members of the fixed
+     * `Interval` union `INTERVAL_SECONDS` below maps. Since this source
+     * already buckets straight from raw trades (no upstream native-interval
+     * constraint), ANY bucket size works — omit this to keep the original
+     * behavior (map `interval` via INTERVAL_SECONDS), unchanged for existing
+     * callers (FuturesChartTab.tsx).
+     */
+    private readonly intervalSecOverride?: number,
+  ) {}
 
   async getBars(
     _symbol: string,
@@ -50,7 +63,7 @@ export class DatabentoBarsSource implements ChartDataSource {
     from: UTCTimestamp,
     to: UTCTimestamp,
   ): Promise<Bar[]> {
-    const intervalSec = INTERVAL_SECONDS[interval] ?? 60;
+    const intervalSec = this.intervalSecOverride ?? (INTERVAL_SECONDS[interval] ?? 60);
     const trades = this.store.getRawTrades();
 
     const fromMs = Number(from) * 1000;

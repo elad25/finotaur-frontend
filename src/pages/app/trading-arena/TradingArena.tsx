@@ -24,10 +24,9 @@
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, ChevronLeft } from 'lucide-react';
-import type { Interval } from '@/components/charting/types';
 import {
   SymbolAutocomplete,
 } from '@/components/backtest/SymbolAutocomplete';
@@ -37,6 +36,7 @@ import {
 } from '@/components/backtest/symbolUniverse';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { toTabId } from './types';
+import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
 import { ChartTab }      from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
@@ -51,7 +51,7 @@ import {
 // Default symbol and interval
 // ---------------------------------------------------------------------------
 const DEFAULT_SYMBOL = 'BTCUSDT';
-const DEFAULT_INTERVAL: Interval = '15m';
+const DEFAULT_INTERVAL: ArenaInterval = '15m';
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -72,8 +72,13 @@ export default function TradingArena() {
   // Using URL search params would be ideal for bookmarking, but keeping it
   // simple for Phase 0 (local state is sufficient for a workstation).
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
-  const [interval, setIntervalValue] = useState<Interval>(DEFAULT_INTERVAL);
+  const [interval, setIntervalValue] = useState<ArenaInterval>(DEFAULT_INTERVAL);
   const [assetClass, setAssetClass] = useState<AssetClass>('crypto');
+
+  // Which timeframe menu sections are usable for the active symbol — only
+  // crypto (Binance) has a live trades feed, so it's the only asset class
+  // that can serve sub-minute bars. Recomputed only when assetClass flips.
+  const intervalCapability = useMemo(() => getIntervalCapability(assetClass), [assetClass]);
 
   // Selected real account for the header's account selector. Display/context
   // only for now — NOT wired into the paper-trading engine or order routing;
@@ -171,6 +176,7 @@ export default function TradingArena() {
           <ArenaToolbar
             interval={interval}
             onIntervalChange={setIntervalValue}
+            intervalCapability={intervalCapability}
             activeTab={activeTab}
             controls={ofControls}
             onControlsChange={setOfControls}

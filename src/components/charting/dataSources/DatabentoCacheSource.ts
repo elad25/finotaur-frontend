@@ -29,6 +29,7 @@ type CandleTuple = [number, number, number, number, number, number];
  * Values mirror the wall-clock duration each interval name represents.
  */
 const INTERVAL_TO_BUCKET_SECONDS: Record<Interval, number | null> = {
+  '1s': null, // not supported — Databento cache has no sub-minute bucket
   '1m': 60,
   '2m': 120,
   '5m': 300,

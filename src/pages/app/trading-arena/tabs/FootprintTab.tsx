@@ -31,8 +31,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
+import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { Indicator, Interval } from '@/components/charting/types';
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
+import {
+  intervalToSeconds,
+  resolveIntervalPlan,
+  type ArenaInterval,
+} from '../utils/intervals';
 import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTradeSource';
 import { DatabentoTradeSource } from '@/components/charting/orderflow/DatabentoTradeSource';
 import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
@@ -57,7 +63,7 @@ import { cn } from '@/lib/utils';
 
 interface FootprintTabProps {
   symbol: string;
-  interval: Interval;
+  interval: ArenaInterval;
   assetClass: AssetClass;
   /** Gates the futures (Databento) mode — see the compliance note above. */
   isAdmin: boolean;
@@ -68,22 +74,6 @@ const DEFAULT_INDICATORS: Indicator[] = [
   { type: 'EMA', period: 50 },
   { type: 'RSI', period: 14 },
 ];
-
-/** Interval → seconds, for the subset of Interval values ARENA_INTERVALS offers. */
-const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
-  '1m': 60,
-  '5m': 5 * 60,
-  '15m': 15 * 60,
-  '30m': 30 * 60,
-  '60m': 60 * 60,
-  '1h': 60 * 60,
-  '4h': 4 * 60 * 60,
-  '1d': 24 * 60 * 60,
-};
-
-function intervalToSec(interval: Interval): number {
-  return INTERVAL_SECONDS[interval] ?? 60;
-}
 
 function densityMultiplier(density: RowDensity): number {
   if (density === 'x2') return 2;
@@ -184,17 +174,37 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin }: Footprin
 
 interface CryptoFootprintBodyProps {
   symbol: string;
-  interval: Interval;
+  interval: ArenaInterval;
   controls: OrderFlowControlsState;
   onControlsChange: (next: OrderFlowControlsState) => void;
 }
 
+// Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
+// a small fixed set of native intervals — custom/aggregated timeframes hide
+// those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
+const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+
 function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: CryptoFootprintBodyProps) {
   const { from, to } = useMemo(nowWindowCrypto, [symbol, interval]);
   const focusRange = useMemo(
-    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSec(interval), to }),
+    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
     [to, interval],
   );
+
+  // Native-vs-aggregate resolution for the candlestick series (see
+  // utils/intervals.ts) — arbitrary custom timeframes the resolved source
+  // can't serve directly are wrapped in AggregatingSource.
+  const { candleDataSource, candleInterval, klineDeltaInterval } = useMemo(() => {
+    const plan = resolveIntervalPlan('binance', interval);
+    const resolvedSource = plan.kind === 'native'
+      ? binanceSource
+      : new AggregatingSource(binanceSource, plan.targetSeconds, plan.baseInterval);
+    const resolvedInterval = plan.kind === 'native' ? plan.interval : plan.baseInterval;
+    const klineInterval = plan.kind === 'native' && KLINE_DELTA_NATIVE.includes(plan.interval)
+      ? plan.interval
+      : null;
+    return { candleDataSource: resolvedSource, candleInterval: resolvedInterval, klineDeltaInterval: klineInterval };
+  }, [interval]);
 
   // Row size: auto-suggested from the loaded window's average PER-BAR
   // high/low range — same approach as ChartTab.tsx (see its header comment
@@ -213,7 +223,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
   );
 
   const rowSize = Math.max(suggestedRowSize, FALLBACK_TICK_SIZE) * densityMultiplier(controls.rowDensity);
-  const intervalSec = intervalToSec(interval);
+  const intervalSec = intervalToSeconds(interval);
 
   const { store, status, backfillCoveredFromSec } = useOrderFlow({
     symbol,
@@ -235,7 +245,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
     }
   }
 
-  const showSubPanes = controls.showCvd || controls.showDelta;
+  const showSubPanes = klineDeltaInterval !== null && (controls.showCvd || controls.showDelta);
 
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
@@ -251,10 +261,10 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
       <div className="relative flex-1 min-h-0">
         <FinotaurChart
           symbol={symbol}
-          interval={interval}
+          interval={candleInterval}
           from={from}
           to={to}
-          dataSource={binanceSource}
+          dataSource={candleDataSource}
           indicators={DEFAULT_INDICATORS}
           theme="dark"
           height="100%"
@@ -277,13 +287,13 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
         />
       </div>
 
-      {showSubPanes && (
+      {showSubPanes && klineDeltaInterval && (
         <div className="flex-shrink-0 flex flex-col">
           {controls.showCvd && (
-            <CvdSubPane symbol={symbol} interval={interval} showTimeAxis={!controls.showDelta} />
+            <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!controls.showDelta} />
           )}
           {controls.showDelta && (
-            <DeltaSubPane symbol={symbol} interval={interval} showTimeAxis={true} />
+            <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
           )}
         </div>
       )}
@@ -293,8 +303,14 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
 
 // ─── Futures mode (Databento, admin-only) ───────────────────────────────────
 
+// Placeholder Interval passed to FinotaurChart for the futures body — the
+// actual bucket size comes from DatabentoBarsSource's intervalSecOverride
+// (below), so this value is never used for anything besides satisfying
+// FinotaurChartProps' `interval: Interval` type.
+const DATABENTO_INTERVAL_PLACEHOLDER: Interval = '1m';
+
 interface FuturesFootprintBodyProps {
-  interval: Interval;
+  interval: ArenaInterval;
   controls: OrderFlowControlsState;
   onControlsChange: (next: OrderFlowControlsState) => void;
   root: FuturesRoot;
@@ -307,7 +323,7 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
 
   const { from, to } = useMemo(nowWindowFutures, [contractSymbol]);
   const focusRange = useMemo(
-    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSec(interval), to }),
+    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
     [to, interval],
   );
 
@@ -337,7 +353,7 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
   );
 
   const rowSize = Math.max(suggestedRowSize, spec.tickSize) * densityMultiplier(controls.rowDensity);
-  const intervalSec = intervalToSec(interval);
+  const intervalSec = intervalToSeconds(interval);
 
   const { store, status, backfillCoveredFromSec } = useOrderFlow({
     symbol: contractSymbol,
@@ -349,11 +365,14 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
 
   // Bars source reads raw trades straight off the SAME store the footprint
   // uses — mirrors FuturesChartTab.tsx (see that file's DatabentoBarsSource.ts
-  // note: no separate trade cache/subscription).
-  const barsSourceRef = useRef<DatabentoBarsSource | null>(null);
-  if (!barsSourceRef.current) {
-    barsSourceRef.current = new DatabentoBarsSource(store);
-  }
+  // note: no separate trade cache/subscription). Recreated whenever `store`
+  // or `interval` changes — cheap (no side effects in the constructor) and
+  // lets the arbitrary custom-interval bucket size (intervalToSeconds(interval))
+  // flow straight through without needing the fixed `Interval` union.
+  const barsSource = useMemo(
+    () => new DatabentoBarsSource(store, intervalToSeconds(interval)),
+    [store, interval],
+  );
 
   // Bars refresh token — same throttled onChange→refetch bridge as
   // FuturesChartTab.tsx (copied verbatim; see that file's header comment for
@@ -484,10 +503,10 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
         ) : (
           <FinotaurChart
             symbol={contractSymbol}
-            interval={interval}
+            interval={DATABENTO_INTERVAL_PLACEHOLDER}
             from={from}
             to={to}
-            dataSource={barsSourceRef.current}
+            dataSource={barsSource}
             indicators={DEFAULT_INDICATORS}
             theme="dark"
             height="100%"

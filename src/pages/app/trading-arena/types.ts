@@ -2,8 +2,6 @@
  * Trading Arena — shared types
  */
 
-import type { Interval } from '@/components/charting/types';
-
 /** Active tab identifiers for the Trading Arena. */
 export type TabId = 'chart' | 'footprint' | 'liquidity';
 
@@ -35,12 +33,6 @@ export function toTabId(raw: string | undefined): TabId {
   return 'chart';
 }
 
-/** Intervals shown in the Trading Arena interval selector. */
-export const ARENA_INTERVALS: { value: Interval; label: string }[] = [
-  { value: '1m',  label: '1m' },
-  { value: '5m',  label: '5m' },
-  { value: '15m', label: '15m' },
-  { value: '1h',  label: '1h' },
-  { value: '4h',  label: '4h' },
-  { value: '1d',  label: '1d' },
-];
+// The old fixed ARENA_INTERVALS list (1m/5m/15m/1h/4h/1d) has been replaced
+// by the arbitrary-timeframe model in ./utils/intervals.ts (ArenaInterval,
+// ARENA_TIMEFRAME_GROUPS, DEFAULT_FAVORITE_INTERVALS) — see TimeframeMenu.tsx.

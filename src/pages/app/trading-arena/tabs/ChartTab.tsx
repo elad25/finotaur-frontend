@@ -60,6 +60,7 @@ import {
   toDatabentoCacheSymbol,
   toYahooSymbol,
 } from '@/components/charting/dataSources';
+import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { Indicator, Interval } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
@@ -74,10 +75,16 @@ import {
   type RowDensity,
 } from '../components/OrderFlowControls';
 import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
+import {
+  intervalToSeconds,
+  resolveIntervalPlan,
+  type ArenaInterval,
+  type CandleSourceKind,
+} from '../utils/intervals';
 
 interface ChartTabProps {
   symbol: string;
-  interval: Interval;
+  interval: ArenaInterval;
   /** Detected asset class for the current symbol. Controls chart source and rail enabled state. */
   assetClass: string;
   /** Order Flow controls — lifted up to TradingArena (rendered in the Arena
@@ -107,55 +114,22 @@ function nowWindow(): { from: number; to: number } {
   return { from, to };
 }
 
-/** Interval → seconds, for the subset of Interval values the Arena's ARENA_INTERVALS actually offers. */
-const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
-  '1m': 60,
-  '5m': 5 * 60,
-  '15m': 15 * 60,
-  '30m': 30 * 60,
-  '60m': 60 * 60,
-  '1h': 60 * 60,
-  '4h': 4 * 60 * 60,
-  '1d': 24 * 60 * 60,
-};
-
-function intervalToSec(interval: Interval): number {
-  return INTERVAL_SECONDS[interval] ?? 60;
+/**
+ * Native-vs-aggregate resolution for the candlestick series moved to
+ * ../utils/intervals.ts's `resolveIntervalPlan` — supports the full
+ * arbitrary ArenaInterval space (custom timeframes included), replacing the
+ * old fixed-ARENA_INTERVALS `nearestSupportedInterval` snap-to-nearest guard.
+ * `intervalToMs` stays local — only DepthMatrixLayer's candle-width mapping
+ * needs milliseconds.
+ */
+function intervalToMs(interval: ArenaInterval): number {
+  return intervalToSeconds(interval) * 1000;
 }
 
-function intervalToMs(interval: Interval): number {
-  return intervalToSec(interval) * 1000;
-}
-
-// ── Non-crypto interval support guard ────────────────────────────────────
-// Both DatabentoCacheSource.ts's INTERVAL_TO_BUCKET_SECONDS and the
-// chart-bars Edge Function's INTERVAL_SECONDS (YahooFinanceSource's backend)
-// already support every interval ARENA_INTERVALS offers today — this guard
-// is a fail-safe so a future addition to either interval list can never
-// throw from `getBars`; an unsupported selection silently snaps to the
-// nearest interval the resolved source actually supports.
-const DATABENTO_SUPPORTED_INTERVALS = new Set<Interval>([
-  '1m', '2m', '5m', '15m', '30m', '60m', '1h', '4h', '1d',
-]); // mirrors DatabentoCacheSource.ts — 1wk/1mo NOT supported there
-const YAHOO_SUPPORTED_INTERVALS = new Set<Interval>([
-  '1m', '2m', '5m', '15m', '30m', '60m', '1h', '4h', '1d', '1wk', '1mo',
-]); // mirrors supabase/functions/chart-bars's INTERVAL_SECONDS map
-
-function nearestSupportedInterval(interval: Interval, supported: ReadonlySet<Interval>): Interval {
-  if (supported.has(interval)) return interval;
-  const targetSec = intervalToSec(interval);
-  let best: Interval = interval;
-  let bestDiff = Infinity;
-  for (const candidate of Object.keys(INTERVAL_SECONDS) as Interval[]) {
-    if (!supported.has(candidate)) continue;
-    const diff = Math.abs(intervalToSec(candidate) - targetSec);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      best = candidate;
-    }
-  }
-  return best;
-}
+// Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
+// a small fixed set of native intervals — custom/aggregated timeframes hide
+// those sub-panes rather than erroring (see `klineDeltaInterval` below).
+const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
 // ── Heatmap defaults (Task 2) ────────────────────────────────────────────
 // MarketScanner exposes floor/size-filter as user-adjustable controls (its
@@ -220,28 +194,46 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
   // e.g. "MNQ=F", "EURUSD=X") — the per-branch mapper calls below are
   // idempotent passthroughs in that case and only do real work for symbols
   // that arrive in a raw/contract-code form.
-  const { chartDataSource, chartSymbol } = useMemo(() => {
+  const { chartDataSource, chartSymbol, chartInterval, klineDeltaInterval } = useMemo(() => {
     const source = pickDataSource(symbol);
     let resolvedSymbol: string;
+    let kind: CandleSourceKind;
     if (isCryptoSymbol(symbol)) {
       resolvedSymbol = toBinanceSymbol(symbol) ?? symbol;
+      kind = 'binance';
     } else if (isDatabentoCachedSymbol(symbol)) {
       resolvedSymbol = toDatabentoCacheSymbol(symbol) ?? symbol;
+      kind = 'databento';
     } else {
       resolvedSymbol = toYahooSymbol(symbol, assetClass) ?? symbol;
+      kind = 'yahoo';
     }
-    return { chartDataSource: source, chartSymbol: resolvedSymbol };
-  }, [symbol, assetClass]);
 
-  // Non-crypto interval safety net (see nearestSupportedInterval above) —
-  // zero effect for crypto (always returns `interval` unchanged).
-  const chartInterval = useMemo(() => {
-    if (isCrypto) return interval;
-    const supported = isDatabentoCachedSymbol(symbol)
-      ? DATABENTO_SUPPORTED_INTERVALS
-      : YAHOO_SUPPORTED_INTERVALS;
-    return nearestSupportedInterval(interval, supported);
-  }, [interval, isCrypto, symbol]);
+    // Native-vs-aggregate resolution (see utils/intervals.ts) — arbitrary
+    // ArenaInterval values (custom timeframes included) that the resolved
+    // source can't serve directly are wrapped in AggregatingSource, binning
+    // client-side from the finest native base.
+    const plan = resolveIntervalPlan(kind, interval);
+    const resolvedDataSource = plan.kind === 'native'
+      ? source
+      : new AggregatingSource(source, plan.targetSeconds, plan.baseInterval);
+    const resolvedInterval = plan.kind === 'native' ? plan.interval : plan.baseInterval;
+
+    // Binance klines (useKlineDelta, the CVD/Delta sub-panes) only understand
+    // a small fixed set of native intervals — null hides those sub-panes for
+    // custom/aggregated timeframes rather than erroring (see ChartTab render
+    // below / KLINE_DELTA_NATIVE above).
+    const klineInterval = kind === 'binance' && plan.kind === 'native' && KLINE_DELTA_NATIVE.includes(plan.interval)
+      ? plan.interval
+      : null;
+
+    return {
+      chartDataSource: resolvedDataSource,
+      chartSymbol: resolvedSymbol,
+      chartInterval: resolvedInterval,
+      klineDeltaInterval: klineInterval,
+    };
+  }, [symbol, assetClass, interval]);
 
   // Always called unconditionally (hooks rule). For non-crypto, the symbol
   // won't match a Binance pair — lastPrice will stay null, disabling the rail.
@@ -295,7 +287,7 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
   );
 
   const rowSize = Math.max(suggestedRowSize, FALLBACK_TICK_SIZE) * densityMultiplier(controls.rowDensity);
-  const intervalSec = intervalToSec(interval);
+  const intervalSec = intervalToSeconds(interval);
 
   // ── Order flow data: one BinanceTradeSource + useOrderFlow per mount ────
   // Non-crypto gets NOOP_TRADE_SOURCE — no live trades feed exists for those
@@ -352,7 +344,11 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
     }
   }
 
-  const showSubPanes = isCrypto && (controls.showCvd || controls.showDelta);
+  // CVD/Delta sub-panes read Binance klines directly (useKlineDelta) — hidden
+  // for custom/aggregated timeframes that have no native Binance kline
+  // interval (klineDeltaInterval is null in that case; see the resolution
+  // block above) rather than erroring.
+  const showSubPanes = isCrypto && klineDeltaInterval !== null && (controls.showCvd || controls.showDelta);
 
   // ── Resizable right rail (Task 1) ──────────────────────────────────────
   const [railWidth, setRailWidth] = useState<number>(readStoredRailWidth);
@@ -457,13 +453,13 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
           />
         </div>
 
-        {showSubPanes && (
+        {showSubPanes && klineDeltaInterval && (
           <div className="flex-shrink-0 flex flex-col">
             {controls.showCvd && (
-              <CvdSubPane symbol={symbol} interval={interval} showTimeAxis={!controls.showDelta} />
+              <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!controls.showDelta} />
             )}
             {controls.showDelta && (
-              <DeltaSubPane symbol={symbol} interval={interval} showTimeAxis={true} />
+              <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
             )}
           </div>
         )}
