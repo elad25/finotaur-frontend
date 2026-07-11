@@ -70,7 +70,8 @@ export default function PortfolioReportPage() {
     const slidesInput = buildPortfolioTakeawayInputs(reportData);
     fetchTakeaways({
       reportType: 'portfolio',
-      periodKey: `${tradesList.length}`,
+      // b1 = bullet-format takeaways (2026-07-11) — bumping invalidates same-period cached prose.
+      periodKey: `b1:${tradesList.length}`,
       slides: slidesInput,
     })
       .then((res) => {
