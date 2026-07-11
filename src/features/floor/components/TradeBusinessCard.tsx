@@ -72,7 +72,7 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
         src="/finotaur-bull-watermark.png"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none select-none absolute right-[-4%] top-1/2 z-0 h-[165%] w-auto max-w-none -translate-y-1/2 -scale-x-100 opacity-[0.22] mix-blend-screen"
+        className="pointer-events-none select-none absolute right-[-15%] bottom-[-30%] z-0 h-[180%] w-auto max-w-none -scale-x-100 opacity-[0.24] mix-blend-screen"
       />
 
       <div className="relative z-10 flex flex-col gap-ds-3">
