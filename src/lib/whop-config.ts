@@ -228,12 +228,25 @@ export const INTRO_OFFER = {
   whopProductId: WHOP_PRODUCT_IDS.premium_intro,
   introPrice: 31.49,
   fullPrice: 44.99,
+  discountedCycles: 2,
+  // Hidden Whop promo — 30% off, applies to the first 1 recurring billing
+  // cycle, restricted to this plan. Combined with the plan's own initial-fee
+  // discount, this gives 2 discounted months total (month 1 = plan initial
+  // fee, month 2 = TRADER30 on the first recurring cycle).
+  promoCode: 'TRADER30',
+} as const;
+
+// ============================================
+// REFERRAL OFFER — referred-user variant of the Intro Offer
+// When the visitor arrived via a member referral code (stored on-device),
+// the Intro Offer popup swaps the organic 2-month TRADER30 discount for a
+// bigger 3-month discount, applied at checkout using the REFERRING FRIEND'S
+// own personal promo code instead of TRADER30. Friend codes only work on
+// this same hidden Trader plan. See src/components/onboarding/IntroOffer.tsx.
+// ============================================
+export const REFERRAL_OFFER = {
+  discountPercent: 30,
   discountedCycles: 3,
-  // Hidden Whop promo — 30% off, applies to the first 2 recurring billing
-  // cycles, restricted to this plan. Combined with the plan's own initial-fee
-  // discount, this gives 3 discounted months total (month 1 = plan initial
-  // fee, months 2-3 = INTRO30 on the first 2 recurring cycles).
-  promoCode: 'INTRO30',
 } as const;
 
 // ============================================

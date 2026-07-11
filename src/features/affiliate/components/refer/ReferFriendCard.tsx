@@ -24,7 +24,25 @@ import {
   rowFromProvisionResult,
   DEFAULT_MEMBER_DISCOUNT_PERCENT,
   type MemberReferralRow,
+  type ProvisionMemberReferralError,
 } from '@/features/affiliate/utils/memberReferral';
+
+/** Maps a requested-code provision error to friendly, user-facing English
+ * text. Switches on the typed `kind`, not the raw message string. */
+function friendlyCodeError(error: ProvisionMemberReferralError): string {
+  switch (error.kind) {
+    case 'invalid_code':
+      return 'Codes are 4-15 letters/numbers.';
+    case 'reserved_code':
+      return 'That code is reserved, try another.';
+    case 'code_taken':
+      return 'That code is already taken, try another.';
+    case 'unknown':
+      return error.message;
+    default:
+      return 'Failed to create your referral code.';
+  }
+}
 
 type CardState =
   | { kind: 'checking' }
@@ -40,6 +58,7 @@ export function ReferFriendCard() {
   const { isPaidUser, isLoading: subLoading } = useSubscription();
   const [state, setState] = useState<CardState>({ kind: 'checking' });
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [requestedCode, setRequestedCode] = useState('');
 
   // Resolve initial state: hidden while subscription is still loading, then
   // locked for free members, then check for an already-provisioned row.
@@ -67,9 +86,13 @@ export function ReferFriendCard() {
     };
   }, [subLoading, isPaidUser, user?.id]);
 
+  const handleRequestedCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRequestedCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15));
+  };
+
   const handleProvision = useCallback(async () => {
     setState({ kind: 'provisioning' });
-    const result = await provisionMemberReferralCode();
+    const result = await provisionMemberReferralCode(requestedCode || undefined);
 
     if (result.status === 'error') {
       if (result.error.kind === 'disabled') {
@@ -80,13 +103,13 @@ export function ReferFriendCard() {
         setState({ kind: 'locked' });
         return;
       }
-      setState({ kind: 'error', message: result.error.message });
+      setState({ kind: 'error', message: friendlyCodeError(result.error) });
       return;
     }
 
     const freshRow = user?.id ? await fetchMemberReferralRow(user.id) : null;
     setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
-  }, [user?.id]);
+  }, [user?.id, requestedCode]);
 
   const copy = useCallback(async (text: string, type: 'code' | 'link') => {
     try {
@@ -109,9 +132,8 @@ export function ReferFriendCard() {
           <h3 className="text-h4 text-ink-primary">The Funded Friend Deal</h3>
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
-          Upgrade to get your personal referral code — your friend gets{' '}
-          {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off, and you earn {DEFAULT_MEMBER_DISCOUNT_PERCENT}% of
-          their payments for 12 months.
+          Upgrade to get your personal referral code — your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off
+          their first 3 months, and you earn 20% of their payments for 12 months.
         </p>
         <Button asChild variant="gold" size="sm" className="self-start">
           <Link to="/app/upgrade">Upgrade to unlock</Link>
@@ -128,9 +150,28 @@ export function ReferFriendCard() {
           <h3 className="text-h4 text-ink-primary">The Funded Friend Deal</h3>
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
-          Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off · You earn{' '}
-          {DEFAULT_MEMBER_DISCOUNT_PERCENT}% of their payments for 12 months.
+          Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months · You earn{' '}
+          20% of their payments for 12 months.
         </p>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="refer-friend-card-requested-code" className="text-small font-medium text-ink-secondary">
+            Choose your code (optional)
+          </label>
+          <input
+            id="refer-friend-card-requested-code"
+            type="text"
+            value={requestedCode}
+            onChange={handleRequestedCodeChange}
+            maxLength={15}
+            pattern="[A-Z0-9]*"
+            placeholder="YOURCODE"
+            disabled={state.kind === 'provisioning'}
+            className="rounded-[8px] border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 font-mono text-small uppercase tracking-wider text-ink-primary placeholder:text-ink-muted placeholder:normal-case focus:border-gold-primary focus:outline-none focus:ring-[3px] focus:ring-gold-primary/15 disabled:opacity-60"
+          />
+          <p className="text-small text-ink-tertiary">
+            4-15 characters, letters and numbers. Leave empty to auto-generate. Cannot be changed later.
+          </p>
+        </div>
         {state.kind === 'error' && <p className="text-small text-num-negative">{state.message}</p>}
         <Button
           variant="gold"
@@ -192,7 +233,7 @@ export function ReferFriendCard() {
       </div>
 
       <p className="text-small text-ink-tertiary">
-        Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off · You earn {DEFAULT_MEMBER_DISCOUNT_PERCENT}%
+        Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months · You earn 20%
         of their payments for 12 months
       </p>
 

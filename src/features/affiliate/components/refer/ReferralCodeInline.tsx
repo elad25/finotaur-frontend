@@ -32,9 +32,27 @@ import {
   rowFromProvisionResult,
   DEFAULT_MEMBER_DISCOUNT_PERCENT,
   type MemberReferralRow,
+  type ProvisionMemberReferralError,
 } from '@/features/affiliate/utils/memberReferral';
 
 const CARD_FACE = '/assets/funded-friend-deal-card.webp';
+
+/** Maps a requested-code provision error to friendly, user-facing English
+ * text. Switches on the typed `kind`, not the raw message string. */
+function friendlyCodeError(error: ProvisionMemberReferralError): string {
+  switch (error.kind) {
+    case 'invalid_code':
+      return 'Codes are 4-15 letters/numbers.';
+    case 'reserved_code':
+      return 'That code is reserved, try another.';
+    case 'code_taken':
+      return 'That code is already taken, try another.';
+    case 'unknown':
+      return error.message;
+    default:
+      return 'Failed to create your referral code.';
+  }
+}
 
 type InlineState =
   | { kind: 'checking' }
@@ -51,6 +69,7 @@ export function ReferralCodeInline() {
   const [state, setState] = useState<InlineState>({ kind: 'checking' });
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [open, setOpen] = useState(false);
+  const [requestedCode, setRequestedCode] = useState('');
 
   // Resolve initial state: hidden while subscription is still loading, then
   // locked for free members, then check for an already-provisioned row.
@@ -77,10 +96,14 @@ export function ReferralCodeInline() {
     };
   }, [subLoading, isPaidUser, user?.id]);
 
+  const handleRequestedCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRequestedCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15));
+  };
+
   const handleProvision = useCallback(async () => {
     setOpen(true);
     setState({ kind: 'provisioning' });
-    const result = await provisionMemberReferralCode();
+    const result = await provisionMemberReferralCode(requestedCode || undefined);
 
     if (result.status === 'error') {
       if (result.error.kind === 'disabled') {
@@ -91,13 +114,13 @@ export function ReferralCodeInline() {
         setState({ kind: 'locked' });
         return;
       }
-      setState({ kind: 'error', message: result.error.message });
+      setState({ kind: 'error', message: friendlyCodeError(result.error) });
       return;
     }
 
     const freshRow = user?.id ? await fetchMemberReferralRow(user.id) : null;
     setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
-  }, [user?.id]);
+  }, [user?.id, requestedCode]);
 
   const copy = useCallback(async (text: string, type: 'code' | 'link') => {
     try {
@@ -167,13 +190,13 @@ export function ReferralCodeInline() {
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" aria-hidden="true" />
               <p className="text-sm leading-relaxed text-zinc-300">
                 Your friend gets <span className="font-semibold text-[#E6CD86]">{DEFAULT_MEMBER_DISCOUNT_PERCENT}% off</span>{' '}
-                their first payment.
+                their first 3 months of FINOTAUR Trader.
               </p>
             </div>
             <div className="flex items-start gap-2.5">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" aria-hidden="true" />
               <p className="text-sm leading-relaxed text-zinc-300">
-                You earn <span className="font-semibold text-[#E6CD86]">{DEFAULT_MEMBER_DISCOUNT_PERCENT}%</span> of every
+                You earn <span className="font-semibold text-[#E6CD86]">20%</span> of every
                 payment they make — for 12 months.
               </p>
             </div>
@@ -211,6 +234,25 @@ export function ReferralCodeInline() {
               </>
             ) : (
               <>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="referral-requested-code-inline" className="text-xs font-medium text-zinc-400">
+                    Choose your code (optional)
+                  </label>
+                  <input
+                    id="referral-requested-code-inline"
+                    type="text"
+                    value={requestedCode}
+                    onChange={handleRequestedCodeChange}
+                    maxLength={15}
+                    pattern="[A-Z0-9]*"
+                    placeholder="YOURCODE"
+                    disabled={state.kind === 'provisioning'}
+                    className="rounded-md border border-zinc-700/30 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm uppercase tracking-wider text-zinc-200 placeholder:text-zinc-600 placeholder:normal-case focus:border-[#C9A646] focus:outline-none disabled:opacity-60"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    4-15 characters, letters and numbers. Leave empty to auto-generate. Cannot be changed later.
+                  </p>
+                </div>
                 {state.kind === 'error' && <p className="text-xs text-red-400">{state.message}</p>}
                 <button
                   type="button"
