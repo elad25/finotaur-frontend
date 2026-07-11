@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertOctagon, AlertTriangle, Ban, ChevronDown, ChevronUp, Crown, Lock, Pencil, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ChevronDown, ChevronUp, Crown, Lock, Pencil, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
@@ -18,9 +18,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
-import { useAgentCommand } from '@/features/automation/hooks/useAgentCommand';
 import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
-import { AutomationMasterSwitch } from '@/features/automation/components/AutomationMasterSwitch';
+import { AutomationMasterSwitch, AutomationLockedBanner } from '@/features/automation/components/AutomationMasterSwitch';
 import { useLockAllAccounts } from '@/features/automation/hooks/useLockAllAccounts';
 import { useAccountRiskSummaries } from '@/features/automation/hooks/useAccountRiskSummaries';
 import { EnforcementFeed } from '@/components/copyTrading/EnforcementFeed';
@@ -974,29 +973,6 @@ export function CopyTradingDashboard() {
     }
   };
 
-  // ── Cancel Orders ─────────────────────────────────────────────
-  // Customer-initiated; executed by the local desktop agent.
-  const { cancelOrders, flattenSymbol, isRunning: isCommandRunning } = useAgentCommand();
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-
-  const handleCancelOrdersConfirm = async () => {
-    setShowCancelConfirm(false);
-    if (isDemo) return; // demo: no agent command
-    const result = await cancelOrders();
-    if (result.status === 'sent') {
-      toast.success('Cancel orders command sent to your agent.');
-    } else if (result.status === 'no_agent') {
-      toast.warning('No desktop agent is online — open the FINOTAUR Agent and pair a device.');
-    } else {
-      toast.error("Couldn't send cancel command. Try again.");
-    }
-  };
-
-  // ── Flatten Symbol ────────────────────────────────────────────
-  // Customer-initiated; executed by the local desktop agent.
-  const [showFlattenSymbolDialog, setShowFlattenSymbolDialog] = useState(false);
-  const [flattenSymbolDraft, setFlattenSymbolDraft] = useState('');
-
   // ── Unfollow-with-exposure confirm ──────────────────────────────
   // Guards against silently orphaning open exposure when a follower
   // account is unfollowed while it still holds a position and/or working
@@ -1012,22 +988,6 @@ export function CopyTradingDashboard() {
     reason: 'unfollow' | 'leader-repoint';
     resolve: () => void;
   } | null>(null);
-
-  const handleFlattenSymbolConfirm = async () => {
-    const sym = flattenSymbolDraft.trim().toUpperCase();
-    if (!sym) return;
-    setShowFlattenSymbolDialog(false);
-    setFlattenSymbolDraft('');
-    if (isDemo) return; // demo: no agent command
-    const result = await flattenSymbol(sym);
-    if (result.status === 'sent') {
-      toast.success(`Flatten ${sym} command sent to your agent.`);
-    } else if (result.status === 'no_agent') {
-      toast.warning('No desktop agent is online — open the FINOTAUR Agent and pair a device.');
-    } else {
-      toast.error("Couldn't send flatten symbol command. Try again.");
-    }
-  };
 
   // ── Group management: rename / delete / create ───────────────────────
 
@@ -1272,11 +1232,12 @@ export function CopyTradingDashboard() {
       </div>
       {/* ── Automation control ── */}
       <div className="mb-ds-4">
-        <div className="flex items-center justify-between gap-ds-3 mb-ds-2">
+        <div className="flex items-center justify-between gap-ds-3">
           <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
             Automation control
           </p>
-          <div className="flex items-center gap-ds-2">
+          <div className="flex flex-wrap items-center justify-end gap-ds-2">
+            <AutomationMasterSwitch demo={isDemo} />
             {/* Lock all accounts */}
             <button
               type="button"
@@ -1291,7 +1252,7 @@ export function CopyTradingDashboard() {
             </button>
           </div>
         </div>
-        <AutomationMasterSwitch demo={isDemo} />
+        <AutomationLockedBanner />
       </div>
 
       {/* ── 1. Asset selector + action bar ── */}
@@ -1361,32 +1322,6 @@ export function CopyTradingDashboard() {
 
         {/* Action buttons — customer-initiated, executed by the local desktop agent */}
         <div className="flex items-center gap-ds-2">
-          {/* Cancel Orders */}
-          <button
-            type="button"
-            onClick={() => setShowCancelConfirm(true)}
-            disabled={isCommandRunning}
-            className="flex items-center gap-ds-2 rounded-lg border border-amber-600/60 bg-amber-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-amber-400 shadow-[0_0_14px_rgba(217,119,6,0.08)] transition-colors hover:border-amber-500 hover:bg-amber-600/20 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Cancel all working orders"
-            title="Cancels all working/pending orders via your desktop agent"
-          >
-            <Ban className="h-4 w-4 flex-shrink-0" />
-            {isCommandRunning ? 'Sending…' : 'Cancel Orders'}
-          </button>
-
-          {/* Flatten Symbol */}
-          <button
-            type="button"
-            onClick={() => { setFlattenSymbolDraft(''); setShowFlattenSymbolDialog(true); }}
-            disabled={isCommandRunning}
-            className="flex items-center gap-ds-2 rounded-lg border border-orange-600/60 bg-orange-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-orange-400 shadow-[0_0_14px_rgba(234,88,12,0.08)] transition-colors hover:border-orange-500 hover:bg-orange-600/20 hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Flatten a specific symbol"
-            title="Closes all positions for a specific symbol via your desktop agent"
-          >
-            <AlertOctagon className="h-4 w-4 flex-shrink-0" />
-            Flatten Symbol
-          </button>
-
           {/* Flatten ALL */}
           <button
             type="button"
@@ -1728,89 +1663,6 @@ export function CopyTradingDashboard() {
             >
               <AlertOctagon className="h-4 w-4 flex-shrink-0" />
               Yes, Flatten All
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Cancel Orders confirm modal ── */}
-      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
-        <DialogContent className="max-w-md border-amber-600/40 bg-[#0d0f14]">
-          <DialogTitle className="flex items-center gap-ds-2 text-amber-400">
-            <Ban className="h-5 w-5 flex-shrink-0" />
-            Cancel Orders
-          </DialogTitle>
-
-          <p className="text-sm text-ink-secondary leading-relaxed">
-            This cancels <span className="font-semibold text-ink-primary">all working and pending orders</span> on
-            your accounts. Open positions are <span className="font-semibold text-ink-primary">not</span> closed —
-            use Flatten All if you want to close positions too. Executed locally by your desktop agent.
-          </p>
-
-          <div className="mt-ds-2 flex justify-end gap-ds-3">
-            <button
-              type="button"
-              onClick={() => setShowCancelConfirm(false)}
-              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelOrdersConfirm}
-              className="flex items-center gap-ds-2 rounded-md border border-amber-600/60 bg-amber-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-amber-400 transition-colors hover:border-amber-500 hover:bg-amber-600/25 hover:text-amber-300"
-            >
-              <Ban className="h-4 w-4 flex-shrink-0" />
-              Yes, Cancel Orders
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Flatten Symbol dialog ── */}
-      <Dialog open={showFlattenSymbolDialog} onOpenChange={setShowFlattenSymbolDialog}>
-        <DialogContent className="max-w-md border-orange-600/40 bg-[#0d0f14]">
-          <DialogTitle className="flex items-center gap-ds-2 text-orange-400">
-            <AlertOctagon className="h-5 w-5 flex-shrink-0" />
-            Flatten Symbol
-          </DialogTitle>
-
-          <p className="text-sm text-ink-secondary leading-relaxed">
-            Closes all open positions for a specific symbol, executed locally by your desktop agent.
-            Enter the root symbol (e.g. <span className="font-semibold text-ink-primary">NQ</span>,{' '}
-            <span className="font-semibold text-ink-primary">MES</span>).
-          </p>
-
-          <input
-            type="text"
-            autoFocus
-            value={flattenSymbolDraft}
-            onChange={(e) => setFlattenSymbolDraft(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && flattenSymbolDraft.trim()) {
-                void handleFlattenSymbolConfirm();
-              }
-            }}
-            placeholder="e.g. NQ"
-            className="mt-ds-1 h-9 w-full rounded-md border border-border-ds-default bg-[#111] px-ds-3 text-sm font-semibold uppercase text-ink-primary placeholder:font-normal placeholder:normal-case placeholder:text-ink-tertiary outline-none focus:border-orange-500/60"
-          />
-
-          <div className="mt-ds-2 flex justify-end gap-ds-3">
-            <button
-              type="button"
-              onClick={() => { setShowFlattenSymbolDialog(false); setFlattenSymbolDraft(''); }}
-              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleFlattenSymbolConfirm}
-              disabled={!flattenSymbolDraft.trim()}
-              className="flex items-center gap-ds-2 rounded-md border border-orange-600/60 bg-orange-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-orange-400 transition-colors hover:border-orange-500 hover:bg-orange-600/25 hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <AlertOctagon className="h-4 w-4 flex-shrink-0" />
-              Flatten {flattenSymbolDraft.trim() || '—'}
             </button>
           </div>
         </DialogContent>

@@ -766,7 +766,7 @@ function AppContent() {
 <Route path="journal/ai-review" element={<Navigate to="/app/journal/finotaur-ai" replace />} />
 <Route path="journal/reports" element={<JournalRoute><JournalReportsLayout /></JournalRoute>}>
   <Route index element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
-  <Route path="ai-summary" element={<JournalFeatureGate feature="ai-summary"><JournalReportsAISummary /></JournalFeatureGate>} />
+  <Route path="ai-summary" element={<JournalFeatureGate feature="ai-summary" hideBanner><JournalReportsAISummary /></JournalFeatureGate>} />
   <Route path="overview" element={<JournalReportsOverview />} />
   <Route path="progress" element={<JournalReportsProgress />} />
   <Route path="day-view" element={<JournalReportsDayView />} />

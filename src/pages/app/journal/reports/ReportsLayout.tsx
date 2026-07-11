@@ -1,26 +1,32 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import ReportsTabsNav from '@/components/journal/reports/ReportsTabsNav';
-import { FinoExplains } from '@/components/fino/FinoExplains';
+import { ReportsFinoExplains } from '@/components/journal/reports/ReportsFinoExplains';
+import { PreviewBanner } from '@/components/routes/JournalFeatureGate';
+import { useSubscription } from '@/hooks/useSubscription';
 
 /**
  * JournalReportsLayout — shared layout for all /app/journal/reports/* sub-routes.
  * Renders the tab nav once; each sub-page is rendered via <Outlet />.
  * Pages manage their own padding (px-4 md:px-6 py-6) — no double-padding here.
+ *
+ * The AI Summary tab is gated (<JournalFeatureGate feature="ai-summary" hideBanner>)
+ * so free-tier users see it in preview mode. Its "Leak Detector — Preview" banner
+ * is rendered HERE, ABOVE the tab nav, so the order reads:
+ *   preview banner → tabs → Fino Explains → report.
+ * (The gate renders it with hideBanner, delegating the banner to this layout.)
  */
 export default function JournalReportsLayout() {
+  const { pathname } = useLocation();
+  const { isFreeJournal, isLoading } = useSubscription();
+
+  const showAiSummaryPreview =
+    !isLoading && isFreeJournal && pathname.startsWith('/app/journal/reports/ai-summary');
+
   return (
     <>
+      {showAiSummaryPreview && <PreviewBanner feature="ai-summary" />}
       <ReportsTabsNav />
-      <div className="relative px-4 pt-4 sm:px-6">
-        <FinoExplains
-          title="What are the Journal Reports?"
-          className="ml-auto w-fit"
-        >
-          Your trading, fully X-rayed. This analytics suite breaks your performance down every way
-          that matters — win rate, risk, day-by-day, by strategy and by setup — so you can see
-          what's working and what's costing you.
-        </FinoExplains>
-      </div>
+      <ReportsFinoExplains />
       <Outlet />
     </>
   );

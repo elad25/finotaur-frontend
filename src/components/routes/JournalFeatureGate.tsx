@@ -28,6 +28,13 @@ type GatedFeature = 'shadow' | 'revenge-radar' | 'trade-copier' | 'risk-manageme
 interface JournalFeatureGateProps {
   feature: GatedFeature;
   children: ReactNode;
+  /**
+   * When true, the gate still flips free-tier users into preview mode (demo
+   * data via JournalPreviewContext) but does NOT render the PreviewBanner —
+   * the surface renders that banner itself in a better position (e.g. the
+   * Journal Reports layout renders it ABOVE the tab nav). Default false.
+   */
+  hideBanner?: boolean;
 }
 
 interface FeatureCopy {
@@ -52,7 +59,7 @@ const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
   },
 };
 
-function PreviewBanner({ feature }: { feature: GatedFeature }) {
+export function PreviewBanner({ feature }: { feature: GatedFeature }) {
   const navigate = useNavigate();
   const copy = FEATURE_COPY[feature];
 
@@ -69,7 +76,7 @@ function PreviewBanner({ feature }: { feature: GatedFeature }) {
   );
 }
 
-export function JournalFeatureGate({ feature, children }: JournalFeatureGateProps) {
+export function JournalFeatureGate({ feature, children, hideBanner = false }: JournalFeatureGateProps) {
   const { isFreeJournal, isLoading } = useSubscription();
 
   // Loading — reuse the same fallback JournalRoute uses so the transition
@@ -84,7 +91,7 @@ export function JournalFeatureGate({ feature, children }: JournalFeatureGateProp
 
   return (
     <JournalPreviewContext.Provider value={{ isPreview: true }}>
-      <PreviewBanner feature={feature} />
+      {!hideBanner && <PreviewBanner feature={feature} />}
       {children}
     </JournalPreviewContext.Provider>
   );
