@@ -555,7 +555,7 @@ const buildTradeSummaries = (
 // Pure SVG, reads only the already-computed win-rate percent — no data logic here.
 const WinRateDonut = ({ percent }: { percent: number }) => {
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-  const size = 64;
+  const size = 72;
   const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -592,7 +592,7 @@ const WinRateDonut = ({ percent }: { percent: number }) => {
           stroke="currentColor"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-ink-primary tabular-nums">
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-ink-primary tabular-nums">
         {safePercent.toFixed(1)}%
       </span>
     </div>
@@ -636,6 +636,13 @@ const PnlSparkline = ({ data }: { data: number[] }) => {
   );
 };
 
+// 🎯 Tiny text-glyph "icon" for the Avg R card — renders the letter R gold
+// inside the same circular chip the other cards use. Accepts (and ignores)
+// the same className/strokeWidth-shaped props StatsCard passes to <Icon>.
+const RGlyph = ({ className, ...rest }: { className?: string; [key: string]: any }) => (
+  <span className={`text-sm font-bold leading-none ${className || ''}`}>R</span>
+);
+
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
 const StatsCard = memo(({
   icon: Icon,
@@ -652,7 +659,7 @@ const StatsCard = memo(({
   icon: any;
   title: string;
   value: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   color: string;
   valueColor?: string;
   loading?: boolean;
@@ -660,7 +667,7 @@ const StatsCard = memo(({
   sparklineData?: number[];
   help?: string;
 }) => (
-  <div className="rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5 transition-colors duration-base hover:border-border-ds-default">
+  <div className="relative rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5 transition-colors duration-base hover:border-border-ds-default">
     <div className="flex items-center justify-between mb-ds-4">
       {/* Title row */}
       <div className="flex items-center justify-between flex-1 min-w-0">
@@ -674,40 +681,55 @@ const StatsCard = memo(({
             </span>
           )}
         </div>
-        {/* Uniform gold-tinted icon chip — all 4 cards, not per-metric color */}
-        <div
-          className="inline-flex items-center justify-center w-8 h-8 rounded-md shrink-0"
-          style={{
-            background: 'rgba(201,166,70,0.12)',
-            border: '1px solid rgba(201,166,70,0.3)',
-          }}
-        >
-          <Icon className="w-4 h-4 text-gold-primary" strokeWidth={1.8} />
-        </div>
+        {/* Uniform gold-tinted icon chip — circular. The Win Rate card has no
+            chip: its donut (rendered below, absolutely positioned) takes the
+            right-side slot instead. */}
+        {donutPercent === undefined && (
+          <div
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full shrink-0"
+            style={{
+              background: 'rgba(201,166,70,0.12)',
+              border: '1px solid rgba(201,166,70,0.3)',
+            }}
+          >
+            <Icon className="w-4 h-4 text-gold-primary" strokeWidth={1.8} />
+          </div>
+        )}
       </div>
     </div>
 
-    <div className="flex items-center justify-between gap-ds-3">
-      <div className="min-w-0">
-        {/* Value — large and dominant */}
-        {loading ? (
-          <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
-        ) : (
-          <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-ink-primary'}`}>
+    <div className={`min-w-0 ${donutPercent !== undefined ? 'pr-20' : ''}`}>
+      {/* Value — large and dominant. Sparkline (Net P&L) sits inline right
+          next to the number, near its baseline — not floated across the card. */}
+      {loading ? (
+        <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
+      ) : (
+        <div className="flex items-end gap-2 mb-2">
+          <div className={`text-3xl font-bold tracking-tight leading-none ${valueColor || 'text-ink-primary'}`}>
             {value}
           </div>
-        )}
+          {sparklineData && sparklineData.length > 0 && (
+            <div className="mb-1">
+              <PnlSparkline data={sparklineData} />
+            </div>
+          )}
+        </div>
+      )}
 
-        {!loading && subtitle && (
-          <div className="text-xs text-ink-secondary font-medium">
-            {subtitle}
-          </div>
-        )}
-      </div>
-
-      {!loading && donutPercent !== undefined && <WinRateDonut percent={donutPercent} />}
-      {!loading && sparklineData && sparklineData.length > 0 && <PnlSparkline data={sparklineData} />}
+      {!loading && subtitle && (
+        <div className="text-xs text-ink-secondary font-medium">
+          {subtitle}
+        </div>
+      )}
     </div>
+
+    {/* Win Rate donut — vertically centered on the card's right edge,
+        replacing the icon chip entirely for this card. */}
+    {!loading && donutPercent !== undefined && (
+      <div className="absolute right-5 top-1/2 -translate-y-1/2">
+        <WinRateDonut percent={donutPercent} />
+      </div>
+    )}
   </div>
 ));
 
@@ -2072,10 +2094,16 @@ const stats = useMemo<Stats>(() => {
         <div className="px-6 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatsCard
-              icon={Target}
+              icon={BarChart3}
               title="Total Trades"
               value={stats.totalTrades.toString()}
-              subtitle={stats.totalTrades > 0 ? `${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE` : undefined}
+              subtitle={
+                stats.totalTrades > 0 ? (
+                  <>
+                    {stats.wins}W / <span className="text-red-400">{stats.losses}L</span> / {stats.breakeven}BE
+                  </>
+                ) : undefined
+              }
               color="rgba(59, 130, 246, 0.1)"
               loading={isStatsLoading}
               help="All trades in the selected period"
@@ -2105,7 +2133,7 @@ const stats = useMemo<Stats>(() => {
             />
 
             <StatsCard
-              icon={Award}
+              icon={RGlyph}
               title="Avg R"
               value={`${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
               subtitle="Per trade"
