@@ -28,6 +28,7 @@ import {
   toDatabentoCacheSymbol,
   isCryptoSymbol,
   isDatabentoCachedSymbol,
+  DatabentoYahooFallbackSource,
 } from '@/components/charting/dataSources';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { IndicatorToolbar } from '@/components/charting/IndicatorToolbar';
@@ -282,7 +283,22 @@ function ChartBody({
   const { markers, markerIcons } = useMemo(() => tradeToMarkers(trade), [trade]);
 
   // Route to the right source based on the raw broker symbol (router knows crypto vs equity)
-  const dataSource = useMemo(() => pickDataSource(trade.symbol), [trade.symbol]);
+  // For Databento-cached futures, wrap in a Yahoo fallback so recently-
+  // journaled trades (not yet in the lagging Databento cache) still chart
+  // via Yahoo's near-real-time continuous-front data. Covered/historical
+  // trades transparently keep using the Databento cache.
+  const dataSource = useMemo(() => {
+    if (isDatabentoCached) {
+      const yahooFallback = toYahooSymbol(trade.symbol, trade.asset_class);
+      if (yahooFallback) {
+        const coverageDeadlineSec = trade.close_at
+          ? Math.floor(new Date(trade.close_at).getTime() / 1000)
+          : Math.floor(Date.now() / 1000);
+        return new DatabentoYahooFallbackSource(yahooFallback, coverageDeadlineSec);
+      }
+    }
+    return pickDataSource(trade.symbol);
+  }, [trade.symbol, trade.asset_class, trade.close_at, isDatabentoCached]);
 
   const focusRange = useMemo(() => {
     // Target ~70 bars visible regardless of timeframe — the trader's eye
