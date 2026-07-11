@@ -245,6 +245,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
         disabled={false}
         statusNote={statusNote}
         historyLimitedNote={historyLimitedNote}
+        hideHeatmapToggle
       />
 
       <div className="relative flex-1 min-h-0">
@@ -469,6 +470,7 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
         disabled={false}
         statusNote={statusNote}
         historyLimitedNote={historyLimitedNote}
+        hideHeatmapToggle
       />
 
       <div className="relative flex-1 min-h-0">

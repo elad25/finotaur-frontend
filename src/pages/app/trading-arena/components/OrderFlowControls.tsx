@@ -67,6 +67,12 @@ interface OrderFlowControlsProps {
    * popover: no border, roomier padding, same flex-wrap behavior.
    */
   variant?: 'bar' | 'menu';
+  /**
+   * Hides the Heatmap toggle. Default false — zero change for existing
+   * callers. Used by tabs whose chart has no DepthMatrixLayer wired up
+   * (e.g. FootprintTab.tsx), where the toggle would otherwise be a no-op.
+   */
+  hideHeatmapToggle?: boolean;
 }
 
 const CELL_MODE_OPTIONS: { value: FootprintCellMode; label: string }[] = [
@@ -106,6 +112,7 @@ export function OrderFlowControls({
   statusNote,
   historyLimitedNote,
   variant = 'bar',
+  hideHeatmapToggle = false,
 }: OrderFlowControlsProps) {
   const title = disabled ? 'Order flow requires a crypto symbol' : historyLimitedNote;
 
@@ -222,16 +229,18 @@ export function OrderFlowControls({
         >
           VP
         </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange({ ...state, showHeatmap: !state.showHeatmap })}
-          className={pillClass(state.showHeatmap, disabled)}
-          aria-pressed={state.showHeatmap}
-          title="Liquidity heatmap — Bookmap-style resting order-book depth"
-        >
-          Heatmap
-        </button>
+        {!hideHeatmapToggle && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange({ ...state, showHeatmap: !state.showHeatmap })}
+            className={pillClass(state.showHeatmap, disabled)}
+            aria-pressed={state.showHeatmap}
+            title="Liquidity heatmap — Bookmap-style resting order-book depth"
+          >
+            Heatmap
+          </button>
+        )}
         <button
           type="button"
           disabled={disabled || !state.enabled}

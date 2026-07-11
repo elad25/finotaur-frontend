@@ -2,23 +2,37 @@
  * Trading Arena — Chart tab
  *
  * Layout: two-pane flex row.
- *   Left  — FinotaurChart (BinanceSource, crypto only) or a placeholder for
- *            non-crypto symbols, with Order Flow controls above it and
- *            optional CVD/Delta sub-panes below it.
+ *   Left  — FinotaurChart, routed through the shared data-source router
+ *            (`pickDataSource` in src/components/charting/dataSources) —
+ *            crypto → BinanceSource, our 14 cached futures roots →
+ *            DatabentoCacheSource, everything else (stocks/forex/uncached
+ *            futures) → YahooFinanceSource. Order Flow controls above it and
+ *            optional CVD/Delta sub-panes below it (crypto only — see below).
  *   Right — Resizable (280-560 px, default 320 px) PaperTradeRail
  *            (paper-trading panel driven by live tick price from
- *            useBinanceOrderBook). Width is dragged via a handle on its
- *            left border and persisted to localStorage.
+ *            useBinanceOrderBook), crypto only. Non-crypto renders the chart
+ *            full-width instead. Width is dragged via a handle on its left
+ *            border and persisted to localStorage.
  *
  * useBinanceOrderBook is called unconditionally (rules of hooks). For non-crypto
  * symbols it connects to Binance with a malformed pair and will sit in 'error'
- * or 'connecting' state — livePrice stays null, which disables the rail.
+ * or 'connecting' state — livePrice stays null, which disables the rail (the
+ * rail itself isn't rendered for non-crypto anyway — see the render below).
  *
  * Order Flow (Phase 3 integration): zoom-driven progressive disclosure on
  * THIS chart — not a separate mode. One BinanceTradeSource + useOrderFlow
  * hook per mount; rowSize auto-suggested from recently loaded bars and
  * adjustable via the row-density control (×2/×4 widen the suggested rowSize).
  * See src/components/charting/orderflow/ for the underlying engine.
+ * Order flow, CVD/Delta and the depth heatmap are crypto-only (no live trades
+ * feed for other asset classes) — useOrderFlow is fed a NOOP_TRADE_SOURCE for
+ * non-crypto symbols so no Binance WebSocket ever opens for a non-crypto
+ * ticker (the OrderFlowControls cluster itself is disabled with a tooltip for
+ * non-crypto — see ArenaToolbar.tsx's `chartControlsDisabled` prop).
+ *
+ * Non-crypto data (Databento cache / Yahoo) may be delayed relative to a live
+ * tick feed — a small "Delayed data" badge is shown near the top of the chart
+ * pane whenever the active symbol isn't crypto.
  *
  * Heatmap toggle (Bookmap-style liquidity heatmap, Phase 4): reuses
  * DepthMatrixLayer + useDepthSlices EXACTLY as wired in MarketScanner.tsx —
@@ -38,14 +52,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
-import { BinanceSource } from '@/components/charting/dataSources';
+import {
+  pickDataSource,
+  isCryptoSymbol,
+  isDatabentoCachedSymbol,
+  toBinanceSymbol,
+  toDatabentoCacheSymbol,
+  toYahooSymbol,
+} from '@/components/charting/dataSources';
 import type { Indicator, Interval } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
 import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTradeSource';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
-import { DEFAULT_FOOTPRINT_CONFIG } from '@/components/charting/orderflow/types';
+import { DEFAULT_FOOTPRINT_CONFIG, type TradeSource } from '@/components/charting/orderflow/types';
 import { resolveImbalancePreset, type FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import {
@@ -65,8 +86,13 @@ interface ChartTabProps {
   onControlsChange: (next: OrderFlowControlsState) => void;
 }
 
-// Singleton — BinanceSource is stateless; one instance is fine.
-const binanceSource = new BinanceSource();
+// Non-crypto symbols have no live trades feed — this inert TradeSource
+// satisfies useOrderFlow's unconditional hook call (rules of hooks) without
+// ever opening a Binance WebSocket for a non-crypto ticker.
+const NOOP_TRADE_SOURCE: TradeSource = {
+  subscribe: () => () => {},
+  backfill: async () => ({ trades: [], coveredFromMs: 0 }),
+};
 
 // Default indicators rendered in the arena chart.
 const DEFAULT_INDICATORS: Indicator[] = [
@@ -99,6 +125,36 @@ function intervalToSec(interval: Interval): number {
 
 function intervalToMs(interval: Interval): number {
   return intervalToSec(interval) * 1000;
+}
+
+// ── Non-crypto interval support guard ────────────────────────────────────
+// Both DatabentoCacheSource.ts's INTERVAL_TO_BUCKET_SECONDS and the
+// chart-bars Edge Function's INTERVAL_SECONDS (YahooFinanceSource's backend)
+// already support every interval ARENA_INTERVALS offers today — this guard
+// is a fail-safe so a future addition to either interval list can never
+// throw from `getBars`; an unsupported selection silently snaps to the
+// nearest interval the resolved source actually supports.
+const DATABENTO_SUPPORTED_INTERVALS = new Set<Interval>([
+  '1m', '2m', '5m', '15m', '30m', '60m', '1h', '4h', '1d',
+]); // mirrors DatabentoCacheSource.ts — 1wk/1mo NOT supported there
+const YAHOO_SUPPORTED_INTERVALS = new Set<Interval>([
+  '1m', '2m', '5m', '15m', '30m', '60m', '1h', '4h', '1d', '1wk', '1mo',
+]); // mirrors supabase/functions/chart-bars's INTERVAL_SECONDS map
+
+function nearestSupportedInterval(interval: Interval, supported: ReadonlySet<Interval>): Interval {
+  if (supported.has(interval)) return interval;
+  const targetSec = intervalToSec(interval);
+  let best: Interval = interval;
+  let bestDiff = Infinity;
+  for (const candidate of Object.keys(INTERVAL_SECONDS) as Interval[]) {
+    if (!supported.has(candidate)) continue;
+    const diff = Math.abs(intervalToSec(candidate) - targetSec);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 // ── Heatmap defaults (Task 2) ────────────────────────────────────────────
@@ -156,6 +212,37 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
 
   const isCrypto = assetClass === 'crypto';
 
+  // ── Data-source routing (Task A) — resolves via the shared router
+  // (pickDataSource) rather than reimplementing crypto/futures-cache/Yahoo
+  // branching here. `symbol` arrives already source-native for its asset
+  // class (TradingArena.tsx normalizes crypto to Binance pairs; futures/
+  // forex/stocks come pre-resolved from SymbolAutocomplete's SYMBOL_UNIVERSE,
+  // e.g. "MNQ=F", "EURUSD=X") — the per-branch mapper calls below are
+  // idempotent passthroughs in that case and only do real work for symbols
+  // that arrive in a raw/contract-code form.
+  const { chartDataSource, chartSymbol } = useMemo(() => {
+    const source = pickDataSource(symbol);
+    let resolvedSymbol: string;
+    if (isCryptoSymbol(symbol)) {
+      resolvedSymbol = toBinanceSymbol(symbol) ?? symbol;
+    } else if (isDatabentoCachedSymbol(symbol)) {
+      resolvedSymbol = toDatabentoCacheSymbol(symbol) ?? symbol;
+    } else {
+      resolvedSymbol = toYahooSymbol(symbol, assetClass) ?? symbol;
+    }
+    return { chartDataSource: source, chartSymbol: resolvedSymbol };
+  }, [symbol, assetClass]);
+
+  // Non-crypto interval safety net (see nearestSupportedInterval above) —
+  // zero effect for crypto (always returns `interval` unchanged).
+  const chartInterval = useMemo(() => {
+    if (isCrypto) return interval;
+    const supported = isDatabentoCachedSymbol(symbol)
+      ? DATABENTO_SUPPORTED_INTERVALS
+      : YAHOO_SUPPORTED_INTERVALS;
+    return nearestSupportedInterval(interval, supported);
+  }, [interval, isCrypto, symbol]);
+
   // Always called unconditionally (hooks rule). For non-crypto, the symbol
   // won't match a Binance pair — lastPrice will stay null, disabling the rail.
   const book = useBinanceOrderBook(symbol);
@@ -211,11 +298,13 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
   const intervalSec = intervalToSec(interval);
 
   // ── Order flow data: one BinanceTradeSource + useOrderFlow per mount ────
+  // Non-crypto gets NOOP_TRADE_SOURCE — no live trades feed exists for those
+  // asset classes, so no Binance WebSocket ever opens for a non-crypto symbol.
   const { store, status, backfillCoveredFromSec } = useOrderFlow({
     symbol,
     intervalSec,
     rowSize,
-    source: BinanceTradeSource,
+    source: isCrypto ? BinanceTradeSource : NOOP_TRADE_SOURCE,
     backfillBars: 40,
   });
 
@@ -321,46 +410,51 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
         {/* Order Flow controls now live in the Arena toolbar's "Chart ▾"
             dropdown (see ArenaToolbar.tsx) — no longer rendered here. */}
         <div className="relative flex-1 min-h-0">
-          {isCrypto ? (
-            <FinotaurChart
-              symbol={symbol}
-              interval={interval}
-              from={from}
-              to={to}
-              dataSource={binanceSource}
-              indicators={DEFAULT_INDICATORS}
-              theme="dark"
-              height="100%"
-              onBarsLoad={handleBarsLoad}
-              footprint={{
-                store,
-                config: {
-                  ...DEFAULT_FOOTPRINT_CONFIG,
-                  cellMode: controls.cellMode,
-                  imbalancePreset: controls.imbalancePreset,
-                  ...resolveImbalancePreset(controls.imbalancePreset),
-                  showStats: controls.showStats,
-                  magnifierEnabled: controls.magnifierEnabled,
-                },
-                visible: orderFlowActive,
-                onStageChange: handleStageChange,
+          {!isCrypto && (
+            <div
+              className="absolute left-2 top-2 z-30 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                color: '#C9A646',
+                background: 'rgba(201,166,70,0.12)',
+                border: '1px solid rgba(201,166,70,0.28)',
               }}
-              mutedCandles={mutedCandles}
-              volumeProfile={{ store, visible: volumeProfileActive }}
-              wallRenderMode={heatmapActive ? 'matrix' : 'series'}
-              depthMatrixColumns={heatmapActive ? depthMatrix.columns : undefined}
-              depthMatrixBinSize={depthMatrix.binSize}
-              depthMatrixSizeFilterPct={HEATMAP_SIZE_FILTER_PCT}
-              depthMatrixFloorUsd={HEATMAP_FLOOR_USD}
-              depthMatrixCandleIntervalMs={intervalToMs(interval)}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-[13px] text-zinc-600">
-                Live chart data — crypto only for now
-              </p>
+              title="This symbol's data comes from a cached/delayed feed, not a live tick stream."
+            >
+              Delayed data
             </div>
           )}
+          <FinotaurChart
+            symbol={chartSymbol}
+            interval={chartInterval}
+            from={from}
+            to={to}
+            dataSource={chartDataSource}
+            indicators={DEFAULT_INDICATORS}
+            theme="dark"
+            height="100%"
+            onBarsLoad={handleBarsLoad}
+            footprint={{
+              store,
+              config: {
+                ...DEFAULT_FOOTPRINT_CONFIG,
+                cellMode: controls.cellMode,
+                imbalancePreset: controls.imbalancePreset,
+                ...resolveImbalancePreset(controls.imbalancePreset),
+                showStats: controls.showStats,
+                magnifierEnabled: controls.magnifierEnabled,
+              },
+              visible: orderFlowActive,
+              onStageChange: handleStageChange,
+            }}
+            mutedCandles={mutedCandles}
+            volumeProfile={{ store, visible: volumeProfileActive }}
+            wallRenderMode={heatmapActive ? 'matrix' : 'series'}
+            depthMatrixColumns={heatmapActive ? depthMatrix.columns : undefined}
+            depthMatrixBinSize={depthMatrix.binSize}
+            depthMatrixSizeFilterPct={HEATMAP_SIZE_FILTER_PCT}
+            depthMatrixFloorUsd={HEATMAP_FLOOR_USD}
+            depthMatrixCandleIntervalMs={intervalToMs(interval)}
+          />
         </div>
 
         {showSubPanes && (
@@ -375,31 +469,38 @@ export function ChartTab({ symbol, interval, assetClass, controls, onControlsCha
         )}
       </div>
 
-      {/* Drag handle — resizes the paper-trading rail (280-560 px). */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panel"
-        onMouseDown={handleRailHandleMouseDown}
-        className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
-          isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
-        }`}
-      />
+      {/* Paper-trading rail (crypto only — driven by useBinanceOrderBook's
+          live tick price, which has nothing to feed for non-crypto symbols).
+          Non-crypto renders the chart pane full-width instead — no broken
+          placeholder rail. */}
+      {isCrypto && (
+        <>
+          {/* Drag handle — resizes the paper-trading rail (280-560 px). */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panel"
+            onMouseDown={handleRailHandleMouseDown}
+            className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+              isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+            }`}
+          />
 
-      {/* Paper-trading right rail */}
-      <div
-        className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
-        style={{ width: railWidth }}
-      >
-        <PaperTradeRail
-          key={symbol}
-          symbol={symbol}
-          livePrice={livePrice}
-          bid={bid}
-          ask={ask}
-          enabled={isCrypto}
-        />
-      </div>
+          <div
+            className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
+            style={{ width: railWidth }}
+          >
+            <PaperTradeRail
+              key={symbol}
+              symbol={symbol}
+              livePrice={livePrice}
+              bid={bid}
+              ask={ask}
+              enabled={isCrypto}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
