@@ -6,7 +6,6 @@
 // =====================================================
 
 import { useState } from 'react';
-import { UserCircle } from 'lucide-react';
 import { useFloorProfile } from '@/features/floor/hooks/useFloorProfile';
 import { FloorProfileDialog } from './FloorProfileDialog';
 
@@ -49,16 +48,24 @@ export function FloorProfileGate({ children }: FloorProfileGateProps) {
             border: '1px solid rgba(201,166,70,0.2)',
           }}
         >
-          {/* Icon */}
+          {/* Icon — FINOTAUR bull mark */}
           <div className="flex justify-center">
             <div
-              className="flex h-14 w-14 items-center justify-center rounded-full"
+              className="flex h-14 w-14 items-center justify-center rounded-full overflow-hidden"
               style={{
-                background: 'rgba(201,166,70,0.12)',
+                background: '#000',
                 border: '1px solid rgba(201,166,70,0.3)',
               }}
             >
-              <UserCircle className="h-7 w-7" style={{ color: '#E8C766' }} />
+              <img
+                src="/favicon.png"
+                alt="FINOTAUR"
+                className="h-8 w-auto object-contain"
+                style={{
+                  maskImage: 'radial-gradient(ellipse at center, black 62%, transparent 88%)',
+                  WebkitMaskImage: 'radial-gradient(ellipse at center, black 62%, transparent 88%)',
+                }}
+              />
             </div>
           </div>
 
