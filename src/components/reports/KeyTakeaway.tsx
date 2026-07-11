@@ -21,6 +21,10 @@ export interface KeyTakeawayProps {
 
 export function KeyTakeaway({ text, loading = false, fallback, className }: KeyTakeawayProps) {
   const body = text?.trim() || fallback;
+  const bullets = body
+    .split('\n')
+    .map((l) => l.replace(/^[-•]\s*/, '').trim())
+    .filter(Boolean);
 
   return (
     <div
@@ -46,7 +50,20 @@ export function KeyTakeaway({ text, loading = false, fallback, className }: KeyT
             <Skeleton className="h-3.5 w-2/3" />
           </div>
         ) : (
-          <p className="font-sans text-sm italic leading-[1.6] text-ink-secondary">{body}</p>
+          <ul className="space-y-ds-1">
+            {bullets.map((line, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-ds-2 text-sm leading-snug text-ink-secondary"
+              >
+                <span
+                  className="mt-[7px] h-1 w-1 flex-shrink-0 rounded-full bg-gold-primary"
+                  aria-hidden="true"
+                />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

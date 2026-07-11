@@ -90,7 +90,8 @@ export default function JournalReportPage() {
     const slidesInput = buildJournalTakeawayInputs(reportData, unlockedKeys);
     fetchTakeaways({
       reportType: 'journal',
-      periodKey: `${reportData.totalTrades}:${reportData.dateRangeLabel}`,
+      // b1 = bullet-format takeaways (2026-07-11) — bumping invalidates same-period cached prose.
+      periodKey: `b1:${reportData.totalTrades}:${reportData.dateRangeLabel}`,
       slides: slidesInput,
     })
       .then((res) => {
