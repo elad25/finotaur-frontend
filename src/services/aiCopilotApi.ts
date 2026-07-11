@@ -3,6 +3,7 @@
 // 🔥 FIXED: Auth header now uses correct localStorage key
 
 import { supabase } from '@/lib/supabase';
+import { FINO_TIER_QUOTAS } from '@/lib/fino-tiers';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
@@ -376,7 +377,9 @@ export const aiCopilotApi = {
       usage: {
         questions_today: data.usage?.questions_today ?? 0,
         tokens_today: data.usage?.tokens_today ?? 0,
-        daily_limit: unlimited ? null : (data.usage?.daily_limit ?? 3),
+        // Client-side fallback when the server omits daily_limit — mirrors the
+        // FREE tier quota (see FINO_TIER_QUOTAS in fino-tiers.ts) so this can't drift.
+        daily_limit: unlimited ? null : (data.usage?.daily_limit ?? FINO_TIER_QUOTAS.free),
         remaining: remaining,
         remaining_questions: remaining,
         tier: tier,

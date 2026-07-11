@@ -26,6 +26,12 @@ export interface InstantAnswer {
 export const INSTANT_QUESTIONS: { key: string; question: string }[] = [
   { key: 'overtrading', question: 'Am I overtrading?' },
   { key: 'win-rate', question: "What's my win rate this month?" },
+  { key: 'pnl-week', question: "What's my P&L this week?" },
+  { key: 'pnl-today', question: "What's my P&L today?" },
+  { key: 'best-setup', question: "What's my best setup?" },
+  { key: 'most-traded-symbol', question: "What's my most traded symbol?" },
+  { key: 'avg-r-multiple', question: "What's my average R multiple?" },
+  { key: 'current-streak', question: "What's my current streak?" },
 ];
 
 /** Minimal structural shape — works with the app's real Trade type. */
@@ -34,6 +40,10 @@ export interface InstantTrade {
   close_at?: string | null;
   pnl?: number | null;
   outcome?: string | null;
+  symbol?: string | null;
+  setup?: string | null;
+  strategy_name?: string | null;
+  actual_r?: number | null;
 }
 
 export function matchInstantQuestion(message: string): string | null {
@@ -54,6 +64,37 @@ function dayKey(iso: string): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC calendar day)
+}
+
+function formatR(n: number): string {
+  const rounded = Math.round(n * 100) / 100;
+  if (rounded === 0) return '0.00R';
+  const sign = rounded > 0 ? '+' : '−';
+  return `${sign}${Math.abs(rounded).toFixed(2)}R`;
+}
+
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function startOfUtcWeek(d: Date): Date {
+  const day = startOfUtcDay(d);
+  const dow = day.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMonday = dow === 0 ? 6 : dow - 1; // days since Monday
+  return new Date(day.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+}
+
+function isClosedOutcome(t: InstantTrade): boolean {
+  if (!t.close_at) return false;
+  const outcome = (t.outcome ?? '').toUpperCase();
+  return outcome === 'WIN' || outcome === 'LOSS' || outcome === 'BE';
+}
+
+function summarizeLastTen(closedSortedDesc: InstantTrade[]): string {
+  const last10 = closedSortedDesc.slice(0, 10);
+  const wins = last10.filter((t) => (t.outcome ?? '').toUpperCase() === 'WIN').length;
+  const losses = last10.filter((t) => (t.outcome ?? '').toUpperCase() === 'LOSS').length;
+  return `${wins}W-${losses}L`;
 }
 
 function computeOvertrading(trades: InstantTrade[]): InstantAnswer | null {
@@ -208,6 +249,231 @@ function computeWinRate(trades: InstantTrade[]): InstantAnswer | null {
   };
 }
 
+function computePnlForPeriod(trades: InstantTrade[], period: 'week' | 'today'): InstantAnswer | null {
+  const now = new Date();
+  const periodStart = period === 'today' ? startOfUtcDay(now) : startOfUtcWeek(now);
+  const minTrades = period === 'today' ? 1 : 2;
+
+  const closed = trades.filter((t) => {
+    if (!isClosedOutcome(t)) return false;
+    const d = new Date(t.close_at as string);
+    return !Number.isNaN(d.getTime()) && d >= periodStart && d <= now;
+  });
+
+  if (closed.length < minTrades) return null;
+
+  const wins = closed.filter((t) => (t.outcome ?? '').toUpperCase() === 'WIN').length;
+  const losses = closed.filter((t) => (t.outcome ?? '').toUpperCase() === 'LOSS').length;
+  const netPnl = closed.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
+  const periodLabel = period === 'today' ? 'today' : 'this week';
+
+  const stats: InstantStat[] = [
+    {
+      label: 'Net P&L',
+      value: formatSignedDollars(netPnl),
+      tone: netPnl > 0 ? 'good' : netPnl < 0 ? 'warn' : 'neutral',
+    },
+    { label: 'Trades closed', value: String(closed.length), tone: 'neutral' },
+    { label: 'Win rate', value: `${winRate.toFixed(0)}%`, tone: winRate >= 50 ? 'good' : 'warn' },
+  ];
+
+  const verdict = `You're ${netPnl >= 0 ? 'up' : 'down'} ${formatSignedDollars(netPnl)} ${periodLabel} across ${closed.length} closed trade${closed.length === 1 ? '' : 's'}, at a ${winRate.toFixed(0)}% win rate.`;
+
+  return {
+    key: period === 'today' ? 'pnl-today' : 'pnl-week',
+    title: period === 'today' ? 'P&L — today' : 'P&L — this week',
+    stats,
+    verdict,
+    followUp: period === 'today' ? 'Why is my P&L today what it is?' : 'Why is my P&L this week what it is?',
+  };
+}
+
+function computeBestSetup(trades: InstantTrade[]): InstantAnswer | null {
+  const closed = trades.filter(isClosedOutcome);
+
+  const byGroup = new Map<string, InstantTrade[]>();
+  for (const t of closed) {
+    const label = (t.setup ?? t.strategy_name ?? '')?.trim();
+    if (!label) continue;
+    const arr = byGroup.get(label) ?? [];
+    arr.push(t);
+    byGroup.set(label, arr);
+  }
+
+  const qualifying = Array.from(byGroup.entries()).filter(([, arr]) => arr.length >= 3);
+  if (qualifying.length === 0) return null;
+
+  const ranked = qualifying
+    .map(([label, arr]) => {
+      const netPnl = arr.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+      const wins = arr.filter((t) => (t.outcome ?? '').toUpperCase() === 'WIN').length;
+      const losses = arr.filter((t) => (t.outcome ?? '').toUpperCase() === 'LOSS').length;
+      const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
+      return { label, netPnl, winRate, count: arr.length };
+    })
+    .sort((a, b) => b.netPnl - a.netPnl);
+
+  const best = ranked[0];
+
+  const stats: InstantStat[] = [
+    {
+      label: 'Net P&L',
+      value: formatSignedDollars(best.netPnl),
+      tone: best.netPnl > 0 ? 'good' : best.netPnl < 0 ? 'warn' : 'neutral',
+    },
+    { label: 'Win rate', value: `${best.winRate.toFixed(0)}%`, tone: best.winRate >= 50 ? 'good' : 'warn' },
+    { label: 'Trades', value: String(best.count), tone: 'neutral' },
+  ];
+
+  const verdict = `"${best.label}" is your best setup — ${best.count} trades netting ${formatSignedDollars(best.netPnl)} at a ${best.winRate.toFixed(0)}% win rate.`;
+
+  return {
+    key: 'best-setup',
+    title: 'Best setup',
+    stats,
+    verdict,
+    followUp: `Why does "${best.label}" work so well for me?`,
+  };
+}
+
+function computeMostTradedSymbol(trades: InstantTrade[]): InstantAnswer | null {
+  if (trades.length < 3) return null;
+
+  const bySymbol = new Map<string, InstantTrade[]>();
+  for (const t of trades) {
+    const sym = (t.symbol ?? '')?.trim().toUpperCase();
+    if (!sym) continue;
+    const arr = bySymbol.get(sym) ?? [];
+    arr.push(t);
+    bySymbol.set(sym, arr);
+  }
+
+  const ranked = Array.from(bySymbol.entries()).sort((a, b) => b[1].length - a[1].length);
+  if (ranked.length === 0 || ranked[0][1].length < 3) return null;
+
+  const [topSymbol, topTrades] = ranked[0];
+  const closed = topTrades.filter(isClosedOutcome);
+  const netPnl = closed.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const pctOfJournal = (topTrades.length / trades.length) * 100;
+
+  const stats: InstantStat[] = [
+    { label: 'Trades', value: String(topTrades.length), tone: 'neutral' },
+    { label: '% of journal', value: `${pctOfJournal.toFixed(0)}%`, tone: 'neutral' },
+    {
+      label: 'Net P&L',
+      value: formatSignedDollars(netPnl),
+      tone: netPnl > 0 ? 'good' : netPnl < 0 ? 'warn' : 'neutral',
+    },
+  ];
+
+  const verdict = `${topSymbol} is your most-traded symbol — ${topTrades.length} trades (${pctOfJournal.toFixed(0)}% of your journal), netting ${formatSignedDollars(netPnl)}.`;
+
+  return {
+    key: 'most-traded-symbol',
+    title: 'Most traded symbol',
+    stats,
+    verdict,
+    followUp: `What's my performance breakdown on ${topSymbol}?`,
+  };
+}
+
+function computeAvgRMultiple(trades: InstantTrade[]): InstantAnswer | null {
+  const withR = trades.filter(
+    (t) => isClosedOutcome(t) && typeof t.actual_r === 'number' && Number.isFinite(t.actual_r),
+  );
+
+  if (withR.length < 3) return null;
+
+  const avgR = withR.reduce((sum, t) => sum + (t.actual_r ?? 0), 0) / withR.length;
+  const positiveR = withR.filter((t) => (t.actual_r ?? 0) > 0);
+  const negativeR = withR.filter((t) => (t.actual_r ?? 0) < 0);
+  const avgWinR =
+    positiveR.length > 0 ? positiveR.reduce((s, t) => s + (t.actual_r ?? 0), 0) / positiveR.length : 0;
+  const avgLossR =
+    negativeR.length > 0 ? negativeR.reduce((s, t) => s + (t.actual_r ?? 0), 0) / negativeR.length : 0;
+
+  const stats: InstantStat[] = [
+    { label: 'Avg R multiple', value: formatR(avgR), tone: avgR > 0 ? 'good' : avgR < 0 ? 'warn' : 'neutral' },
+    { label: 'Avg win R', value: formatR(avgWinR), tone: 'good' },
+    { label: 'Avg loss R', value: formatR(avgLossR), tone: 'warn' },
+  ];
+
+  const verdict = `Across ${withR.length} trades with recorded R, you're averaging ${formatR(avgR)} per trade — winners average ${formatR(avgWinR)}, losers average ${formatR(avgLossR)}.`;
+
+  return {
+    key: 'avg-r-multiple',
+    title: 'Average R multiple',
+    stats,
+    verdict,
+    followUp: 'How can I improve my average R multiple?',
+  };
+}
+
+function computeCurrentStreak(trades: InstantTrade[]): InstantAnswer | null {
+  const closed = trades
+    .filter(isClosedOutcome)
+    .sort((a, b) => new Date(b.close_at as string).getTime() - new Date(a.close_at as string).getTime());
+
+  if (closed.length < 3) return null;
+
+  const mostRecentOutcome = (closed[0].outcome ?? '').toUpperCase();
+  if (mostRecentOutcome !== 'WIN' && mostRecentOutcome !== 'LOSS') {
+    return {
+      key: 'current-streak',
+      title: 'Current streak',
+      stats: [
+        { label: 'Current streak', value: '—', tone: 'neutral' },
+        { label: 'Last trade', value: 'Break-even', tone: 'neutral' },
+        { label: 'Last 10 trades', value: summarizeLastTen(closed), tone: 'neutral' },
+      ],
+      verdict:
+        "Your most recent trade closed break-even, so there's no active winning or losing streak right now.",
+      followUp: 'How do I build a winning streak?',
+    };
+  }
+
+  let streakLength = 0;
+  const streakTrades: InstantTrade[] = [];
+  for (const t of closed) {
+    const outcome = (t.outcome ?? '').toUpperCase();
+    if (outcome !== mostRecentOutcome) break;
+    streakLength++;
+    streakTrades.push(t);
+  }
+
+  const streakPnl = streakTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const isWinStreak = mostRecentOutcome === 'WIN';
+
+  const stats: InstantStat[] = [
+    {
+      label: 'Current streak',
+      value: `${streakLength}${isWinStreak ? 'W' : 'L'}`,
+      tone: isWinStreak ? 'good' : 'warn',
+    },
+    {
+      label: 'Streak P&L',
+      value: formatSignedDollars(streakPnl),
+      tone: streakPnl > 0 ? 'good' : streakPnl < 0 ? 'warn' : 'neutral',
+    },
+    { label: 'Last 10 trades', value: summarizeLastTen(closed), tone: 'neutral' },
+  ];
+
+  const verdict = isWinStreak
+    ? `You're on a ${streakLength}-trade winning streak, netting ${formatSignedDollars(streakPnl)} across those trades.`
+    : `You're on a ${streakLength}-trade losing streak, down ${formatSignedDollars(streakPnl)} across those trades.`;
+
+  return {
+    key: 'current-streak',
+    title: 'Current streak',
+    stats,
+    verdict,
+    followUp: isWinStreak
+      ? "What's driving this winning streak so I can keep it going?"
+      : 'Why am I on this losing streak and how do I break it?',
+  };
+}
+
 // Rendered when the question matched but the journal doesn't have enough
 // trades to compute a real answer. Still zero-cost: without this, the match
 // would fall through to the AI and burn a quota question on an answer the
@@ -235,6 +501,42 @@ export function computeInstantAnswer(key: string, trades: InstantTrade[]): Insta
     return (
       computeWinRate(trades) ??
       insufficientDataAnswer(key, 'Win rate — this month', "What's my win rate this month?")
+    );
+  }
+  if (key === 'pnl-week') {
+    return (
+      computePnlForPeriod(trades, 'week') ??
+      insufficientDataAnswer(key, 'P&L — this week', "What's my P&L this week?")
+    );
+  }
+  if (key === 'pnl-today') {
+    return (
+      computePnlForPeriod(trades, 'today') ??
+      insufficientDataAnswer(key, 'P&L — today', "What's my P&L today?")
+    );
+  }
+  if (key === 'best-setup') {
+    return (
+      computeBestSetup(trades) ??
+      insufficientDataAnswer(key, 'Best setup', "What's my best setup?")
+    );
+  }
+  if (key === 'most-traded-symbol') {
+    return (
+      computeMostTradedSymbol(trades) ??
+      insufficientDataAnswer(key, 'Most traded symbol', "What's my most traded symbol?")
+    );
+  }
+  if (key === 'avg-r-multiple') {
+    return (
+      computeAvgRMultiple(trades) ??
+      insufficientDataAnswer(key, 'Average R multiple', "What's my average R multiple?")
+    );
+  }
+  if (key === 'current-streak') {
+    return (
+      computeCurrentStreak(trades) ??
+      insufficientDataAnswer(key, 'Current streak', "What's my current streak?")
     );
   }
   return null;
