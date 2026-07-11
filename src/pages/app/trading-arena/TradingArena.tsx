@@ -43,6 +43,7 @@ import { ChartTab }      from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
+import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { AccountSelector } from './components/AccountSelector';
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,17 @@ export default function TradingArena() {
               Trading Arena
             </span>
           </div>
+
+          {/* Divider */}
+          <span
+            className="w-px h-5 flex-shrink-0"
+            style={{ background: 'rgba(201,166,70,0.18)' }}
+            aria-hidden="true"
+          />
+
+          {/* Tab switcher — Chart / Order Flow / Liquidity. URL stays the
+              source of truth; this only navigates. */}
+          <ArenaTabSwitcher activeTab={activeTab} />
 
           {/* Divider */}
           <span
