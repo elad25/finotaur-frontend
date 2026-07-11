@@ -1,12 +1,13 @@
 // src/components/landing-new/BeforeAfter.tsx
 // ================================================
 // UNLOCK — "Unlock the power of FINOTAUR"
-// Positive exclusive framing: 3 institutional capabilities decoded.
-// Full reframe from the old "Retail traders fight with hands tied" pain-point pattern.
+// Persona self-selection: two doors in, Trader and Investor.
+// Full reframe from the old 3-capability numbered-card pattern.
 // ================================================
 
 import { motion } from 'framer-motion';
-import { Brain, Zap, LineChart } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Crosshair, Telescope } from 'lucide-react';
 import { SectionShell } from './_shared/SectionShell';
 import { SectionEyebrow } from './_shared/SectionEyebrow';
 import { SectionTitle } from './_shared/SectionTitle';
@@ -16,34 +17,24 @@ import { SectionTitle } from './_shared/SectionTitle';
 // ---------------------------------------------------------------------------
 const unlocks = [
   {
-    number: '01',
-    eyebrow: 'UNLOCK 01',
-    title: 'Institutional Intelligence',
-    description:
-      'Real-time AI analysis trained on flow data, macro signals, and analyst-grade research. The same edge funds pay $25K/year for.',
+    eyebrow: 'FOR THE TRADER',
+    title: 'Trade with an edge',
+    promise: 'Catch the revenge trade before you take it.',
+    description: 'Every tool a serious trader needs, in one terminal.',
     includesLabel: 'INCLUDES',
-    includes: ['AI Engine', 'Top Secret Reports', 'Sector Analyzer'],
-    Icon: Brain,
+    includes: ['Trade Journal', 'AI Coach', 'Risk Management', 'Trade Copier'],
+    ctaLabel: 'Enter as a Trader',
+    Icon: Crosshair,
   },
   {
-    number: '02',
-    eyebrow: 'UNLOCK 02',
-    title: 'Real-Time Edge',
-    description:
-      'Pre-market briefings, live options flow, sector rotation tracking. See where smart money is moving before the headlines.',
+    eyebrow: 'FOR THE INVESTOR',
+    title: 'Invest with clarity',
+    promise: 'One brief every morning. What moved, and why.',
+    description: 'The whole market on one page. The brief that replaces your nine tabs.',
     includesLabel: 'INCLUDES',
-    includes: ['Top Secret', 'Options Flow', 'Live Signals'],
-    Icon: Zap,
-  },
-  {
-    number: '03',
-    eyebrow: 'UNLOCK 03',
-    title: 'Personal Trading System',
-    description:
-      'Your trades, backtested. Your strategies, refined. AI-powered insights from your own data — what works, what doesn\'t, and why.',
-    includesLabel: 'INCLUDES',
-    includes: ['Trading Journal', 'Backtesting', 'AI Insights'],
-    Icon: LineChart,
+    includes: ['Daily Brief', 'Top Secret Reports', 'Insiders & 13F', 'Company Research'],
+    ctaLabel: 'Enter as an Investor',
+    Icon: Telescope,
   },
 ] as const;
 
@@ -53,7 +44,7 @@ const unlocks = [
 type UnlockData = (typeof unlocks)[number];
 
 function UnlockCard({ unlock, index }: { unlock: UnlockData; index: number }) {
-  const { number, eyebrow, title, description, includesLabel, includes, Icon } = unlock;
+  const { eyebrow, title, promise, description, includesLabel, includes, ctaLabel, Icon } = unlock;
 
   return (
     <motion.div
@@ -79,29 +70,21 @@ function UnlockCard({ unlock, index }: { unlock: UnlockData; index: number }) {
         <Icon className="w-4 h-4" />
       </div>
 
-      {/* Eyebrow: UNLOCK 01 */}
+      {/* Eyebrow: FOR THE TRADER */}
       <p className="font-sans uppercase tracking-[0.32em] text-[10px] text-gold-eyebrow font-medium flex items-center gap-1.5">
         <span className="inline-block w-1 h-1 rounded-full bg-gold-primary flex-shrink-0" aria-hidden="true" />
         {eyebrow}
       </p>
 
-      {/* Big number */}
-      <motion.p
-        initial={{ opacity: 0, scale: 0.9 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.3 + index * 0.15, duration: 0.7 }}
-        className="font-wordmark font-medium text-7xl leading-[0.9] tracking-[-0.02em] mt-3
-          bg-gradient-gold-vertical bg-clip-text text-transparent select-none"
-        aria-hidden="true"
-      >
-        {number}
-      </motion.p>
-
       {/* Title */}
-      <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary tracking-[-0.02em] leading-[1.1] mt-3">
+      <h3 className="font-sans font-semibold text-2xl md:text-3xl text-ink-primary tracking-[-0.02em] leading-[1.1] mt-3">
         {title}
       </h3>
+
+      {/* Promise — sans gold accent */}
+      <p className="font-sans font-medium text-gold-primary text-lg md:text-xl leading-[1.4] mt-4">
+        {promise}
+      </p>
 
       {/* Description */}
       <p className="font-sans font-light text-ink-secondary text-base leading-[1.6] mt-4">
@@ -128,6 +111,19 @@ function UnlockCard({ unlock, index }: { unlock: UnlockData; index: number }) {
           ))}
         </div>
       </div>
+
+      {/* CTA — gold text link, not a filled button (one gold button max/viewport) */}
+      <Link
+        to="/auth/register"
+        className="mt-6 flex items-center gap-1.5 text-gold-primary text-sm font-medium
+          tracking-[0.02em] w-fit
+          hover:underline underline-offset-4 transition-colors"
+      >
+        {ctaLabel}
+        <span className="group-hover:translate-x-1 transition-transform inline-block" aria-hidden="true">
+          →
+        </span>
+      </Link>
     </motion.div>
   );
 }
@@ -149,14 +145,14 @@ const BeforeAfter = () => {
 
         {/* Subhead */}
         <p className="font-sans font-light text-ink-secondary text-base md:text-lg max-w-2xl mx-auto mt-4">
-          Three institutional capabilities, decoded for the independent trader. No more guesswork. No more lag.
+          One terminal, two ways in. Choose the edge you came for.
         </p>
       </div>
 
       {/* Cards grid */}
-      <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+      <div className="grid md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
         {unlocks.map((unlock, index) => (
-          <UnlockCard key={unlock.number} unlock={unlock} index={index} />
+          <UnlockCard key={unlock.title} unlock={unlock} index={index} />
         ))}
       </div>
     </SectionShell>

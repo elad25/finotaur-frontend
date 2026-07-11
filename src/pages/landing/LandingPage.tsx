@@ -9,13 +9,14 @@ import Navbar from '@/components/landing-new/Navbar';
 import Hero from '@/components/landing-new/Hero';
 import SocialProof from '@/components/landing-new/SocialProof';
 import BeforeAfter from '@/components/landing-new/BeforeAfter';
-import AISection from '@/components/landing-new/AISection';
 import CoreSystem from '@/components/landing-new/CoreSystem';
 import ProductShowcase from '@/components/landing-new/ProductShowcase';
 import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
+import AISection from '@/components/landing-new/AISection';
+import Testimonials from '@/components/landing-new/Testimonials';
 import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
-import Testimonials from '@/components/landing-new/Testimonials';
+import CopilotSection from '@/components/landing-new/CopilotSection';
 import Vision from '@/components/landing-new/Vision';
 import Pricing from '@/components/landing-new/Pricing';
 import RiskReversal from '@/components/landing-new/RiskReversal';
@@ -130,14 +131,27 @@ const LandingPage = () => {
       <Navbar />
       <Hero />
       <SocialProof />
+
+      {/* Persona split — Trader vs Investor, the two doors in */}
       <BeforeAfter />
-      <AISection />
+
+      {/* How it works — the system underneath both personas */}
       <CoreSystem />
+
+      {/* TRADER lane — journal + tools */}
       <ProductShowcase />
       <JournalToolsTabs />
-      <PartnershipRow />
-      <DesignPhilosophy />
+
+      {/* INVESTOR lane — AI research desk */}
+      <AISection />
+
       <Testimonials />
+      <DesignPhilosophy />
+      <PartnershipRow />
+
+      {/* Finale before pricing — the true Copilot, coming soon */}
+      <CopilotSection />
+
       <Vision />
       <Pricing />
       <RiskReversal />

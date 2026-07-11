@@ -12,6 +12,7 @@ import { Button } from "@/components/ds/Button";
 import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
 import { SectionTitle } from "./_shared/SectionTitle";
+import { JournalDashboardPreview } from "./previews/JournalDashboardPreview";
 
 const journalFeatures = [
   {
@@ -180,6 +181,11 @@ const ProductShowcase = () => {
             }}
           />
         </motion.div>
+      </div>
+
+      {/* ===== PERFORMANCE DASHBOARD PREVIEW — "look inside" the Journal ===== */}
+      <div className="mt-12 lg:mt-16">
+        <JournalDashboardPreview className="max-w-4xl mx-auto" />
       </div>
     </SectionShell>
   );

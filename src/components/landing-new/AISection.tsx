@@ -12,6 +12,7 @@ import { Button } from "@/components/ds/Button";
 import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
 import { SectionTitle } from "./_shared/SectionTitle";
+import { StockAnalyzerPreview } from "./previews/StockAnalyzerPreview";
 
 const aiCapabilities = [
   {
@@ -83,7 +84,7 @@ const AISection = () => {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
-          <SectionEyebrow>AI Co-Pilot</SectionEyebrow>
+          <SectionEyebrow>For The Investor</SectionEyebrow>
           <SectionTitle gradient="split" size="default">
             <span className="text-ink-primary">AI that thinks like an institutional analyst — </span>
             <span className="text-gold-primary">and acts in seconds</span>
@@ -121,7 +122,7 @@ const AISection = () => {
               style={{ background: 'rgba(255,220,140,1)', boxShadow: '0 0 8px rgba(255,220,140,0.8)' }}
               aria-hidden="true"
             />
-            AI Engine · Live
+            AI Research · Live
           </span>
         </div>
 
@@ -243,7 +244,15 @@ const AISection = () => {
           </div>
         </motion.div>
 
-        {/* Hairline divider — AI Engine → capability grid */}
+        {/* Hairline divider — AI Engine → Stock Analyzer preview */}
+        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-12" aria-hidden="true" />
+
+        {/* Stock Analyzer preview — "look inside" the Investor research surface */}
+        <div className="mb-12">
+          <StockAnalyzerPreview className="max-w-3xl mx-auto" />
+        </div>
+
+        {/* Hairline divider — Stock Analyzer preview → capability grid */}
         <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-12" aria-hidden="true" />
 
         {/* 4 AI Capability Cards */}
