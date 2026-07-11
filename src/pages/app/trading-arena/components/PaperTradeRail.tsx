@@ -462,14 +462,24 @@ export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled }: PaperTr
         </button>
       )}
 
-      {/* Slim session line — trades count and win rate, no dollar figures */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5">
-        <p className="text-[11px] text-zinc-500">
-          Trades: {state.stats.totalTrades}
-          {state.stats.totalTrades > 0 && (
-            <> · Win {state.stats.winRate.toFixed(0)}%</>
-          )}
-        </p>
+      {/* Positions + orders counter — what's currently open/working */}
+      <div className="grid grid-cols-2 gap-[7px]">
+        <div className="rounded-lg border border-[#C9A646]/15 bg-black/30 px-3 py-1.5">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-[#6a6a6a]">
+            Positions
+          </p>
+          <p className="text-[13px] font-bold text-[#C9A646] tabular-nums">
+            {activePos ? 1 : 0}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[#C9A646]/15 bg-black/30 px-3 py-1.5">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-[#6a6a6a]">
+            Orders
+          </p>
+          <p className="text-[13px] font-bold text-[#C9A646] tabular-nums">
+            {state.pendingOrders.length}
+          </p>
+        </div>
       </div>
     </div>
   );
