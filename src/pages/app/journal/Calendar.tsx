@@ -12,7 +12,7 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, useRef, memo } from "react";
+import { useEffect, useState, useMemo, useRef, memo, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTitle from "@/components/PageTitle";
 import { Button } from "@/components/ui/button";
@@ -1234,8 +1234,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Net Performance</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Net P&L</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Net P&L</p>
               </div>
               <div className="rounded-lg bg-yellow-500/15 p-2 group-hover:bg-yellow-500/25 transition-colors">
                 <DollarSign className="w-4 h-4 text-yellow-500" />
@@ -1261,8 +1260,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Risk Efficiency</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Profit Factor</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Profit Factor</p>
               </div>
               <div className="rounded-lg bg-yellow-500/15 p-2 group-hover:bg-yellow-500/25 transition-colors">
                 <Target className="w-4 h-4 text-yellow-500" />
@@ -1278,7 +1276,7 @@ export default function JournalCalendar() {
               monthStats.profitFactor >= 1.5 ? 'text-yellow-400' : 
               'text-orange-400'
             }`}>
-              {monthStats.profitFactor >= 2 ? '🔥 Excellent' : monthStats.profitFactor >= 1.5 ? '✓ Good' : '⚠ Improve'}
+              {monthStats.profitFactor >= 2 ? 'Excellent' : monthStats.profitFactor >= 1.5 ? 'Good' : 'Improve'}
             </div>
           </div>
 
@@ -1288,8 +1286,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Success Rate</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Win Rate</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Win Rate</p>
               </div>
               <div className="rounded-lg bg-emerald-500/15 p-2 group-hover:bg-emerald-500/25 transition-colors">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -1311,8 +1308,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Risk Management</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Avg R:R</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Avg R:R</p>
               </div>
               <div className="rounded-lg bg-blue-500/15 p-2 group-hover:bg-blue-500/25 transition-colors">
                 <BarChart3 className="w-4 h-4 text-blue-400" />
@@ -1326,7 +1322,7 @@ export default function JournalCalendar() {
             <div className={`text-xs mt-1.5 font-medium ${
               monthStats.avgRR >= 2 ? 'text-emerald-400' : 'text-yellow-400'
             }`}>
-              {monthStats.avgRR >= 2 ? '💎 Strong' : '📊 Acceptable'}
+              {monthStats.avgRR >= 2 ? 'Strong' : 'Acceptable'}
             </div>
           </div>
 
@@ -1336,8 +1332,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Realized</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Avg R</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Avg R</p>
               </div>
               <div className="rounded-lg bg-purple-500/15 p-2 group-hover:bg-purple-500/25 transition-colors">
                 <Award className="w-4 h-4 text-purple-400" />
@@ -1353,7 +1348,7 @@ export default function JournalCalendar() {
               monthStats.avgR >= 0 ? 'text-yellow-400' : 
               'text-red-400'
             }`}>
-              {monthStats.avgR >= 1 ? '🎯 Great' : monthStats.avgR >= 0 ? '✓ Positive' : '⚠ Losing'}
+              {monthStats.avgR >= 1 ? 'Great' : monthStats.avgR >= 0 ? 'Positive' : 'Losing'}
             </div>
           </div>
 
@@ -1363,8 +1358,7 @@ export default function JournalCalendar() {
           >
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Mental State</span>
-                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Emotional</p>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">Emotional</p>
               </div>
               <div className="rounded-lg bg-purple-500/15 p-2 group-hover:bg-purple-500/25 transition-colors">
                 <Brain className="w-4 h-4 text-purple-400" />
@@ -1381,7 +1375,7 @@ export default function JournalCalendar() {
                 <span className={`text-[10px] font-bold ${
                   emotionalStabilityChange >= 0 ? 'text-emerald-400' : 'text-red-400'
                 }`}>
-                  Stable (↑ {emotionalStabilityChange}%)
+                  Stable ({emotionalStabilityChange >= 0 ? '+' : ''}{emotionalStabilityChange}%)
                 </span>
               </div>
               <p className="text-[9px] text-zinc-500 mt-0.5">from last week</p>
@@ -1449,27 +1443,28 @@ export default function JournalCalendar() {
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
         }`}
       >
-        <div className="flex gap-4 items-start">
-          {/* Main Calendar */}
-          <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 flex-1">
+        <div>
+          {/* Main Calendar — days + inline weekly summary column (desktop) */}
+          <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 sm:p-6">
             {/* Day headers */}
-            <div className="grid grid-cols-7 gap-0.5 sm:gap-2 mb-3">
+            <div className="grid grid-cols-7 xl:grid-cols-[repeat(7,minmax(0,1fr))_13rem] gap-1 sm:gap-2 mb-3">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} className="text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   <span className="sm:hidden">{day.charAt(0)}</span>
                   <span className="hidden sm:inline">{day}</span>
                 </div>
               ))}
+              <div className="hidden xl:block text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">Week</div>
             </div>
 
             {/* Calendar days */}
-            <div className="grid grid-cols-7 gap-0.5 sm:gap-2">
+            <div className="grid grid-cols-7 xl:grid-cols-[repeat(7,minmax(0,1fr))_13rem] gap-1 sm:gap-2">
               {calendarDays.map((day, index) => {
                 if (!day) {
                   return (
                     <div
                       key={`empty-${index}`}
-                      className="aspect-square rounded-xl bg-zinc-950/50"
+                      className="h-16 sm:h-20 xl:h-24 rounded-xl bg-zinc-950/50"
                     />
                   );
                 }
@@ -1480,10 +1475,12 @@ export default function JournalCalendar() {
                 const isHovered = hoveredDate === dateStr;
                 const weekIndex = Math.floor(index / 7);
                 const isWeekHovered = hoveredWeek === weekIndex;
+                const isWeekEnd = (index + 1) % 7 === 0 || index === calendarDays.length - 1;
+                const week = weeklySummaries[weekIndex];
 
                 return (
+                  <Fragment key={dateStr}>
                   <button
-                    key={dateStr}
                     onClick={() => {
                       if (dayData && dayData.tradeCount > 0) {
                         setSelectedDay(dayData);
@@ -1493,7 +1490,7 @@ export default function JournalCalendar() {
                       }
                     }}
                     className={`
-                      aspect-square rounded-xl border p-1 sm:p-2 transition-all duration-200
+                      h-16 sm:h-20 xl:h-24 rounded-xl border p-1 sm:p-2 transition-all duration-200
                       ${getDayColor(dayData, displayMode)}
                       ${isToday ? 'ring-2 ring-yellow-500' : ''}
                       ${isHovered ? 'ring-2 ring-yellow-500 scale-105 shadow-[0_0_25px_rgba(201,166,70,0.5)]' : ''}
@@ -1584,81 +1581,58 @@ export default function JournalCalendar() {
                       </div>
                     )}
                   </button>
+
+                  {/* Weekly summary card — desktop, aligned to this exact week row */}
+                  {isWeekEnd && week && (
+                    <div
+                      onMouseEnter={() => setHoveredWeek(weekIndex)}
+                      onMouseLeave={() => setHoveredWeek(null)}
+                      className={`
+                        hidden xl:flex xl:col-start-8 flex-col justify-center
+                        rounded-[18px] border px-3 py-2 transition-all duration-200 cursor-pointer
+                        ${week.totalPnL > 0
+                          ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5'
+                          : week.totalPnL < 0
+                          ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-600/5'
+                          : 'border-zinc-800 bg-zinc-900/40'}
+                        ${hoveredWeek === weekIndex ? 'ring-2 ring-yellow-500 shadow-lg' : ''}
+                        hover:border-yellow-500/50
+                      `}
+                    >
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+                        Week {week.weekNumber}
+                      </div>
+                      {week.tradeCount > 0 ? (
+                        <>
+                          <div className={`text-lg xl:text-xl font-black leading-tight ${
+                            week.totalPnL > 0 ? 'text-emerald-400' :
+                            week.totalPnL < 0 ? 'text-red-400' :
+                            'text-zinc-400'
+                          }`}>
+                            {week.totalPnL > 0 ? '+' : ''}${formatNumber(week.totalPnL, 0)}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-0.5">
+                            <span>{week.daysTraded}{week.daysTraded === 1 ? ' day' : ' days'}</span>
+                            <span>·</span>
+                            <span>{week.tradeCount}{week.tradeCount === 1 ? ' trade' : ' trades'}</span>
+                            {week.avgR !== 0 && (
+                              <span className={`ml-auto font-semibold ${week.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {formatRValue(week.avgR)}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-zinc-600">No trades</div>
+                      )}
+                    </div>
+                  )}
+                  </Fragment>
                 );
               })}
             </div>
           </Card>
 
-          {/* Weekly Summary Rail - Desktop */}
-          <div className="hidden xl:flex flex-col gap-2 w-64 flex-shrink-0">
-            {weeklySummaries.map((week, weekIndex) => (
-              <div
-                key={week.weekNumber}
-                onMouseEnter={() => setHoveredWeek(weekIndex)}
-                onMouseLeave={() => setHoveredWeek(null)}
-                className={`
-                  rounded-[18px] border p-3 transition-all duration-200 cursor-pointer
-                  ${week.totalPnL > 0 
-                    ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5' 
-                    : week.totalPnL < 0
-                    ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-600/5'
-                    : 'border-zinc-800 bg-zinc-900/40'
-                  }
-                  ${hoveredWeek === weekIndex ? 'ring-2 ring-yellow-500 scale-105 shadow-lg' : ''}
-                  hover:border-yellow-500/50
-                `}
-                style={{
-                  height: 'fit-content',
-                  minHeight: '120px'
-                }}
-              >
-                <div className="space-y-2">
-                  {/* Week Title */}
-                  <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
-                    Week {week.weekNumber}
-                  </div>
-
-                  {/* Total PnL */}
-                  {week.tradeCount > 0 ? (
-                    <>
-                      <div className={`text-2xl font-black ${
-                        week.totalPnL > 0 ? 'text-emerald-400' : 
-                        week.totalPnL < 0 ? 'text-red-400' : 
-                        'text-zinc-400'
-                      }`}
-                        style={{
-                          filter: week.totalPnL > 0 
-                            ? 'drop-shadow(0 2px 6px rgba(0,196,108,0.4))' 
-                            : week.totalPnL < 0
-                            ? 'drop-shadow(0 2px 6px rgba(228,69,69,0.4))'
-                            : 'none'
-                        }}
-                      >
-                        {week.totalPnL > 0 ? '+' : ''}${formatNumber(week.totalPnL, 0)}
-                      </div>
-
-                      {/* 🔥 NEW: Show Avg R for week */}
-                      {week.avgR !== 0 && (
-                        <div className={`text-sm font-semibold ${
-                          week.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          {formatRValue(week.avgR)}
-                        </div>
-                      )}
-
-                      {/* Stats Row */}
-                      <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                        <span>{week.daysTraded} {week.daysTraded === 1 ? 'day' : 'days'}</span>
-                        <span>{week.tradeCount} {week.tradeCount === 1 ? 'trade' : 'trades'}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-sm text-zinc-600 py-4">No trades</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Weekly Summary - Mobile */}
