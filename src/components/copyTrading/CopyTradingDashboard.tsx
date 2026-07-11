@@ -1238,14 +1238,20 @@ export function CopyTradingDashboard() {
           </p>
           <div className="flex flex-wrap items-center justify-end gap-ds-2">
             <AutomationMasterSwitch demo={isDemo} />
-            {/* Lock all accounts */}
+            {/* Lock all accounts — blocked while any account still holds an
+                open position, so a user can never lock themselves into a live
+                trade. They must Flatten All (close positions) first. */}
             <button
               type="button"
-              onClick={() => setShowLockAllConfirm(true)}
-              disabled={isLocking}
+              onClick={() => { if (openPositionsCount > 0) return; setShowLockAllConfirm(true); }}
+              disabled={isLocking || openPositionsCount > 0}
               className="flex items-center gap-ds-2 rounded-lg border border-red-600/60 bg-red-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-red-400 shadow-[0_0_14px_rgba(220,38,38,0.08)] transition-colors hover:border-red-500 hover:bg-red-600/20 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Lock all accounts"
-              title="Flattens and locks every account until the next session open"
+              title={
+                openPositionsCount > 0
+                  ? 'Close your open positions first — use Flatten All. Locking is only allowed with no open positions, so you never get locked into a live trade.'
+                  : 'Flattens and locks every account until the next session open'
+              }
             >
               <Lock className="h-4 w-4 flex-shrink-0" />
               {isLocking ? 'Sending…' : 'Lock all accounts'}
