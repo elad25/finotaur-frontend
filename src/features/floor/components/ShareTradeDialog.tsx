@@ -102,6 +102,7 @@ function buildPreviewItem(
     author_consistency_tier: null,
     author_win_rate: null,
     author_profit_factor: null,
+    show_chart: privacy.showChart ?? true,
   };
 }
 
@@ -229,11 +230,19 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
   const [showSetupOnly, setShowSetupOnly] = useState(false);
   const [revealSize, setRevealSize] = useState(false);
   const [caption, setCaption] = useState('');
+  const [showChart, setShowChart] = useState(true);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const privacy: SharePrivacy = useMemo(
-    () => ({ hidePnl, showSetupOnly, revealSize, caption: caption || undefined, strategyCategory: channel }),
-    [hidePnl, showSetupOnly, revealSize, caption, channel],
+    () => ({
+      hidePnl,
+      showSetupOnly,
+      revealSize,
+      caption: caption || undefined,
+      strategyCategory: channel,
+      showChart,
+    }),
+    [hidePnl, showSetupOnly, revealSize, caption, channel, showChart],
   );
 
   const previewItem = useMemo(
@@ -295,6 +304,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
       setHidePnl(false);
       setShowSetupOnly(false);
       setRevealSize(false);
+      setShowChart(true);
     } catch (err) {
       toast({
         title: err instanceof Error ? err.message : 'Failed to share trade. Please try again.',
@@ -338,6 +348,48 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
                 This is exactly what others will see.
               </p>
             </div>
+
+            {/* Card style — with chart (chart + data) vs without chart (branded business card) */}
+            <div className="flex flex-col items-center gap-ds-2">
+              <SectionLabel>Card style</SectionLabel>
+              <div
+                role="radiogroup"
+                aria-label="Card style"
+                className="inline-flex items-center rounded-full border-[0.5px] border-border-ds-subtle bg-surface-2 p-[3px]"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={showChart}
+                  onClick={() => setShowChart(true)}
+                  className={cn(
+                    'rounded-full px-[12px] py-[5px]',
+                    'font-sans text-[11px] font-medium transition-colors duration-base ease-out',
+                    showChart
+                      ? 'bg-gradient-gold text-surface-base'
+                      : 'text-ink-secondary hover:text-ink-primary',
+                  )}
+                >
+                  With chart
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!showChart}
+                  onClick={() => setShowChart(false)}
+                  className={cn(
+                    'rounded-full px-[12px] py-[5px]',
+                    'font-sans text-[11px] font-medium transition-colors duration-base ease-out',
+                    !showChart
+                      ? 'bg-gradient-gold text-surface-base'
+                      : 'text-ink-secondary hover:text-ink-primary',
+                  )}
+                >
+                  Without chart
+                </button>
+              </div>
+            </div>
+
             {/* Render SharedTradeCard in preview-only mode (reactions/comments disabled by wrapping in a non-interactive skin) */}
             <div className="w-full max-w-2xl mx-auto pointer-events-none select-none opacity-95">
               <SharedTradeCard item={previewItem} />

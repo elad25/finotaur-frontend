@@ -106,6 +106,7 @@ export function useGlobalFeed(filters: FeedFilters = {}): {
         reaction_count: (row.reaction_count as number) ?? 0,
         reactions: (row.reactions as GlobalFeedItem['reactions']) ?? [],
         my_reaction: (row.my_reaction as string | null) ?? null,
+        show_chart: (row.show_chart as boolean) ?? true,
       })) as GlobalFeedItem[];
     },
     getNextPageParam: (lastPage) => {
