@@ -58,6 +58,8 @@ export interface GlobalFeedItem {
   author_win_rate: number | null;
   /** Author's all-time profit factor (gross win / gross loss); NULL when no losses or no trades. */
   author_profit_factor: number | null;
+  /** false = render the no-chart branded business card instead of the chart. */
+  show_chart: boolean;
 }
 
 // ── Feed filters & tags ────────────────────────────────────────────────────────
@@ -163,4 +165,6 @@ export interface SharePrivacy {
   caption?: string;
   /** Strategy category — REQUIRED when sharing to the global feed (server-enforced). */
   strategyCategory?: string | null;
+  /** false = share without the chart, as a branded business card. */
+  showChart?: boolean;
 }

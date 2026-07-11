@@ -34,6 +34,7 @@ import {
   useAddGlobalComment,
 } from '@/features/floor/hooks/useGlobalFeed';
 import { TradeChart } from '@/components/journal/TradeChart';
+import { TradeBusinessCard } from '@/features/floor/components/TradeBusinessCard';
 import type {
   GlobalFeedItem,
   GlobalComment,
@@ -599,8 +600,16 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
         </p>
       )}
 
-      {/* Attached trade — only when a trade is linked */}
-      {item.attached_trade_id && <AttachedTradeCard item={item} />}
+      {/* Attached trade — only when a trade is linked.
+          show_chart === false (explicit) → branded no-chart business card;
+          undefined/true → existing chart+data card (default behavior). */}
+      {item.attached_trade_id && (
+        item.show_chart === false ? (
+          <TradeBusinessCard item={item} />
+        ) : (
+          <AttachedTradeCard item={item} />
+        )
+      )}
 
       {/* Reaction bar */}
       <LocalReactionBar item={item} />
