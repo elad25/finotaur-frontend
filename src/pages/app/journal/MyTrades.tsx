@@ -562,40 +562,35 @@ const WinRateDonut = ({ percent }: { percent: number }) => {
   const offset = circumference - (safePercent / 100) * circumference;
 
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="-rotate-90"
-        aria-hidden="true"
-      >
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          className="text-white/10"
-          stroke="currentColor"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className="text-gold-primary"
-          stroke="currentColor"
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-ink-primary tabular-nums">
-        {safePercent.toFixed(1)}%
-      </span>
-    </div>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="-rotate-90 shrink-0"
+      aria-hidden="true"
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        className="text-white/10"
+        stroke="currentColor"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        className="text-gold-primary"
+        stroke="currentColor"
+      />
+    </svg>
   );
 };
 
@@ -604,15 +599,16 @@ const WinRateDonut = ({ percent }: { percent: number }) => {
 const PnlSparkline = ({ data }: { data: number[] }) => {
   if (data.length < 2) return null;
 
-  const width = 64;
-  const height = 24;
+  const width = 100;
+  const height = 44;
+  const padding = 2;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
 
   const points = data.map((value, index) => {
     const x = (index / (data.length - 1)) * width;
-    const y = height - ((value - min) / range) * height;
+    const y = padding + (1 - (value - min) / range) * (height - padding * 2);
     return [x, y] as const;
   });
 
@@ -620,17 +616,30 @@ const PnlSparkline = ({ data }: { data: number[] }) => {
   const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden="true">
-      {/* Area fill only makes sense with >= 3 points — with exactly 2 points it
-          renders as a triangle, not a trend shape. Line still draws at >= 2. */}
-      {data.length >= 3 && <polygon points={areaPoints} className="fill-emerald-400/10" stroke="none" />}
+    <svg
+      width="100%"
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className="block"
+      style={{ width: '100%' }}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="pnlSparkFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity={0.25} className="text-emerald-400" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity={0} className="text-emerald-400" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill="url(#pnlSparkFill)" stroke="none" />
       <polyline
         points={linePoints}
         fill="none"
         className="stroke-emerald-400"
-        strokeWidth={1.5}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
@@ -699,26 +708,28 @@ const StatsCard = memo(({
     </div>
 
     <div className={`min-w-0 ${donutPercent !== undefined ? 'pr-20' : ''}`}>
-      {/* Value — large and dominant. Sparkline (Net P&L) sits inline right
-          next to the number, near its baseline — not floated across the card. */}
+      {/* Value — large and dominant. */}
       {loading ? (
         <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
       ) : (
-        <div className="flex items-end gap-2 mb-2">
+        <div className="mb-2">
           <div className={`text-3xl font-bold tracking-tight leading-none ${valueColor || 'text-ink-primary'}`}>
             {value}
           </div>
-          {sparklineData && sparklineData.length > 0 && (
-            <div className="mb-1">
-              <PnlSparkline data={sparklineData} />
-            </div>
-          )}
         </div>
       )}
 
       {!loading && subtitle && (
         <div className="text-xs text-ink-secondary font-medium">
           {subtitle}
+        </div>
+      )}
+
+      {/* Mini equity chart (Net P&L) — spans the card's full inner width,
+          rendered below the value+subtitle block, not inline with the number. */}
+      {!loading && sparklineData && sparklineData.length > 0 && (
+        <div className="mt-3 -mb-1">
+          <PnlSparkline data={sparklineData} />
         </div>
       )}
     </div>
