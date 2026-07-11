@@ -6,8 +6,10 @@
  *            (`pickDataSource` in src/components/charting/dataSources) —
  *            crypto → BinanceSource, our 14 cached futures roots →
  *            DatabentoCacheSource, everything else (stocks/forex/uncached
- *            futures) → YahooFinanceSource. Default indicators (EMA 50 /
- *            RSI 14) render on top.
+ *            futures) → YahooFinanceSource. Indicators come from the
+ *            `indicators` prop — a single source of truth held in
+ *            TradingArena.tsx (ArenaToolbar's Indicators ▾ picker), shared
+ *            across tabs so switching tabs keeps the same selection.
  *   Right — Resizable (280-560 px, default 320 px) PaperTradeRail
  *            (paper-trading panel driven by live tick price from
  *            useBinanceOrderBook), crypto only. Non-crypto renders the chart
@@ -54,13 +56,9 @@ interface ChartTabProps {
   interval: ArenaInterval;
   /** Detected asset class for the current symbol. Controls chart source and rail enabled state. */
   assetClass: string;
+  /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
+  indicators: Indicator[];
 }
-
-// Default indicators rendered in the arena chart.
-const DEFAULT_INDICATORS: Indicator[] = [
-  { type: 'EMA', period: 50 },
-  { type: 'RSI', period: 14 },
-];
 
 // Rolling 24-hour window for the chart (from = now − 24h, to = now).
 function nowWindow(): { from: number; to: number } {
@@ -94,7 +92,7 @@ function readStoredRailWidth(): number {
   return RAIL_DEFAULT_WIDTH;
 }
 
-export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
+export function ChartTab({ symbol, interval, assetClass, indicators }: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
 
   const isCrypto = assetClass === 'crypto';
@@ -236,7 +234,7 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
             from={from}
             to={to}
             dataSource={chartDataSource}
-            indicators={DEFAULT_INDICATORS}
+            indicators={indicators}
             theme="dark"
             height="100%"
           />
