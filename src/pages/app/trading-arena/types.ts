@@ -3,7 +3,7 @@
  */
 
 /** Active tab identifiers for the Trading Arena. */
-export type TabId = 'chart' | 'footprint' | 'liquidity';
+export type TabId = 'chart' | 'order-flow' | 'liquidity';
 
 export interface TradingArenaTab {
   id: TabId;
@@ -12,24 +12,24 @@ export interface TradingArenaTab {
 }
 
 export const TRADING_ARENA_TABS: TradingArenaTab[] = [
-  { id: 'chart',      label: 'Chart',     locked: false },
-  { id: 'footprint',  label: 'Footprint', locked: false },
-  { id: 'liquidity',  label: 'Liquidity', locked: false },
+  { id: 'chart',      label: 'Chart',      locked: false },
+  { id: 'order-flow', label: 'Order Flow', locked: false },
+  { id: 'liquidity',  label: 'Liquidity',  locked: false },
 ];
 
 /**
  * Maps the :section URL param to a TabId, defaulting to 'chart'.
  *
  * Legacy/removed section slugs are redirected rather than 404ing:
- *   - 'order-flow' / 'orderflow' (the old Bookmap-style tab) → 'liquidity',
- *     the tab that now owns that Bookmap-style liquidity view.
+ *   - 'orderflow' (no dash) / 'footprint' (the tab's former slug, before the
+ *     2026-07 rename) → 'order-flow', the dedicated footprint chart tab.
  *   - 'tape' / 'cvd' / 'options' / 'futures' / 'forex' (all removed from the
  *     tab bar) → 'chart', the safe default.
  */
 export function toTabId(raw: string | undefined): TabId {
-  const valid: TabId[] = ['chart', 'footprint', 'liquidity'];
+  const valid: TabId[] = ['chart', 'order-flow', 'liquidity'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
-  if (raw === 'order-flow' || raw === 'orderflow') return 'liquidity';
+  if (raw === 'orderflow' || raw === 'footprint') return 'order-flow';
   return 'chart';
 }
 

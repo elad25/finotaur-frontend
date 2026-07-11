@@ -1,35 +1,36 @@
 /**
- * Trading Arena — single-row toolbar (Timeframe / Indicators / Chart)
+ * Trading Arena — single-row toolbar (Timeframe / Indicators)
  *
  * Replaces the old 3-row chart-controls layout (a header row with an inline
  * IntervalSelector pill-strip, plus a wrapping OrderFlowControls strip
- * holding ~25 buttons) with ONE horizontal row of dropdown triggers:
+ * holding ~25 buttons) with ONE horizontal row:
  *   - Timeframe    — always shown. Now a TimeframeMenu (see that file):
  *                    favorite chips + a TradingView-style grouped dropdown
  *                    (SECONDS/MINUTES/HOURS/DAYS) with a "Custom…" dialog.
  *   - Indicators ▾ — chart tab only. PLACEHOLDER: read-only rows for the
  *                    two hardcoded default indicators (EMA 50 / RSI 14).
  *                    No add/remove logic, no state.
- *   - Chart ▾      — chart tab only. Hosts the EXISTING OrderFlowControls
- *                    component (unchanged logic) as the popover body, in
- *                    its 'menu' variant.
  *
- * Dropdown behavior is a tiny local implementation — a single `openMenu`
- * state here plus one shared document mousedown/Escape listener. No new
- * dependency (no Radix Popover etc. — that's an intentional scope choice
- * for this stub-quality toolbar).
+ * The Chart tab is a plain candlestick chart (2026-07 restructure) — no
+ * order-flow controls apply to it anymore. The full OrderFlowControls
+ * cluster now lives entirely on the dedicated Order Flow tab (see
+ * FootprintTab.tsx), which manages its own controls state internally and
+ * does not go through this toolbar.
+ *
+ * Dropdown behavior (Indicators ▾) is a tiny local implementation — a
+ * single `openMenu` state here plus one shared document mousedown/Escape
+ * listener. No new dependency (no Radix Popover etc. — that's an intentional
+ * scope choice for this stub-quality toolbar).
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { FootprintCellMode } from '@/components/charting/orderflow/types';
 import type { TabId } from '../types';
 import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
-import { OrderFlowControls, type OrderFlowControlsState } from './OrderFlowControls';
 import { TimeframeMenu } from './TimeframeMenu';
 
-type MenuId = 'indicators' | 'chart';
+type MenuId = 'indicators';
 
 interface ArenaToolbarProps {
   interval: ArenaInterval;
@@ -37,36 +38,13 @@ interface ArenaToolbarProps {
   /** Which timeframe sections are usable for the active symbol/asset class. */
   intervalCapability: IntervalCapability;
   activeTab: TabId;
-  controls: OrderFlowControlsState;
-  onControlsChange: (next: OrderFlowControlsState) => void;
-  /** Passed straight through to OrderFlowControls' `disabled` (non-crypto symbol). */
-  chartControlsDisabled: boolean;
-  /** Passed straight through to OrderFlowControls — optional, see ChartTab wiring note. */
-  statusNote?: string;
-  historyLimitedNote?: string;
 }
-
-// Display label for the Chart ▾ trigger. Mirrors OrderFlowControls' internal
-// CELL_MODE_OPTIONS labels — kept as a small local map here rather than
-// exporting that internal constant; both lists are small and stable.
-const CELL_MODE_LABELS: Record<FootprintCellMode, string> = {
-  bidAsk: 'Bid×Ask',
-  delta: 'Delta',
-  volume: 'Volume',
-  trades: 'Trades',
-  volumeDelta: 'Vol+Δ',
-};
 
 export function ArenaToolbar({
   interval,
   onIntervalChange,
   intervalCapability,
   activeTab,
-  controls,
-  onControlsChange,
-  chartControlsDisabled,
-  statusNote,
-  historyLimitedNote,
 }: ArenaToolbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +75,7 @@ export function ArenaToolbar({
     };
   }, [openMenu]);
 
-  // Indicators ▾ and Chart ▾ only apply to the footprint chart itself.
+  // Indicators ▾ only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
 
   return (
@@ -135,24 +113,6 @@ export function ArenaToolbar({
               </div>
               <span className="px-2 pt-1 text-[10px] text-[#555555]">More coming soon</span>
             </div>
-          </ToolbarTrigger>
-
-          {/* Chart ▾ — hosts the existing OrderFlowControls as the popover body */}
-          <ToolbarTrigger
-            caption="Chart"
-            value={CELL_MODE_LABELS[controls.cellMode]}
-            isOpen={openMenu === 'chart'}
-            onClick={() => toggleMenu('chart')}
-            panelClassName="max-w-[560px]"
-          >
-            <OrderFlowControls
-              variant="menu"
-              state={controls}
-              onChange={onControlsChange}
-              disabled={chartControlsDisabled}
-              statusNote={statusNote}
-              historyLimitedNote={historyLimitedNote}
-            />
           </ToolbarTrigger>
         </>
       )}
