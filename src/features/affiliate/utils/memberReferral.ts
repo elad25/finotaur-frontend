@@ -11,6 +11,11 @@
 // Row is looked up on the `affiliates` table, scoped to this member by
 // `affiliate_type = 'member'` (distinct from the legacy influencer-affiliate
 // rows, which use `affiliate_type = 'regular' | 'admin'`).
+//
+// v3.1.0 "Referral beats intro": the member's personal code now gives 30%
+// off the first 3 months of FINOTAUR Trader (beats the organic TRADER30
+// intro promo's 30% off 2 months). Members may optionally choose their own
+// code before it's provisioned — see `provisionMemberReferralCode`.
 // =====================================================
 
 import { supabase } from '@/lib/supabase';
@@ -41,6 +46,9 @@ export interface ProvisionMemberReferralData {
 export type ProvisionMemberReferralError =
   | { kind: 'disabled' }
   | { kind: 'not_paying' }
+  | { kind: 'invalid_code'; message: string }
+  | { kind: 'reserved_code'; message: string }
+  | { kind: 'code_taken'; message: string }
   | { kind: 'unknown'; message: string };
 
 // NOTE: discriminant is a string literal (`status`), not a boolean `ok`
@@ -65,7 +73,9 @@ export interface MemberReferralListItem {
 }
 
 // Default discount shown before the edge function confirms the real value.
-export const DEFAULT_MEMBER_DISCOUNT_PERCENT = 20;
+// 30% off the first 3 months of FINOTAUR Trader (v3.1.0 — was 20%, first
+// payment only).
+export const DEFAULT_MEMBER_DISCOUNT_PERCENT = 30;
 
 const REFERRAL_LINK_BASE = 'https://finotaur.com/ref';
 
@@ -150,10 +160,22 @@ export async function fetchMemberReferralRow(userId: string): Promise<MemberRefe
 }
 
 /** Invokes `create-whop-promo` with `{ mode: 'member' }` using the caller's
- * own JWT (supabase-js attaches the current session automatically). */
-export async function provisionMemberReferralCode(): Promise<ProvisionMemberReferralResult> {
+ * own JWT (supabase-js attaches the current session automatically).
+ *
+ * @param requestedCode Optional self-chosen code (uppercased + trimmed
+ * before sending). Only honored the first time a member provisions their
+ * code — once `affiliates.affiliate_code` already exists, the edge
+ * function's `ensure_member_affiliate()` RPC ignores it (idempotency). */
+export async function provisionMemberReferralCode(
+  requestedCode?: string,
+): Promise<ProvisionMemberReferralResult> {
+  const normalizedRequestedCode = requestedCode?.trim().toUpperCase();
+
   const { data, error } = await supabase.functions.invoke('create-whop-promo', {
-    body: { mode: 'member' },
+    body: {
+      mode: 'member',
+      ...(normalizedRequestedCode ? { requested_code: normalizedRequestedCode } : {}),
+    },
   });
 
   if (error) {
@@ -163,6 +185,15 @@ export async function provisionMemberReferralCode(): Promise<ProvisionMemberRefe
     }
     if (httpStatus === 403 && bodyError === 'not_paying') {
       return { status: 'error', error: { kind: 'not_paying' } };
+    }
+    if (httpStatus === 400 && bodyError === 'invalid_code') {
+      return { status: 'error', error: { kind: 'invalid_code', message: 'invalid_code' } };
+    }
+    if (httpStatus === 400 && bodyError === 'reserved_code') {
+      return { status: 'error', error: { kind: 'reserved_code', message: 'reserved_code' } };
+    }
+    if (httpStatus === 409 && bodyError === 'code_taken') {
+      return { status: 'error', error: { kind: 'code_taken', message: 'code_taken' } };
     }
     return {
       status: 'error',

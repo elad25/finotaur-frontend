@@ -11,6 +11,23 @@
 //    affiliates.whop_promo_id, and record promo_provision_error/promo_provision_attempts
 //    on Whop API failure instead of throwing.
 //
+// 🔥 v3.1.0 — "Referral beats intro": member personal codes now beat the
+//  organic intro offer.
+//  - Member promo default discount 20% -> 30%, number_of_intervals 1 -> 2
+//    (with the initial-fee discount this yields 3 discounted months, one
+//    more than the organic TRADER30 promo's 2 discounted months).
+//  - Member promos are now restricted to the hidden Trader plan
+//    (plan_ids: [MEMBER_REFERRAL_PLAN_ID]) — admin promos are UNCHANGED
+//    (still number_of_intervals: 1, no plan restriction).
+//  - createWhopPromoCode() takes an options bag (numberOfIntervals, planIds)
+//    instead of a hardcoded interval, so admin vs member behavior diverges
+//    without duplicating the function.
+//  - Member path now accepts an optional `requested_code` in the request
+//    body — lets a member choose their own code (before their affiliates
+//    row exists). Validated server-side (format + reserved list) and again
+//    by ensure_member_affiliate() (format + reserved list + uniqueness).
+//    Ignored once the member already has a code (idempotency unchanged).
+//
 // FLOW (admin path — unchanged):
 // 1. Admin approves affiliate application in the dashboard
 // 2. Frontend calls this Edge Function with affiliate details
@@ -43,6 +60,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Hidden Trader plan — member personal referral codes are restricted to
+// this plan ONLY (v3.1.0). Must match the frontend's shared constant.
+const MEMBER_REFERRAL_PLAN_ID = 'plan_u6VqqKZlb0axR'
+
+// Reserved codes a member may not self-select as their personal referral
+// code — mirrors the frontend/DB copy of this list (keep all three in sync).
+const RESERVED_CODES = new Set([
+  'TRADER30', 'INTRO30', 'FINOTAUR50', 'WELCOMEBACK', 'WELCOME',
+  'FINOTAUR', 'TRADER', 'INTRO', 'ADMIN', 'TEST',
+])
+
+const CUSTOM_CODE_PATTERN = /^[A-Z0-9]{4,15}$/
+
+type RequestedCodeValidation =
+  | { ok: true; code: string }
+  | { ok: false; error: 'invalid_code' | 'reserved_code' }
+
+function validateRequestedCode(raw: string): RequestedCodeValidation {
+  const code = raw.trim().toUpperCase()
+  if (!CUSTOM_CODE_PATTERN.test(code)) {
+    return { ok: false, error: 'invalid_code' }
+  }
+  if (RESERVED_CODES.has(code)) {
+    return { ok: false, error: 'reserved_code' }
+  }
+  return { ok: true, code }
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -56,6 +101,7 @@ interface CreatePromoRequest {
   // Member path (new, Phase 1)
   mode?: 'member'
   user_id?: string             // Only honored on the service-role auth path
+  requested_code?: string      // Member path only — optional self-chosen code (v3.1.0)
 }
 
 interface WhopPromoResponse {
@@ -85,20 +131,34 @@ function timingSafeEqual(a: string, b: string): boolean {
 // WHOP API FUNCTION
 // ============================================
 
+interface CreateWhopPromoOptions {
+  // Whop's number_of_intervals: how many billing cycles the discount applies
+  // to. Admin path default = 1 (first payment only — locked pricing rule:
+  // list price fixed, promos are a first-payment acquisition lever, same
+  // semantics as WELCOME). Member path (v3.1.0) uses 2, which combined with
+  // the initial-fee discount yields 3 discounted months.
+  numberOfIntervals?: number
+  // Optional plan restriction. Admin promos are unrestricted (undefined).
+  // Member personal codes (v3.1.0) are restricted to the hidden Trader plan.
+  planIds?: string[]
+}
+
 async function createWhopPromoCode(
   apiKey: string,
   companyId: string,
   code: string,
   discountPercent: number,
   affiliateId: string,
-  affiliateName?: string
+  affiliateName?: string,
+  options: CreateWhopPromoOptions = {}
 ): Promise<WhopPromoResponse> {
+  const { numberOfIntervals = 1, planIds } = options
 
   console.log(`[Whop API] Creating promo code: ${code} with ${discountPercent}% discount`)
   console.log(`[Whop API] Company ID: ${companyId}`)
 
   // 🔥 v2.1 FIX: Use high stock number instead of 0
-  const requestBody = {
+  const requestBody: Record<string, unknown> = {
     code: code.toUpperCase(),           // Whop codes are case-insensitive
     amount_off: discountPercent,        // discount percent
     base_currency: 'usd',
@@ -106,12 +166,12 @@ async function createWhopPromoCode(
     new_users_only: true,               // new users only
     stock: 999999,                      // 🔥 FIX: High number instead of 0!
     unlimited_stock: true,              // unlimited usage
-    number_of_intervals: 1,             // 🔴 FIRST PAYMENT ONLY (was 0 = forever).
-                                        // A forever discount permanently cuts the
-                                        // referred cohort's LTGP — locked pricing rule:
-                                        // list price fixed, promos are a first-payment
-                                        // acquisition lever (same semantics as WELCOME).
+    number_of_intervals: numberOfIntervals,
   };
+
+  if (planIds && planIds.length > 0) {
+    requestBody.plan_ids = planIds
+  }
 
   console.log(`[Whop API] Request body:`, JSON.stringify(requestBody, null, 2));
 
@@ -149,7 +209,8 @@ async function createWhopPromoCode(
 
 async function handleMemberPromo(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  requestedCode?: string
 ): Promise<Response> {
   const jsonResponse = (body: unknown, status: number) =>
     new Response(JSON.stringify(body), {
@@ -174,17 +235,42 @@ async function handleMemberPromo(
 
   const discountPercent = Number.isInteger(config.friend_discount_percent)
     ? (config.friend_discount_percent as number)
-    : 20
+    : 30
+
+  // ============================================
+  // 1b. OPTIONAL SELF-CHOSEN CODE — validate BEFORE calling the RPC.
+  // Ignored (server-side, via the RPC) once the member already has a code —
+  // that idempotency check lives inside ensure_member_affiliate().
+  // ============================================
+  let validatedRequestedCode: string | undefined
+  if (typeof requestedCode === 'string' && requestedCode.trim().length > 0) {
+    const validation = validateRequestedCode(requestedCode)
+    if (!validation.ok) {
+      return jsonResponse({ error: validation.error }, 400)
+    }
+    validatedRequestedCode = validation.code
+  }
 
   // ============================================
   // 2. ENSURE THE MEMBER'S AFFILIATE ROW EXISTS (idempotent)
   // ============================================
   const { data: ensureResult, error: ensureError } = await supabase.rpc('ensure_member_affiliate', {
     p_user_id: userId,
+    p_requested_code: validatedRequestedCode ?? null,
   })
 
   if (ensureError) {
     console.error('[create-whop-promo] ensure_member_affiliate RPC error:', ensureError)
+    const rpcMessage = ensureError.message ?? ''
+    if (rpcMessage.includes('code_taken')) {
+      return jsonResponse({ error: 'code_taken' }, 409)
+    }
+    if (rpcMessage.includes('reserved_code')) {
+      return jsonResponse({ error: 'reserved_code' }, 400)
+    }
+    if (rpcMessage.includes('invalid_code')) {
+      return jsonResponse({ error: 'invalid_code' }, 400)
+    }
     return jsonResponse({ ok: false, error: ensureError.message }, 403)
   }
 
@@ -248,7 +334,8 @@ async function handleMemberPromo(
       affiliateRow.coupon_code,
       discountPercent,
       affiliateRow.id,
-      affiliateRow.display_name
+      affiliateRow.display_name,
+      { numberOfIntervals: 2, planIds: [MEMBER_REFERRAL_PLAN_ID] }
     )
 
     const { error: updateError } = await supabase
@@ -326,7 +413,7 @@ serve(async (req) => {
       if (!body.user_id) {
         throw new Error('Missing required field: user_id')
       }
-      return await handleMemberPromo(supabase, body.user_id)
+      return await handleMemberPromo(supabase, body.user_id, body.requested_code)
     }
 
     // ============================================
@@ -339,7 +426,7 @@ serve(async (req) => {
       if (authError || !user) {
         throw new Error('Unauthorized: Invalid token')
       }
-      return await handleMemberPromo(supabase, user.id)
+      return await handleMemberPromo(supabase, user.id, body.requested_code)
     }
 
     // ============================================

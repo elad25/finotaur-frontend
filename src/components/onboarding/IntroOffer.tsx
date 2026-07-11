@@ -16,7 +16,7 @@ import { X, Gift, Clock, ArrowRight, Crown, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 import { supabase } from '@/lib/supabase';
-import { INTRO_OFFER } from '@/lib/whop-config';
+import { INTRO_OFFER, REFERRAL_OFFER } from '@/lib/whop-config';
 import { track } from '@/lib/analytics';
 import { toast } from 'sonner';
 
@@ -58,6 +58,42 @@ function writeCache(state: IntroOfferCache): void {
     localStorage.setItem(CACHE_KEY, JSON.stringify(state));
   } catch {
     // localStorage unavailable (private mode, quota) — cache is best-effort only.
+  }
+}
+
+// =====================================================
+// REFERRAL VARIANT — reads the same on-device affiliate/referral code
+// used by checkout (src/hooks/useWhopCheckout.ts:getStoredAffiliateData /
+// STORAGE_KEYS). Read-only here — does not mutate or clear storage; the
+// actual checkout flow owns expiry cleanup.
+// =====================================================
+
+const REFERRAL_STORAGE_KEYS = {
+  code: 'finotaur_affiliate_code',
+  expires: 'finotaur_affiliate_expires',
+  fullData: 'finotaur_affiliate',
+};
+
+function getStoredReferralCode(): string | null {
+  try {
+    const expires = localStorage.getItem(REFERRAL_STORAGE_KEYS.expires);
+    if (expires && Number(expires) < Date.now()) return null;
+
+    let code = localStorage.getItem(REFERRAL_STORAGE_KEYS.code);
+    if (!code) {
+      const raw = localStorage.getItem(REFERRAL_STORAGE_KEYS.fullData);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          code = parsed?.code || null;
+        } catch {
+          // Malformed JSON — ignore, no referral code.
+        }
+      }
+    }
+    return code || null;
+  } catch {
+    return null;
   }
 }
 
@@ -126,6 +162,9 @@ export default function IntroOffer() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [pulseGift, setPulseGift] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [variant, setVariant] = useState<'organic' | 'referred'>('organic');
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referrerName, setReferrerName] = useState<string | null>(null);
   const expiredHandledRef = useRef(false);
   const shownTrackedRef = useRef(false);
 
@@ -141,6 +180,39 @@ export default function IntroOffer() {
       toast.error('Checkout failed', { description: error.message });
     },
   });
+
+  // ─── Referral variant check — independent of the gating state machine ──
+  // Reads the stored referral code (if any), validates it, and swaps to the
+  // referred variant (3 months, friend's code) when it's valid and carries
+  // a live promo. Any failure (no code, invalid code, RPC error) silently
+  // falls back to the organic variant — no error UI.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkReferral() {
+      const code = getStoredReferralCode();
+      if (!code) return;
+
+      try {
+        const { data, error } = await supabase.rpc('validate_referral_code', { p_code: code });
+        if (cancelled || error) return;
+
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row?.is_valid && row?.has_promo) {
+          setVariant('referred');
+          setReferralCode(code);
+          setReferrerName(row.referrer_name ?? null);
+        }
+      } catch {
+        // RPC failure — silently fall back to the organic variant.
+      }
+    }
+
+    void checkReferral();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ─── Load state on mount (and when the user resolves) ────────────────
   useEffect(() => {
@@ -317,9 +389,14 @@ export default function IntroOffer() {
   const handleMinimize = () => setIsMinimized(true);
   const handleReopen = () => setIsMinimized(false);
 
+  // Referred users get the friend's personal promo code instead of TRADER30,
+  // and a bigger discount window (3 months vs 2).
+  const activeCode = variant === 'referred' && referralCode ? referralCode : INTRO_OFFER.promoCode;
+  const activeMonths = variant === 'referred' ? REFERRAL_OFFER.discountedCycles : INTRO_OFFER.discountedCycles;
+
   const handleCopyCode = async () => {
     try {
-      await navigator.clipboard.writeText(INTRO_OFFER.promoCode);
+      await navigator.clipboard.writeText(activeCode);
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
     } catch {
@@ -332,7 +409,7 @@ export default function IntroOffer() {
       planName: 'premium',
       billingInterval: 'monthly',
       overrideWhopPlanId: INTRO_OFFER.whopPlanId,
-      discountCode: INTRO_OFFER.promoCode,
+      discountCode: activeCode,
     });
   };
 
@@ -465,7 +542,7 @@ export default function IntroOffer() {
             <h2 className="text-2xl font-bold mb-2">
               <span className="text-white">One-time welcome offer: </span>
               <span style={{ background: 'linear-gradient(135deg, #F4D97B, #C9A646)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                30% Off Your First 3 Months
+                30% Off Your First {activeMonths} Months
               </span>
             </h2>
 
@@ -476,7 +553,7 @@ export default function IntroOffer() {
                 style={{ background: 'rgba(201,166,70,0.08)', border: '1px dashed rgba(201,166,70,0.4)' }}
               >
                 <span className="text-lg font-sans font-semibold tracking-widest" style={{ color: '#F4D97B' }}>
-                  {INTRO_OFFER.promoCode}
+                  {activeCode}
                 </span>
                 <button
                   type="button"
@@ -491,6 +568,11 @@ export default function IntroOffer() {
               <p className="text-zinc-500 text-xs mt-2">
                 {codeCopied ? 'Copied!' : 'Applied automatically at checkout'}
               </p>
+              {variant === 'referred' && (
+                <p className="text-xs mt-1" style={{ color: '#F4D97B' }}>
+                  {referrerName ? `Referral bonus applied — invited by ${referrerName}` : 'Referral bonus applied'}
+                </p>
+              )}
             </div>
 
             {/* Price */}
@@ -500,7 +582,7 @@ export default function IntroOffer() {
             >
               <span className="text-sm text-zinc-500 line-through">${INTRO_OFFER.fullPrice.toFixed(2)}/mo</span>
               <span className="text-lg font-sans font-semibold tabular-nums tracking-[-0.01em]" style={{ color: '#F4D97B' }}>
-                ${INTRO_OFFER.introPrice.toFixed(2)}/mo for 3 months
+                ${INTRO_OFFER.introPrice.toFixed(2)}/mo for {activeMonths} months
               </span>
             </div>
 
@@ -549,7 +631,7 @@ export default function IntroOffer() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  Claim 30% Off — 3 Months
+                  Claim 30% Off — {activeMonths} Months
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

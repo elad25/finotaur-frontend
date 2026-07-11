@@ -238,9 +238,9 @@ export default function ReferFriendPage() {
           <div className="space-y-1.5 max-w-sm">
             <p className="text-h4 text-ink-primary">Referral codes are a paid member benefit</p>
             <p className="text-small leading-relaxed text-ink-secondary">
-              Upgrade to get your personal referral code — your friend gets{' '}
-              {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first payment, and you earn{' '}
-              {DEFAULT_MEMBER_DISCOUNT_PERCENT}% of every payment they make for their first 12 months.
+              Upgrade to get your personal referral code — your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}%
+              off their first 3 months of FINOTAUR Trader, and you earn 20% of every
+              payment they make for their first 12 months.
             </p>
           </div>
           <Button asChild variant="gold" size="default">
@@ -275,7 +275,7 @@ export default function ReferFriendPage() {
     <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-h1 text-ink-primary">The Funded Friend Deal</h1>
-        <p className="mt-1 text-small text-ink-secondary">Give 20%, Get 20% for 12 months</p>
+        <p className="mt-1 text-small text-ink-secondary">Give 30%, Get 20% for 12 months</p>
       </div>
 
       {/* Hero — code + share link + terms */}
@@ -314,8 +314,8 @@ export default function ReferFriendPage() {
         </div>
 
         <p className="text-small leading-relaxed text-ink-tertiary">
-          Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first payment. You earn{' '}
-          {DEFAULT_MEMBER_DISCOUNT_PERCENT}% of every payment they make for their first 12 months.
+          Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months of FINOTAUR Trader. You earn{' '}
+          20% of every payment they make for their first 12 months.
         </p>
       </Card>
 
