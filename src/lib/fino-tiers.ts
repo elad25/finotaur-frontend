@@ -121,15 +121,15 @@ const HOME_CHIPS_BY_TIER: Record<FinoTierKey, FinoHomeChip[]> = {
 
 /**
  * Chips for the home-page Ask Fino input. Journal coaching chips lead when the
- * user actually has a journal to coach on; tier chips follow; "Ask Fino
- * anything" always closes the row.
+ * user actually has a journal to coach on; tier chips follow; a practical
+ * catch-all ("What should I focus on today?") always closes the row.
  */
 export function getFinoHomeChips(tier: FinoTierKey, hasActiveJournal: boolean): FinoHomeChip[] {
   const tierChips = HOME_CHIPS_BY_TIER[tier];
   const chips = hasActiveJournal
     ? [...JOURNAL_HOME_CHIPS, ...tierChips]
     : [...tierChips];
-  return [...chips.slice(0, 4), { label: 'Ask Fino anything' }];
+  return [...chips.slice(0, 4), { label: 'What should I focus on today?', query: 'What should I focus on today?' }];
 }
 
 const FREE_PROMPTS: FinoPromptChip[][] = [
