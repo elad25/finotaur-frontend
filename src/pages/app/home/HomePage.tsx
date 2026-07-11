@@ -280,8 +280,9 @@ export default function HomePage() {
               </Button>
             </div>
 
-            {/* Prompt chips */}
-            <div className="flex flex-wrap gap-2 mt-ds-3">
+            {/* Prompt chips — single row (never wrap to a 2nd line; scroll
+                horizontally on narrow widths instead) to keep the card compact. */}
+            <div className="flex flex-nowrap gap-2 mt-ds-3 overflow-x-auto">
               {promptChips.map((chip) => (
                 <button
                   key={chip.label}
@@ -294,6 +295,7 @@ export default function HomePage() {
                     }
                   }}
                   className="
+                    shrink-0 whitespace-nowrap
                     rounded-sm border border-border-ds-subtle px-3 py-1.5
                     text-xs text-ink-secondary
                     hover:text-gold-primary hover:border-gold-border
@@ -311,7 +313,7 @@ export default function HomePage() {
                 "max one gold CTA per viewport" rule (see DESIGN_SYSTEM.md §8).
                 Visible to every tier; gating (journal access / 60-trade
                 unlock) happens inside each report page, not here. */}
-            <div className="flex flex-wrap gap-2 mt-ds-3">
+            <div className="flex flex-wrap gap-2 mt-ds-3 justify-end">
               <Button
                 variant="gold"
                 size="compact"
