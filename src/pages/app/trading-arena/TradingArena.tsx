@@ -43,7 +43,11 @@ import { ChartTab }      from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
+import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { AccountSelector } from './components/AccountSelector';
+import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
+import { isIntradayInterval } from '@/components/charting/indicators';
+import { INDICATOR_PERIODS, type Indicator } from '@/components/charting/types';
 
 // ---------------------------------------------------------------------------
 // Default symbol and interval
@@ -82,6 +86,30 @@ export default function TradingArena() {
   // only for now — NOT wired into the paper-trading engine or order routing;
   // the Arena stays 100% paper (real execution is out of scope here).
   const [accountId, setAccountId] = useState<string | null>(null);
+
+  // Indicators — single source of truth shared across Chart / Order Flow
+  // tabs, so switching tabs keeps the same selection on screen. Persisted
+  // via useArenaIndicatorPreferences (arena-only localStorage key — does
+  // NOT touch Backtest/Journal's saved preferences). Starts empty (no
+  // indicators) until the user opts in via ArenaToolbar's Indicators ▾ picker.
+  const [indicatorSettings, setIndicatorSettings] = useArenaIndicatorPreferences();
+
+  const indicators = useMemo<Indicator[]>(() => {
+    const list: Indicator[] = [];
+    if (indicatorSettings.sma) list.push({ type: 'SMA', period: INDICATOR_PERIODS.sma });
+    if (indicatorSettings.ema) list.push({ type: 'EMA', period: INDICATOR_PERIODS.ema });
+    if (indicatorSettings.rsi) list.push({ type: 'RSI', period: INDICATOR_PERIODS.rsi });
+    // VWAP gate: only meaningful on intraday intervals — same belt-and-
+    // suspenders guard TradeChart.tsx applies (the toolbar also disables
+    // the row on non-intraday intervals).
+    if (indicatorSettings.vwap && isIntradayInterval(interval)) {
+      list.push({ type: 'VWAP', period: 0 });
+    }
+    if (indicatorSettings.macd) list.push({ type: 'MACD', period: 0 });
+    if (indicatorSettings.bbands) list.push({ type: 'BBANDS', period: INDICATOR_PERIODS.bbands.period });
+    if (indicatorSettings.atr) list.push({ type: 'ATR', period: INDICATOR_PERIODS.atr });
+    return list;
+  }, [indicatorSettings, interval]);
 
   const handleSymbolSelect = useCallback((picked: string) => {
     const detected = detectAssetClass(picked);
@@ -149,6 +177,17 @@ export default function TradingArena() {
             aria-hidden="true"
           />
 
+          {/* Tab switcher — Chart / Order Flow / Liquidity. URL stays the
+              source of truth; this only navigates. */}
+          <ArenaTabSwitcher activeTab={activeTab} />
+
+          {/* Divider */}
+          <span
+            className="w-px h-5 flex-shrink-0"
+            style={{ background: 'rgba(201,166,70,0.18)' }}
+            aria-hidden="true"
+          />
+
           {/* Asset selector — SymbolAutocomplete (all asset classes) */}
           <SymbolAutocomplete
             symbol={symbol}
@@ -172,6 +211,8 @@ export default function TradingArena() {
             onIntervalChange={setIntervalValue}
             intervalCapability={intervalCapability}
             activeTab={activeTab}
+            indicatorSettings={indicatorSettings}
+            onIndicatorSettingsChange={setIndicatorSettings}
           />
         </div>
 
@@ -188,6 +229,7 @@ export default function TradingArena() {
             symbol={symbol}
             interval={interval}
             assetClass={assetClass}
+            indicators={indicators}
           />
         )}
         {activeTab === 'order-flow' && (
@@ -196,6 +238,7 @@ export default function TradingArena() {
             interval={interval}
             assetClass={assetClass}
             isAdmin={isAdmin}
+            indicators={indicators}
           />
         )}
         {activeTab === 'liquidity' && (

@@ -67,13 +67,9 @@ interface FootprintTabProps {
   assetClass: AssetClass;
   /** Gates the futures (Databento) mode — see the compliance note above. */
   isAdmin: boolean;
+  /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
+  indicators: Indicator[];
 }
-
-// Default indicators — same set as ChartTab/FuturesChartTab for visual consistency.
-const DEFAULT_INDICATORS: Indicator[] = [
-  { type: 'EMA', period: 50 },
-  { type: 'RSI', period: 14 },
-];
 
 function densityMultiplier(density: RowDensity): number {
   if (density === 'x2') return 2;
@@ -123,7 +119,7 @@ function statusLabel(status: TradeSourceStatus): string {
 // pattern ChartTab.tsx and LiquidityTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
 
-export function FootprintTab({ symbol, interval, assetClass, isAdmin }: FootprintTabProps) {
+export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators }: FootprintTabProps) {
   // Footprint is the entire point of this tab — the master "Order Flow"
   // on/off toggle from OrderFlowControls is locked ON by always forcing
   // `enabled: true` back in on every change, rather than modifying the
@@ -145,6 +141,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin }: Footprin
         interval={interval}
         controls={controls}
         onControlsChange={handleControlsChange}
+        indicators={indicators}
       />
     );
   }
@@ -157,6 +154,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin }: Footprin
         onControlsChange={handleControlsChange}
         root={futuresRoot}
         onRootChange={setFuturesRoot}
+        indicators={indicators}
       />
     );
   }
@@ -177,6 +175,7 @@ interface CryptoFootprintBodyProps {
   interval: ArenaInterval;
   controls: OrderFlowControlsState;
   onControlsChange: (next: OrderFlowControlsState) => void;
+  indicators: Indicator[];
 }
 
 // Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
@@ -184,7 +183,7 @@ interface CryptoFootprintBodyProps {
 // those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
 const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
-function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: CryptoFootprintBodyProps) {
+function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, indicators }: CryptoFootprintBodyProps) {
   const { from, to } = useMemo(nowWindowCrypto, [symbol, interval]);
   const focusRange = useMemo(
     () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
@@ -265,7 +264,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange }: C
           from={from}
           to={to}
           dataSource={candleDataSource}
-          indicators={DEFAULT_INDICATORS}
+          indicators={indicators}
           theme="dark"
           height="100%"
           focusRange={focusRange}
@@ -315,9 +314,10 @@ interface FuturesFootprintBodyProps {
   onControlsChange: (next: OrderFlowControlsState) => void;
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
+  indicators: Indicator[];
 }
 
-function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRootChange }: FuturesFootprintBodyProps) {
+function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRootChange, indicators }: FuturesFootprintBodyProps) {
   const contractSymbol = useMemo(() => frontMonthContract(root), [root]);
   const spec = FUTURES_CONTRACTS[root];
 
@@ -507,7 +507,7 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
             from={from}
             to={to}
             dataSource={barsSource}
-            indicators={DEFAULT_INDICATORS}
+            indicators={indicators}
             theme="dark"
             height="100%"
             focusRange={focusRange}

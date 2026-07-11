@@ -7,9 +7,13 @@
  *   - Timeframe    — always shown. Now a TimeframeMenu (see that file):
  *                    favorite chips + a TradingView-style grouped dropdown
  *                    (SECONDS/MINUTES/HOURS/DAYS) with a "Custom…" dialog.
- *   - Indicators ▾ — chart tab only. PLACEHOLDER: read-only rows for the
- *                    two hardcoded default indicators (EMA 50 / RSI 14).
- *                    No add/remove logic, no state.
+ *   - Indicators ▾ — chart tab only. A real add/remove picker: 7 toggle
+ *                    rows (SMA/EMA/RSI/VWAP/MACD/BB/ATR — the same set
+ *                    IndicatorToolbar exposes for Backtest/Journal, and the
+ *                    only types FinotaurChart renders). Selection state
+ *                    lives in TradingArena.tsx (single source of truth,
+ *                    shared across tabs) and persists via
+ *                    useArenaIndicatorPreferences.
  *
  * The Chart tab is a plain candlestick chart (2026-07 restructure) — no
  * order-flow controls apply to it anymore. The full OrderFlowControls
@@ -24,13 +28,28 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TabId } from '../types';
 import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
 import { TimeframeMenu } from './TimeframeMenu';
+import { isIntradayInterval } from '@/components/charting/indicators';
+import { INDICATOR_PERIODS, type IndicatorSettings } from '@/components/charting/types';
 
 type MenuId = 'indicators';
+
+// Same 7 indicator types FinotaurChart can render (see FinotaurChart.tsx's
+// per-type switch) — mirrors IndicatorToolbar.tsx's chip set/labels so the
+// Arena's picker and Backtest/Journal's toolbar stay visually consistent.
+const INDICATOR_ROWS: Array<{ key: keyof IndicatorSettings; label: string }> = [
+  { key: 'sma', label: `SMA ${INDICATOR_PERIODS.sma}` },
+  { key: 'ema', label: `EMA ${INDICATOR_PERIODS.ema}` },
+  { key: 'rsi', label: `RSI ${INDICATOR_PERIODS.rsi}` },
+  { key: 'vwap', label: 'VWAP' },
+  { key: 'macd', label: 'MACD' },
+  { key: 'bbands', label: `BB ${INDICATOR_PERIODS.bbands.period}` },
+  { key: 'atr', label: `ATR ${INDICATOR_PERIODS.atr}` },
+];
 
 interface ArenaToolbarProps {
   interval: ArenaInterval;
@@ -38,6 +57,9 @@ interface ArenaToolbarProps {
   /** Which timeframe sections are usable for the active symbol/asset class. */
   intervalCapability: IntervalCapability;
   activeTab: TabId;
+  /** Current indicator on/off state — single source of truth lives in TradingArena.tsx. */
+  indicatorSettings: IndicatorSettings;
+  onIndicatorSettingsChange: (next: IndicatorSettings) => void;
 }
 
 export function ArenaToolbar({
@@ -45,6 +67,8 @@ export function ArenaToolbar({
   onIntervalChange,
   intervalCapability,
   activeTab,
+  indicatorSettings,
+  onIndicatorSettingsChange,
 }: ArenaToolbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +102,14 @@ export function ArenaToolbar({
   // Indicators ▾ only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
 
+  // VWAP is only meaningful on intraday intervals — same gate IndicatorToolbar
+  // applies for Backtest/Journal.
+  const intraday = isIntradayInterval(interval);
+  const activeIndicatorCount = INDICATOR_ROWS.filter((row) => indicatorSettings[row.key]).length;
+  const indicatorsTriggerValue = activeIndicatorCount > 0
+    ? `Indicators (${activeIndicatorCount})`
+    : 'Indicators';
+
   return (
     <div ref={containerRef} className="flex items-center gap-1">
       {/* Timeframe — always shown (chart / footprint / liquidity tabs all use it).
@@ -97,21 +129,33 @@ export function ArenaToolbar({
             aria-hidden="true"
           />
 
-          {/* Indicators ▾ — PLACEHOLDER. Static read-only rows, no state. */}
+          {/* Indicators ▾ — real add/remove picker. Row click toggles;
+              active indicators get a gold check + highlight. */}
           <ToolbarTrigger
             caption={null}
-            value="Indicators"
+            value={indicatorsTriggerValue}
             isOpen={openMenu === 'indicators'}
             onClick={() => toggleMenu('indicators')}
           >
-            <div className="flex flex-col p-2 min-w-[160px] gap-1">
-              <div className="flex h-7 items-center rounded px-2 text-[11px] text-[#C0C0C0]">
-                EMA 50
-              </div>
-              <div className="flex h-7 items-center rounded px-2 text-[11px] text-[#C0C0C0]">
-                RSI 14
-              </div>
-              <span className="px-2 pt-1 text-[10px] text-[#555555]">More coming soon</span>
+            <div className="flex flex-col p-1.5 min-w-[160px]">
+              {INDICATOR_ROWS.map((row) => {
+                const disabled = row.key === 'vwap' && !intraday;
+                return (
+                  <IndicatorRow
+                    key={row.key}
+                    label={row.label}
+                    active={indicatorSettings[row.key]}
+                    disabled={disabled}
+                    disabledHint={disabled ? 'VWAP is intraday-only' : undefined}
+                    onClick={() =>
+                      onIndicatorSettingsChange({
+                        ...indicatorSettings,
+                        [row.key]: !indicatorSettings[row.key],
+                      })
+                    }
+                  />
+                );
+              })}
             </div>
           </ToolbarTrigger>
         </>
@@ -171,5 +215,40 @@ function ToolbarTrigger({ caption, value, isOpen, onClick, children, panelClassN
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Indicators ▾ panel row — one toggle per indicator type.
+// ---------------------------------------------------------------------------
+
+interface IndicatorRowProps {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  disabledHint?: string;
+  onClick: () => void;
+}
+
+function IndicatorRow({ label, active, disabled, disabledHint, onClick }: IndicatorRowProps) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={disabled ? disabledHint : undefined}
+      aria-pressed={!disabled && active}
+      className={cn(
+        'flex h-7 items-center justify-between gap-2 rounded px-2 text-[11px] transition-colors duration-150',
+        disabled
+          ? 'cursor-not-allowed text-[#3a3a3a]'
+          : active
+            ? 'cursor-pointer bg-[rgba(201,166,70,0.12)] text-[#C9A646] hover:bg-[rgba(201,166,70,0.18)]'
+            : 'cursor-pointer text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#E8E8E8]',
+      )}
+    >
+      <span>{label}</span>
+      {!disabled && active && <Check className="h-3 w-3 flex-shrink-0" aria-hidden="true" />}
+    </button>
   );
 }

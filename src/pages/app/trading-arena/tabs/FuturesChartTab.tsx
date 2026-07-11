@@ -66,13 +66,9 @@ import { cn } from '@/lib/utils';
 
 interface FuturesChartTabProps {
   interval: Interval;
+  /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
+  indicators: Indicator[];
 }
-
-// Default indicators — same set as ChartTab for visual consistency.
-const DEFAULT_INDICATORS: Indicator[] = [
-  { type: 'EMA', period: 50 },
-  { type: 'RSI', period: 14 },
-];
 
 /** Interval → seconds, for the subset of Interval values ARENA_INTERVALS offers. */
 const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
@@ -115,7 +111,7 @@ function statusLabel(status: TradeSourceStatus): string {
   }
 }
 
-export function FuturesChartTab({ interval }: FuturesChartTabProps) {
+export function FuturesChartTab({ interval, indicators }: FuturesChartTabProps) {
   const [root, setRoot] = useState<FuturesRoot>('NQ');
 
   // Front-month contract code (e.g. "NQU6") — recomputed on root change only.
@@ -395,7 +391,7 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
               from={from}
               to={to}
               dataSource={barsSourceRef.current}
-              indicators={DEFAULT_INDICATORS}
+              indicators={indicators}
               theme="dark"
               height="100%"
               refreshToken={barsRefreshToken}
