@@ -3,7 +3,7 @@
 // FINO AI — tiered capability config (2026-07 pricing restructure)
 // =====================================================
 // FINO is open to EVERY tier — the experience scales with the plan:
-//   FREE      → market Q&A taste (server cap 3/day), general questions
+//   FREE      → market Q&A taste (server cap 5/day), general questions
 //   INVESTOR  → research analyst: TOP SECRET report RAG + research context
 //   FINOTAUR  → full trade desk: premium-data context, actions, unlimited
 //   ULTIMATE  → everything + portfolio awareness (Copilot)
@@ -136,14 +136,14 @@ const FREE_PROMPTS: FinoPromptChip[][] = [
   [
     { icon: Zap, question: 'Am I overtrading?' },
     { icon: Zap, question: "What's my win rate this month?" },
+    { icon: Zap, question: "What's my P&L this week?" },
     { icon: HelpCircle, question: 'What moved the market today?' },
-    { icon: TrendingUp, question: 'Explain what unusual options activity means' },
     { icon: Newspaper, question: 'What are the key economic events this week?' },
-    { icon: Compass, question: 'How do I get the most out of FINOTAUR?' },
+    { icon: Zap, question: "What's my current streak?" },
   ],
   [
+    { icon: Zap, question: "What's my best setup?" },
     { icon: LineChart, question: 'What is the macro outlook?' },
-    { icon: Bitcoin, question: 'What is the current crypto regime?' },
     { icon: Shield, question: 'What risks should I watch right now?' },
   ],
 ];
@@ -152,15 +152,15 @@ const TRADER_PROMPTS: FinoPromptChip[][] = [
   [
     { icon: Zap, question: 'Am I overtrading?' },
     { icon: Zap, question: "What's my win rate this month?" },
+    { icon: Zap, question: "What's my P&L this week?" },
+    { icon: Zap, question: "What's my current streak?" },
     { icon: BookOpen, question: 'Show my best setups' },
     { icon: HelpCircle, question: "Review yesterday's trades" },
-    { icon: Compass, question: 'What mistakes am I repeating?' },
-    { icon: Newspaper, question: 'What moved the market today?' },
   ],
   [
-    { icon: LineChart, question: 'What is the macro outlook?' },
-    { icon: Bitcoin, question: 'What is the current crypto regime?' },
-    { icon: Shield, question: 'What risks should I watch right now?' },
+    { icon: Compass, question: 'What mistakes am I repeating?' },
+    { icon: Zap, question: "What's my most traded symbol?" },
+    { icon: Zap, question: "What's my average R multiple?" },
   ],
 ];
 
@@ -284,9 +284,9 @@ export const FINO_TIERS: Record<FinoTierKey, FinoTierConfig> = {
 // null = unlimited.
 // ---------------------------------------------------------------------------
 export const FINO_TIER_QUOTAS: Record<FinoTierKey, number | null> = {
-  free: 3,
-  trader: 10,
-  investor: 25,
+  free: 5,
+  trader: 20,
+  investor: 40,
   finotaur: null,
   ultimate: null,
 };

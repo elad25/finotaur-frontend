@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { aiCopilotApi } from '@/services/aiCopilotApi';
 import { toast } from 'sonner';
+import { FINO_TIER_QUOTAS } from '@/lib/fino-tiers';
 
 // Types
 export interface MessageSource {
@@ -111,7 +112,9 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
       setUsage({
         questions_today: raw.questions_today ?? 0,
         tokens_today: raw.tokens_today ?? 0,
-        daily_limit: unlimited ? null : (raw.daily_limit ?? 3),
+        // Client-side fallback when the server omits daily_limit — mirrors the
+        // FREE tier quota (see FINO_TIER_QUOTAS in fino-tiers.ts) so this can't drift.
+        daily_limit: unlimited ? null : (raw.daily_limit ?? FINO_TIER_QUOTAS.free),
         remaining: remaining,
         questions_remaining: remaining,
         user_tier: raw.tier ?? raw.user_tier ?? 'free',
