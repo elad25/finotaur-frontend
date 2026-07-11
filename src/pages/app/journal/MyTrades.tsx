@@ -725,21 +725,21 @@ const TradeRow = memo(({
             : getOptionContractLabel(trade)
           : trade.symbol}
         {isRiskOnlyMode && (
-          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
+          <span className="ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border border-yellow-400/40 bg-yellow-500/10 text-yellow-200">
             $
           </span>
         )}
         {isForex && (
-          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-normal">
+          <span className="ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border border-purple-400/40 bg-purple-500/10 text-purple-200">
             FX
           </span>
         )}
         {isOption && !isMultiLeg && (
           <span
-            className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+            className={`ml-1.5 rounded-sm px-1.5 py-0 text-[10px] font-medium border ${
               trade.option_type === 'CALL'
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-red-500/15 text-red-300'
+                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                : 'border-red-400/40 bg-red-500/10 text-red-200'
             }`}
           >
             {trade.option_type ?? 'OPT'}
@@ -747,12 +747,12 @@ const TradeRow = memo(({
         )}
         {isOption && !isMultiLeg && optionDTE !== null && (
           <span
-            className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+            className={`ml-1 rounded-sm px-1.5 py-0 text-[10px] font-medium border ${
               optionDTE < 0
-                ? 'bg-zinc-700/40 text-zinc-400'
+                ? 'border-border-ds-subtle bg-zinc-700/20 text-ink-secondary'
                 : optionDTE <= 7
-                  ? 'bg-amber-500/20 text-amber-300'
-                  : 'bg-zinc-700/40 text-zinc-300'
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+                  : 'border-border-ds-subtle bg-zinc-700/20 text-ink-secondary'
             }`}
             title="Days to expiration"
           >
@@ -768,26 +768,23 @@ const TradeRow = memo(({
 
       {/* Side */}
       <TableCell>
-        <Badge 
+        <Badge
           variant={trade.side === "LONG" ? "outline" : "destructive"}
           className={trade.side === "LONG"
-            ? "text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-            : "text-xs border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
+            ? "rounded-sm px-2 py-0.5 text-xs font-medium border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+            : "rounded-sm px-2 py-0.5 text-xs font-medium border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
           }
         >
           {trade.side}
         </Badge>
       </TableCell>
-      
-      {/* Session */}
+
+      {/* Session — plain muted text, not a colored pill (per mock) */}
       <TableCell>
         {trade.session ? (
-          <Badge 
-            variant="outline"
-            className={`text-xs ${getSessionColor(trade.session)}`}
-          >
+          <span className="text-xs text-ink-secondary">
             {formatSessionDisplay(trade.session)}
-          </Badge>
+          </span>
         ) : (
           <span className="text-zinc-500">—</span>
         )}
@@ -842,7 +839,7 @@ const TradeRow = memo(({
       <TableCell>
         <Badge
           variant={outcome === "WIN" || outcome === "LOSS" ? "outline" : "secondary"}
-          className={`text-xs ${
+          className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
             outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" :
             outcome === "LOSS" ? "border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20" :
             outcome === "OPEN" && isRiskOnlyMode ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : ""
@@ -889,8 +886,8 @@ const TradeRow = memo(({
             onPointerDown={(event) => event.stopPropagation()}
           >
             <Select onValueChange={handleAssignStrategy}>
-              <SelectTrigger className="h-8 w-[150px] rounded-md border-zinc-700/70 bg-zinc-950/70 px-2 text-xs text-zinc-300 hover:border-[#C9A646]/60 hover:text-white focus:ring-[#C9A646]/30">
-                <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-[#C9A646]" />
+              <SelectTrigger className="h-7 w-[150px] rounded-md border-border-ds-subtle bg-transparent px-2 text-xs text-ink-secondary hover:border-gold-primary/60 hover:text-gold-primary focus:ring-gold-primary/30">
+                <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-gold-primary" />
                 <SelectValue placeholder="Assign strategy" />
               </SelectTrigger>
               <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
