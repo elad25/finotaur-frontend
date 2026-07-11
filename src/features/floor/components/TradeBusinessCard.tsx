@@ -67,12 +67,12 @@ export function TradeBusinessCard({ item }: TradeBusinessCardProps) {
         'bg-surface-base border border-[rgba(201,166,70,0.35)]',
       )}
     >
-      {/* FINOTAUR bull watermark — gold-on-black logo, screen-blended so the black drops out */}
+      {/* FINOTAUR bull branding — big, faces inward, fills the right third; screen-blended so the black drops out. Content sits above (z-10). */}
       <img
         src="/finotaur-bull-watermark.png"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-3 -right-3 w-[210px] opacity-[0.16] mix-blend-screen select-none"
+        className="pointer-events-none select-none absolute right-[-4%] top-1/2 z-0 h-[165%] w-auto max-w-none -translate-y-1/2 -scale-x-100 opacity-[0.22] mix-blend-screen"
       />
 
       <div className="relative z-10 flex flex-col gap-ds-3">
