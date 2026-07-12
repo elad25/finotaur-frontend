@@ -47,6 +47,8 @@ import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { AccountSelector } from './components/AccountSelector';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
+import { useChartStylePreferences } from './hooks/useChartStylePreferences';
+import { ChartStyleContext } from './components/chartStyleSettings';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { INDICATOR_PERIODS, type Indicator } from '@/components/charting/types';
 
@@ -94,6 +96,13 @@ export default function TradingArena() {
   // NOT touch Backtest/Journal's saved preferences). Starts empty (no
   // indicators) until the user opts in via ArenaToolbar's Indicators ▾ picker.
   const [indicatorSettings, setIndicatorSettings] = useArenaIndicatorPreferences();
+
+  // Chart Settings (Chart ▾ menu) — single source of truth shared across all
+  // 3 tabs. Persisted globally (not per-symbol) via useChartStylePreferences.
+  // Reaches each tab's FinotaurChart through ChartStyleContext (provided
+  // below, around <main>) instead of prop threading — see
+  // chartStyleSettings.ts's header comment for why.
+  const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
 
   const indicators = useMemo<Indicator[]>(() => {
     const list: Indicator[] = [];
@@ -220,6 +229,9 @@ export default function TradingArena() {
             activeTab={activeTab}
             indicatorSettings={indicatorSettings}
             onIndicatorSettingsChange={setIndicatorSettings}
+            chartStyle={chartStyle}
+            onChartStyleChange={updateChartStyle}
+            onChartStyleReset={resetChartStyle}
           />
         </div>
 
@@ -230,34 +242,43 @@ export default function TradingArena() {
       </header>
 
       {/* ── Content area ─────────────────────────────────────────── */}
-      <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
-        {activeTab === 'chart' && (
-          <ChartTab
-            symbol={symbol}
-            interval={interval}
-            assetClass={assetClass}
-            indicators={indicators}
-          />
-        )}
-        {activeTab === 'order-flow' && (
-          <FootprintTab
-            symbol={symbol}
-            interval={interval}
-            assetClass={assetClass}
-            isAdmin={isAdmin}
-            indicators={indicators}
-            onSelectSymbol={handleSymbolSelect}
-          />
-        )}
-        {activeTab === 'liquidity' && (
-          <LiquidityTab
-            symbol={symbol}
-            interval={interval}
-            assetClass={assetClass}
-            onSelectSymbol={handleSymbolSelect}
-          />
-        )}
-      </main>
+      {/* ChartStyleContext.Provider — makes the Chart ▾ menu's live settings
+          reach every FinotaurChart instance across all 3 tabs (Chart /
+          Order Flow / Liquidity) WITHOUT threading a chartStyle prop through
+          ChartTab/FootprintTab/LiquidityTab. Each FinotaurChart reads this
+          context as a fallback only when its own `chartStyle` prop is
+          undefined (which it always is for these 3 call sites today) — see
+          chartStyleSettings.ts's ChartStyleContext doc comment. */}
+      <ChartStyleContext.Provider value={chartStyle}>
+        <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
+          {activeTab === 'chart' && (
+            <ChartTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
+              indicators={indicators}
+            />
+          )}
+          {activeTab === 'order-flow' && (
+            <FootprintTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
+              isAdmin={isAdmin}
+              indicators={indicators}
+              onSelectSymbol={handleSymbolSelect}
+            />
+          )}
+          {activeTab === 'liquidity' && (
+            <LiquidityTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
+              onSelectSymbol={handleSymbolSelect}
+            />
+          )}
+        </main>
+      </ChartStyleContext.Provider>
     </div>
   );
 }

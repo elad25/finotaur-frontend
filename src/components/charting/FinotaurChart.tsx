@@ -30,7 +30,7 @@
  *   exactly to change later." Keep this object as the single seam.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
@@ -41,6 +41,8 @@ import type { FootprintConfig } from '@/components/charting/orderflow/types';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import { computeFootprintBandHeightPx } from '@/components/charting/orderflow/footprintRender';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
+import { ChartStyleContext, type ChartStyleSettings } from '@/pages/app/trading-arena/components/chartStyleSettings';
+import { chartStyleToChartOptions, chartStyleToSeriesOptions } from '@/pages/app/trading-arena/components/chartStyleMapping';
 import {
   createChart,
   ColorType,
@@ -735,6 +737,27 @@ export interface FinotaurChartProps {
     store: FlowBinStore;
     visible: boolean;
   };
+  /**
+   * Optional TradingView-style chart style overrides (candle colors,
+   * canvas/grid/crosshair/watermark, price axis, timezone, price precision —
+   * see chartStyleSettings.ts). Mapped to lw-charts options via
+   * chartStyleToChartOptions/chartStyleToSeriesOptions (chartStyleMapping.ts)
+   * and applied with `applyOptions()` only — never triggers a chart
+   * recreate.
+   *
+   * 🔴 Undefined is a COMPLETE no-op — this is the default for every
+   * existing caller (Backtest, Journal, Scanner, Replay, FuturesChartTab):
+   * zero behavior change. When undefined, this component still falls back
+   * to `ChartStyleContext` (React context, default `undefined`) so the
+   * Trading Arena's Chart ▾ settings menu can reach all 3 Arena tabs'
+   * FinotaurChart instances (ChartTab / FootprintTab / LiquidityTab)
+   * without those 3 files needing to thread this prop through themselves —
+   * see chartStyleSettings.ts's ChartStyleContext doc comment for the full
+   * rationale. Callers outside the Arena's `<ChartStyleContext.Provider>`
+   * tree read `undefined` from the context too, so they remain unaffected
+   * either way.
+   */
+  chartStyle?: ChartStyleSettings;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -769,12 +792,19 @@ export function FinotaurChart({
   mutedCandles,
   refreshToken,
   volumeProfile,
+  chartStyle,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   // Active theme tokens — derived once, used by both JSX and effects.
   const themeTokens = pickTheme(theme);
+  // Chart Settings (Trading Arena's Chart ▾ menu) — explicit prop wins,
+  // otherwise fall back to ChartStyleContext (undefined outside the Arena's
+  // provider tree, so this is a no-op for every other caller). See the
+  // `chartStyle` prop doc comment above for the full rationale.
+  const contextChartStyle = useContext(ChartStyleContext);
+  const effectiveChartStyle = chartStyle ?? contextChartStyle;
   /**
    * Mirrors the footprint's zoom-driven detail stage (see FootprintLayer's
    * onStageChange) purely so WallHeatLayer can be told how tall the
@@ -934,6 +964,30 @@ export function FinotaurChart({
     // Re-create when theme changes — full remount swaps the candle palette,
     // background, grid, crosshair, and all subpane scale colors atomically.
   }, [theme]);
+
+  // ─── Apply Chart Settings (Trading Arena's Chart ▾ menu) ────
+  // `effectiveChartStyle` undefined (every caller outside the Arena) is a
+  // complete no-op — the chart keeps FINOTAUR_DARK_THEME/buildChartOptions'
+  // hardcoded look untouched. When present, maps to lw-charts options via
+  // the pure chartStyleToChartOptions/chartStyleToSeriesOptions functions
+  // (chartStyleMapping.ts) and applies them with `applyOptions()` only —
+  // never triggers a chart recreate. Depends on `theme` too so a theme
+  // change (which DOES recreate the chart, see the mount effect above)
+  // re-applies the user's chart style immediately after remount — this
+  // effect is declared after the mount effect, so React always runs it
+  // AFTER the new chart/series exist in the same commit.
+  useEffect(() => {
+    if (!effectiveChartStyle) return;
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+    try {
+      chart.applyOptions(chartStyleToChartOptions(effectiveChartStyle));
+      series.applyOptions(chartStyleToSeriesOptions(effectiveChartStyle));
+    } catch {
+      // Chart/series may be mid-teardown — safe to ignore.
+    }
+  }, [effectiveChartStyle, theme]);
 
   // ─── ResizeObserver — keep chart fitting its container ──────
   useEffect(() => {
@@ -1193,6 +1247,12 @@ export function FinotaurChart({
           wickUpColor: 'rgba(22, 163, 74, 0.25)',
           wickDownColor: 'rgba(185, 28, 28, 0.25)',
         });
+      } else if (effectiveChartStyle) {
+        // Chart Settings active (Trading Arena) — restore the user's chosen
+        // candle colors instead of the hardcoded theme defaults, so toggling
+        // mutedCandles off (e.g. footprint overlay stage change) doesn't
+        // clobber a custom candle color preset back to FINOTAUR_DARK_THEME.
+        series.applyOptions(chartStyleToSeriesOptions(effectiveChartStyle));
       } else {
         series.applyOptions({
           upColor: themeTokens.candleUp,
@@ -1206,7 +1266,7 @@ export function FinotaurChart({
     } catch {
       // Series may have been removed mid-flight — ignore.
     }
-  }, [mutedCandles, themeTokens]);
+  }, [mutedCandles, themeTokens, effectiveChartStyle]);
 
   // ─── Imperative time-window re-focus (Fit button) ──────────
   // When `timeFitToken` is bumped by the caller (e.g. scanner "Fit" click),
