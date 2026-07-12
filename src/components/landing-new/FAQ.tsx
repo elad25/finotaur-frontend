@@ -43,7 +43,7 @@ const faqs: FAQItem[] = [
   {
     question: "What about the Trading Journal?",
     answer:
-      "The Trader plan syncs with leading brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides Bloomberg-level analytics. It's included free with the FINOTAUR plan ($44.99/mo value) — you'd normally pay separately for this.",
+      "The Trader plan syncs with leading brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides institutional-grade analytics. It's included free with the FINOTAUR plan ($44.99/mo value) — you'd normally pay separately for this.",
   },
   {
     question: "Is my data safe?",
@@ -53,7 +53,7 @@ const faqs: FAQItem[] = [
   {
     question: "What if I need help?",
     answer:
-      "Core users get priority email support. Finotaur users get priority support with a 24-hour response guarantee. Enterprise clients receive a dedicated account manager. We also have a Discord community where traders share insights and help each other. You're never trading alone.",
+      "Core users get priority email support. Finotaur users get priority support with a 24-hour response commitment. Enterprise clients receive a dedicated account manager. We also have a Discord community where traders share insights and help each other. You're never trading alone.",
   },
 ];
 

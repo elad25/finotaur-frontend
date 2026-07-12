@@ -5,9 +5,9 @@
 // Tabs: Automated Journal (Live), Backtesting / AI Insights / Trade Replay (Coming Soon)
 // ================================================
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
 import { BookOpen, LineChart, Brain, PlayCircle, Lock, TrendingUp, Coins } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SectionShell } from "./_shared/SectionShell";
@@ -213,71 +213,77 @@ const JournalDashboardMock = () => {
   );
 };
 
+// Real chat mock built from the in-app FINO avatar — shows an actual example
+// exchange instead of an idle mascot loop. Dark bubble card, gold accents,
+// mono for numbers per DS §2 number formatting rules.
+const finoChatExchange: Array<{ from: "user" | "fino"; text: string }> = [
+  { from: "user", text: "Why do my Wednesdays keep bleeding?" },
+  {
+    from: "fino",
+    text:
+      "You've lost −$7,490 on Wednesdays — 36% win rate vs 65% on Thursdays. Your losses cluster after 2 consecutive reds. Consider halving size mid-week.",
+  },
+  { from: "user", text: "Set that as a rule." },
+  {
+    from: "fino",
+    text: "Done. I'll flag any Wednesday trade after 2 losses in your reports.",
+  },
+];
+
+// Highlights dollar amounts / percentages in mono tabular-nums per DS §2
+// number-formatting rules, leaving surrounding prose in font-sans.
+const NUMBER_SPLIT_PATTERN = /(−?\$[\d,]+(?:\.\d+)?|\d+%)/g;
+const NUMBER_TEST_PATTERN = /^(−?\$[\d,]+(?:\.\d+)?|\d+%)$/;
+function renderChatText(text: string) {
+  return text.split(NUMBER_SPLIT_PATTERN).map((part, idx) =>
+    NUMBER_TEST_PATTERN.test(part) ? (
+      <span key={idx} className="font-mono tabular-nums">
+        {part}
+      </span>
+    ) : (
+      <span key={idx}>{part}</span>
+    ),
+  );
+}
+
 const MeetFinoIntro = () => {
-  // FINO mascot codec pick — mirrors the in-app Home (HomePage.tsx): Safari /
-  // iOS WebKit can't render VP9-alpha WebM transparently, so those browsers get
-  // the animated-WebP-with-alpha fallback. Everything Chromium/Gecko keeps the
-  // smaller, smoother VP9 WebM. Real alpha → genuinely transparent background,
-  // no mix-blend-screen hack (and no more 503-ing meet-60s mp4).
-  const finoUsesWebpFallback =
-    typeof navigator !== "undefined" &&
-    /AppleWebKit/.test(navigator.userAgent) &&
-    !/Chrome|Chromium|Android/.test(navigator.userAgent);
-
-  // 🔥 PERF FIX: this tab is active by default (JournalToolsTabs mounts with
-  // active="ai"), so the video used to start fetching its 4.1MB source the
-  // instant the landing page loaded even though this section is below the
-  // fold. Defer the `src` (and therefore the network request) until the
-  // container is actually near the viewport; the poster image still renders
-  // instantly so there is no visual change while off-screen or on-screen.
-  // (Safari's webp fallback below is left eager — it has no poster of its
-  // own, so deferring it would show a blank gap instead of an instant image,
-  // which would be a visible regression for Safari users.)
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isNearViewport = useInView(containerRef, { once: true, margin: "200px" });
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (!isNearViewport) return;
-    const video = videoRef.current;
-    if (!video) return;
-    // Setting src programmatically (rather than always rendering the attr)
-    // is what actually delays the network fetch; call play() to honor the
-    // original autoPlay behavior now that the source is attached.
-    video.src = "/fino/fino-home-natural-v4.webm";
-    video.play().catch(() => {
-      // Autoplay can be rejected by the browser (e.g. low-power mode) —
-      // the poster stays visible, matching prior best-effort autoplay UX.
-    });
-  }, [isNearViewport]);
-
   return (
-    <div
-      ref={containerRef}
-      className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden"
-    >
-      <div className="flex flex-col items-center w-full">
-        {finoUsesWebpFallback ? (
-          <img
-            src="/fino/fino-safari-v4.webp"
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-            className="w-full max-w-[320px] sm:max-w-[400px] md:max-w-[440px] h-auto mx-auto object-contain"
-          />
-        ) : (
-          <video
-            ref={videoRef}
-            className="w-full max-w-[320px] sm:max-w-[400px] md:max-w-[440px] h-auto mx-auto object-contain"
-            poster="/fino/fino-home-natural-v4-poster.png"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="none"
-            aria-label="FINO — the FINOTAUR AI assistant"
-          />
-        )}
+    <div className="relative flex flex-col px-4 py-5 sm:px-6 sm:py-6 overflow-hidden">
+      <div className="flex flex-col gap-4 max-w-xl mx-auto w-full">
+        {finoChatExchange.map((message, i) => {
+          const isFino = message.from === "fino";
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.35, delay: i * 0.08 }}
+              className={`flex items-start gap-2.5 ${isFino ? "" : "flex-row-reverse"}`}
+            >
+              {isFino && (
+                <img
+                  src="/fino-avatar.png"
+                  alt="FINO"
+                  width={32}
+                  height={32}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-8 h-8 rounded-full border border-gold-primary/40 shrink-0 mt-0.5"
+                />
+              )}
+              <div
+                className={`rounded-[12px] px-4 py-2.5 text-sm leading-relaxed max-w-[85%] font-sans ${
+                  isFino
+                    ? "bg-section-card-rest border border-gold-border text-ink-primary"
+                    : "bg-gold-primary/10 border border-gold-primary/30 text-ink-primary"
+                }`}
+              >
+                {renderChatText(message.text)}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );
