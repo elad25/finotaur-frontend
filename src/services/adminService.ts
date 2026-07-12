@@ -1515,3 +1515,99 @@ export async function prefetchUserDetails(userIds: string[]): Promise<void> {
   await Promise.allSettled(promises);
   console.log(`✅ Prefetched ${userIds.length} user details`);
 }
+
+// ============================================
+// 🎯 CRM TRUTH — Attention Summary + Revenue Truth
+// ============================================
+// Both RPCs are applied via a separate migration and may not exist yet in
+// every environment. Callers MUST treat a null return as "data source
+// pending" and render accordingly — never assume these throw on failure.
+
+export interface AdminAttentionSummary {
+  ticketsAwaiting: number;
+  ticketsOldestDays: number | null;
+  draftsPending: number;
+  kbSuggestionsPending: number;
+  refunds7d: number;
+  paymentFailures7d: number;
+  cancellations7d: number;
+  expiring7d: number;
+}
+
+export interface AdminRevenueTruth {
+  payingPremium: number;
+  payingBasic: number;
+  platformActive: number;
+  revenue30d: number;
+  revenue90d: number;
+  refunds30d: number;
+  cancellations30d: number;
+  activations30d: number;
+}
+
+/**
+ * 🔔 Cross-surface "what needs Elad's attention today" counts.
+ * Defensive: returns null (not a throw) if the admin_attention_summary RPC
+ * is missing or errors — the UI shows a "Data source pending" note.
+ */
+export async function getAttentionSummary(): Promise<AdminAttentionSummary | null> {
+  try {
+    const { data, error } = await supabase.rpc('admin_attention_summary');
+
+    if (error) {
+      console.warn('⚠️ admin_attention_summary RPC unavailable:', error.message);
+      return null;
+    }
+
+    const d = (data || {}) as Record<string, unknown>;
+
+    return {
+      ticketsAwaiting: Number(d.tickets_awaiting) || 0,
+      ticketsOldestDays:
+        d.tickets_oldest_days === null || d.tickets_oldest_days === undefined
+          ? null
+          : Number(d.tickets_oldest_days),
+      draftsPending: Number(d.drafts_pending) || 0,
+      kbSuggestionsPending: Number(d.kb_suggestions_pending) || 0,
+      refunds7d: Number(d.refunds_7d) || 0,
+      paymentFailures7d: Number(d.payment_failures_7d) || 0,
+      cancellations7d: Number(d.cancellations_7d) || 0,
+      expiring7d: Number(d.expiring_7d) || 0,
+    };
+  } catch (err) {
+    console.warn('⚠️ getAttentionSummary failed:', err);
+    return null;
+  }
+}
+
+/**
+ * 💰 Whop-verified paying counts + $ revenue — the "real" money numbers,
+ * as opposed to the old MRR/ARR estimate computed from empty profile
+ * fields. Defensive: returns null if admin_revenue_truth RPC is missing.
+ */
+export async function getRevenueTruth(): Promise<AdminRevenueTruth | null> {
+  try {
+    const { data, error } = await supabase.rpc('admin_revenue_truth');
+
+    if (error) {
+      console.warn('⚠️ admin_revenue_truth RPC unavailable:', error.message);
+      return null;
+    }
+
+    const d = (data || {}) as Record<string, unknown>;
+
+    return {
+      payingPremium: Number(d.paying_premium) || 0,
+      payingBasic: Number(d.paying_basic) || 0,
+      platformActive: Number(d.platform_active) || 0,
+      revenue30d: Number(d.revenue_30d) || 0,
+      revenue90d: Number(d.revenue_90d) || 0,
+      refunds30d: Number(d.refunds_30d) || 0,
+      cancellations30d: Number(d.cancellations_30d) || 0,
+      activations30d: Number(d.activations_30d) || 0,
+    };
+  } catch (err) {
+    console.warn('⚠️ getRevenueTruth failed:', err);
+    return null;
+  }
+}

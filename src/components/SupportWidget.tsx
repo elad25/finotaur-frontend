@@ -75,6 +75,9 @@ interface SystemUpdate {
   created_at: string;
   read: boolean;
   metadata?: SystemUpdateMetadata;
+  // Optional — column may not exist yet (migration applied separately).
+  // 'manual' = admin-authored announcement, pinned to the top of this list.
+  source?: 'manual' | 'auto' | null;
 }
 
 // ==================== CATEGORY DEFINITIONS ====================
@@ -1264,6 +1267,126 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
   const unreadUpdatesCount = systemUpdates.filter(u => !u.read).length;
 
+  // Pinned "Announcements" section (manual, admin-authored) shown above the
+  // rest. When the `source` column doesn't exist yet, `u.source` is
+  // undefined for every row, so pinnedAnnouncements is empty and
+  // otherUpdates is the full list — current behavior stays unchanged.
+  const pinnedAnnouncements = systemUpdates.filter((u) => u.source === 'manual');
+  const otherUpdates = systemUpdates.filter((u) => u.source !== 'manual');
+
+  function renderUpdateCard(update: SystemUpdate) {
+    return (
+      <div
+        key={update.id}
+        onClick={() => markUpdateAsRead(update.id)}
+        className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:bg-white/5 ${
+          getUpdateBorderColor(update.type)
+        } ${!update.read ? 'bg-white/5' : 'bg-transparent'}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            getUpdateBgColor(update.type)
+          }`}>
+            {getUpdateIcon(update.type)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h4 className={`text-sm font-medium ${!update.read ? 'text-white' : 'text-gray-300'}`}>
+                {update.title}
+              </h4>
+              {!update.read && (
+                <span className="h-2 w-2 rounded-full bg-[#D4AF37]"></span>
+              )}
+              {update.is_pinned && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37]">
+                  Pinned
+                </span>
+              )}
+            </div>
+
+            {isAdmin && update.target_group && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  {getTargetGroupLabel(update.target_group)}
+                </span>
+                {update.metadata?.report_type && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    {getReportTypeLabel(update.metadata.report_type)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 leading-relaxed">
+              {update.content}
+            </p>
+
+            {update.metadata?.pdf_url && (
+              <a
+                href={update.metadata.pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 rounded-lg text-[#D4AF37] text-xs font-medium transition-all"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download PDF Report
+              </a>
+            )}
+
+            {update.metadata?.pmi_value && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+                  update.metadata.pmi_value >= 50
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {update.metadata.pmi_value >= 50 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3" />
+                  )}
+                  PMI: {update.metadata.pmi_value}
+                  {update.metadata.pmi_change !== undefined && update.metadata.pmi_change !== null && (
+                    <span className="ml-1">
+                      ({update.metadata.pmi_change > 0 ? '+' : ''}{update.metadata.pmi_change.toFixed(1)})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {update.metadata?.ticker && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                  📈 {update.metadata.ticker}
+                  {update.metadata.sector && ` • ${update.metadata.sector}`}
+                </span>
+              </div>
+            )}
+
+            {update.metadata?.regime && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+                  update.metadata.regime_score && update.metadata.regime_score >= 50
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-orange-500/20 text-orange-400'
+                }`}>
+                  🪙 {update.metadata.regime}
+                  {update.metadata.regime_score && ` (${update.metadata.regime_score}/100)`}
+                </span>
+              </div>
+            )}
+
+            <span className="text-[10px] text-gray-600 mt-2 block">
+              {formatDate(update.created_at)}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleClose = () => {
     setIsOpen(false);
     setTimeout(() => {
@@ -1568,116 +1691,25 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         </p>
                       </div>
                     ) : (
-                      systemUpdates.map((update) => (
-                        <div
-                          key={update.id}
-                          onClick={() => markUpdateAsRead(update.id)}
-                          className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:bg-white/5 ${
-                            getUpdateBorderColor(update.type)
-                          } ${!update.read ? 'bg-white/5' : 'bg-transparent'}`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                              getUpdateBgColor(update.type)
-                            }`}>
-                              {getUpdateIcon(update.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <h4 className={`text-sm font-medium ${!update.read ? 'text-white' : 'text-gray-300'}`}>
-                                  {update.title}
-                                </h4>
-                                {!update.read && (
-                                  <span className="h-2 w-2 rounded-full bg-[#D4AF37]"></span>
-                                )}
-                                {update.is_pinned && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37]">
-                                    Pinned
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {isAdmin && update.target_group && (
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                    {getTargetGroupLabel(update.target_group)}
-                                  </span>
-                                  {update.metadata?.report_type && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                      {getReportTypeLabel(update.metadata.report_type)}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              
-                              <p className="text-xs text-gray-400 leading-relaxed">
-                                {update.content}
-                              </p>
-                              
-                              {update.metadata?.pdf_url && (
-                                <a
-                                  href={update.metadata.pdf_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 rounded-lg text-[#D4AF37] text-xs font-medium transition-all"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                  Download PDF Report
-                                </a>
-                              )}
-                              
-                              {update.metadata?.pmi_value && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
-                                    update.metadata.pmi_value >= 50 
-                                      ? 'bg-green-500/20 text-green-400' 
-                                      : 'bg-red-500/20 text-red-400'
-                                  }`}>
-                                    {update.metadata.pmi_value >= 50 ? (
-                                      <TrendingUp className="h-3 w-3" />
-                                    ) : (
-                                      <TrendingDown className="h-3 w-3" />
-                                    )}
-                                    PMI: {update.metadata.pmi_value}
-                                    {update.metadata.pmi_change !== undefined && update.metadata.pmi_change !== null && (
-                                      <span className="ml-1">
-                                        ({update.metadata.pmi_change > 0 ? '+' : ''}{update.metadata.pmi_change.toFixed(1)})
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              {update.metadata?.ticker && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
-                                    📈 {update.metadata.ticker}
-                                    {update.metadata.sector && ` • ${update.metadata.sector}`}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              {update.metadata?.regime && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
-                                    update.metadata.regime_score && update.metadata.regime_score >= 50 
-                                      ? 'bg-green-500/20 text-green-400' 
-                                      : 'bg-orange-500/20 text-orange-400'
-                                  }`}>
-                                    🪙 {update.metadata.regime}
-                                    {update.metadata.regime_score && ` (${update.metadata.regime_score}/100)`}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <span className="text-[10px] text-gray-600 mt-2 block">
-                                {formatDate(update.created_at)}
+                      <>
+                        {pinnedAnnouncements.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 px-0.5">
+                              <Megaphone className="h-3.5 w-3.5 text-[#D4AF37]" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#D4AF37]">
+                                Announcements
                               </span>
                             </div>
+                            <div className="space-y-3">
+                              {pinnedAnnouncements.map((update) => renderUpdateCard(update))}
+                            </div>
+                            {otherUpdates.length > 0 && (
+                              <div className="h-px bg-[#D8D1C5]/30 my-1" />
+                            )}
                           </div>
-                        </div>
-                      ))
+                        )}
+                        {otherUpdates.map((update) => renderUpdateCard(update))}
+                      </>
                     )}
                   </div>
                 </div>
