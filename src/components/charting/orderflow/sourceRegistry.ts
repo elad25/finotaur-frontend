@@ -14,6 +14,7 @@
 
 import { BinanceTradeSource } from './BinanceTradeSource';
 import { DatabentoTradeSource } from './DatabentoTradeSource';
+import { Nt8TradeSource } from './Nt8TradeSource';
 import { getCryptoTickSize } from './cryptoTickSizes';
 import { FUTURES_CONTRACTS, type FuturesRoot } from './futuresContracts';
 import type { TradeSource } from './types';
@@ -40,27 +41,39 @@ export interface ResolvedTradeSource {
  *    it resolves; this synchronous lookup is only the immediate/default
  *    value.
  *  - 'futures': the FuturesRoot (e.g. 'NQ'), NOT the front-month contract
- *    code. Front-month resolution (`frontMonthContract()` in
- *    futuresContracts.ts) stays the caller's responsibility — the resolved
- *    contract symbol is also needed elsewhere (useOrderFlow's `symbol`,
- *    DatabentoBarsSource, UI labels) beyond just this tickSize lookup, so
- *    duplicating that resolution here would just be a second source of truth.
+ *    code. Front-month resolution (`frontMonthContract()` / `toNt8Symbol()`
+ *    in futuresContracts.ts) stays the caller's responsibility — the
+ *    resolved contract symbol is also needed elsewhere (useOrderFlow's
+ *    `symbol`, DatabentoBarsSource, UI labels) beyond just this tickSize
+ *    lookup, so duplicating that resolution here would just be a second
+ *    source of truth.
+ *
+ * `opts.nt8Connected` — true when the caller has a LIVE NT8 desktop-agent
+ * bridge connection (see nt8Bridge.ts). Available to ALL users (not
+ * admin-gated, unlike the Databento preview below) and takes priority: a
+ * connected NT8 bridge is real live data from the user's own NinjaTrader,
+ * whereas Databento is an admin-only delayed dev preview.
  */
 export function resolveTradeSource(
   assetClass: 'crypto' | 'futures' | 'stock' | 'forex',
   symbol: string,
-  opts: { isAdmin: boolean },
+  opts: { isAdmin: boolean; nt8Connected?: boolean },
 ): ResolvedTradeSource | null {
   if (assetClass === 'crypto') {
     return { source: BinanceTradeSource, tickSize: getCryptoTickSize(symbol) };
   }
 
   if (assetClass === 'futures') {
+    const spec = FUTURES_CONTRACTS[symbol as FuturesRoot];
+    if (!spec) return null; // unknown root — defensive; callers only pass FUTURES_ROOTS members
+
+    if (opts.nt8Connected) {
+      return { source: Nt8TradeSource, tickSize: spec.tickSize };
+    }
+
     // Databento futures preview is admin-only — never customer-facing (see
     // FuturesChartTab.tsx's compliance note, mirrored in FootprintTab.tsx).
     if (!opts.isAdmin) return null;
-    const spec = FUTURES_CONTRACTS[symbol as FuturesRoot];
-    if (!spec) return null; // unknown root — defensive; callers only pass FUTURES_ROOTS members
     return { source: DatabentoTradeSource, tickSize: spec.tickSize };
   }
 

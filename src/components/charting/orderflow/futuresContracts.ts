@@ -97,6 +97,44 @@ export function frontMonthContract(root: FuturesRoot, now: Date = new Date()): s
   return `${root}${monthCode}${yearDigit}`;
 }
 
+// ─── NT8 (NinjaTrader) symbol format ────────────────────────────────────
+//
+// The NT8 desktop agent's WS bridge (see nt8Bridge.ts) addresses
+// instruments as "<ROOT> <MM-YY>" (e.g. "NQ 09-26") — NinjaTrader's own
+// instrument-naming convention, distinct from the CME/Tradovate short code
+// `frontMonthContract` resolves above (e.g. "NQU6"). This is a standalone
+// duplicate of frontMonthContract's quarterly-cycle + roll-date-approximation
+// walk (not a shared refactor) — deliberately, so this addition can't change
+// frontMonthContract's already-tested behavior for its existing callers.
+
+/**
+ * Resolve the NT8-formatted front-month symbol for a futures root, e.g.
+ * 'NQ' -> 'NQ 09-26'. See the header comment above for why this duplicates
+ * (rather than shares) frontMonthContract's resolution walk.
+ */
+export function toNt8Symbol(root: FuturesRoot, now: Date = new Date()): string {
+  const year = now.getUTCFullYear();
+
+  for (let i = 0; i < 5; i += 1) {
+    const candidateYear = year + Math.floor(i / QUARTERLY_MONTHS.length);
+    const monthIdx = i % QUARTERLY_MONTHS.length;
+    const month = QUARTERLY_MONTHS[monthIdx];
+
+    const expiry = thirdFriday(candidateYear, month);
+    const rollDate = new Date(expiry.getTime() - ROLLOVER_LEAD_DAYS * 24 * 60 * 60 * 1000);
+
+    if (now.getTime() < rollDate.getTime()) {
+      const mm = String(month).padStart(2, '0');
+      const yy = String(candidateYear % 100).padStart(2, '0');
+      return `${root} ${mm}-${yy}`;
+    }
+  }
+
+  const mm = '12';
+  const yy = String(year % 100).padStart(2, '0');
+  return `${root} ${mm}-${yy}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Self-test — guarded, never runs in production. Mirrors flowBinStore.selftest.
 // ─────────────────────────────────────────────────────────────────────────

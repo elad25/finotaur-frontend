@@ -15,6 +15,18 @@
 //   4. Raw token returned to agent exactly once. Never stored server-side.
 //   5. All future requests use the raw token as a Bearer credential;
 //      automation-agent verifies it by hashing and doing a DB lookup.
+//
+// NT8 market-data bridge (additive, 2026-07-12): a SECOND random secret
+// (`bridge_secret`) is generated at the same moment and stored RAW (not
+// hashed, unlike device_token) on the device row via the SAME RPC call.
+// This is a distinct credential from the device token above: it
+// authenticates the BROWSER to the agent's LOCAL WebSocket bridge
+// (ws://127.0.0.1:<port>), never the agent to Supabase. It IS returned in
+// this response — the agent needs the raw value locally to verify inbound
+// browser `hello{token}` handshakes against it. The owning user's own
+// browser separately reads the same value back via fetchBridgeConfig.ts,
+// gated by the automation_agent_devices RLS owner policy — storing it raw
+// (not hashed) is what makes that read-back possible.
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -73,15 +85,24 @@ Deno.serve(async (req: Request) => {
   const rawToken = generateDeviceToken();
   const tokenHash = await sha256Hex(rawToken);
 
+  // Bridge secret — see the file header comment. Stored RAW (not hashed):
+  // unlike device_token, its trust boundary is "authorizes a WS connection
+  // to a process on the user's own machine", not "authenticates to
+  // FINOTAUR's servers", so the owning user's browser needs to read the
+  // literal value back later (fetchBridgeConfig.ts, via RLS).
+  const bridgeSecret = generateDeviceToken();
+
   // Redeem the pairing code: verify it exists, is not expired, mark it used,
-  // and persist the hashed device token. The RPC returns TABLE(device_id uuid, user_id uuid).
+  // and persist the hashed device token + raw bridge secret in one atomic
+  // call. The RPC returns TABLE(device_id uuid, user_id uuid).
   const { data: rows, error: rpcError } = await supabaseAdmin.rpc(
     'automation_redeem_pairing_code',
     {
-      p_code:        pairing_code.trim().toUpperCase(),
-      p_token_hash:  tokenHash,
-      p_device_name: device_name ?? null,
-      p_version:     agent_version ?? null,
+      p_code:           pairing_code.trim().toUpperCase(),
+      p_token_hash:     tokenHash,
+      p_device_name:    device_name ?? null,
+      p_version:        agent_version ?? null,
+      p_bridge_secret:  bridgeSecret,
     },
   );
 
@@ -105,12 +126,14 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Return the raw token to the agent exactly once.
-  // The hash is already persisted in the DB; the raw token is never stored server-side.
+  // Return the raw token + bridge secret to the agent exactly once each.
+  // The device-token hash and the raw bridge secret are already persisted
+  // in the DB; neither raw value is kept server-side beyond this response.
   return new Response(
     JSON.stringify({
-      device_token: rawToken,
-      device_id:    firstRow.device_id,
+      device_token:  rawToken,
+      device_id:     firstRow.device_id,
+      bridge_secret: bridgeSecret,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
   );
