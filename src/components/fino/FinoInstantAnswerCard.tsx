@@ -35,9 +35,6 @@ export default function FinoInstantAnswerCard({
           <span className="text-xs font-bold text-ink-primary">{answer.title}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-[#4ADE80]/30 bg-[#4ADE80]/10 px-2 py-px text-[9px] font-bold uppercase tracking-wider text-[#4ADE80]">
-            Instant · Free
-          </span>
           <button
             type="button"
             aria-label="Dismiss"
@@ -71,7 +68,6 @@ export default function FinoInstantAnswerCard({
       >
         <Sparkles className="h-3 w-3" />
         {answer.followUpLabel ?? 'Ask FINO why'}
-        <span className="text-ink-tertiary">· uses 1 AI question</span>
       </button>
     </div>
   );
