@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  ListOrdered,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
@@ -31,6 +32,7 @@ import { SectionEyebrow } from './_shared/SectionEyebrow';
 import { SectionTitle } from './_shared/SectionTitle';
 
 import journalDashboard from '@/assets/landing/journal-dashboard.webp';
+import myTradesShot from '@/assets/landing/my-trades.webp';
 import journalCalendar from '@/assets/landing/journal-calendar.webp';
 import leakDetector from '@/assets/landing/leak-detector.webp';
 import revengeRadar from '@/assets/landing/revenge-radar.webp';
@@ -47,6 +49,7 @@ import riskManagementShot from '@/assets/landing/risk-management.webp';
 // ---------------------------------------------------------------------------
 type TraderTabKey =
   | 'dashboard'
+  | 'trades'
   | 'calendar'
   | 'leak'
   | 'revenge'
@@ -83,6 +86,19 @@ const tabs: TraderTab[] = [
       src: journalDashboard,
       alt: 'Finotaur journal dashboard showing net P&L of +$26,594, 49.6% win rate, 1.73 profit factor, a FINO Score of 78.19, and the full equity curve',
       glow: true,
+    },
+  },
+  {
+    key: 'trades',
+    icon: ListOrdered,
+    label: 'Trades',
+    status: 'live',
+    heading: 'Every fill, in one ledger.',
+    description:
+      'Date, side, session, entry to exit, R multiple and the strategy behind it — every trade logged the moment it closes, still there when you review.',
+    image: {
+      src: myTradesShot,
+      alt: 'Finotaur My Trades ledger showing 118 logged trades with win rate, net P&L, R multiples and strategy tags',
     },
   },
   {
@@ -215,7 +231,7 @@ const pillars: Pillar[] = [
     key: 'journal',
     icon: LayoutDashboard,
     label: 'Trade Journal',
-    subKeys: ['dashboard', 'calendar', 'breakdowns', 'playbooks'],
+    subKeys: ['dashboard', 'trades', 'calendar', 'breakdowns', 'playbooks'],
   },
   {
     key: 'ai',
@@ -242,6 +258,7 @@ const pillars: Pillar[] = [
 // clicks all navigate through this same sequence, by numeric index.
 const ROTATION_SEQUENCE: TraderTabKey[] = [
   'dashboard',
+  'trades',
   'calendar',
   'breakdowns',
   'playbooks',
