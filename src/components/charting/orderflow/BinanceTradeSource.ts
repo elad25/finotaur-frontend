@@ -16,7 +16,12 @@ const FLUSH_INTERVAL_MS = 250;
 
 const RECONNECT_DELAYS = [1_000, 2_000, 5_000]; // ms, backoff, caps at 5s
 
-const DEFAULT_MAX_BACKFILL_REQUESTS = 40;
+// Raised 40 → 90 (2026-07-12): 40 requests * 1000 aggTrades/page covered only
+// a few minutes-to-an-hour of BTC trade volume — a tiny sliver of a
+// 40-bar*15m backfill window, so most of the footprint opened empty. 90
+// requests * 120ms spacing ≈ 11s total walk — acceptable given progressive
+// per-chunk delivery (below) paints the most recent candles within 1-2s.
+const DEFAULT_MAX_BACKFILL_REQUESTS = 90;
 const BACKFILL_PAGE_LIMIT = 1000;
 // Spacing between paginated REST calls — respects Binance IP rate limits.
 const BACKFILL_REQUEST_SPACING_MS = 120;
@@ -143,7 +148,7 @@ class BinanceTradeSourceImpl implements TradeSource {
     symbol: string,
     fromMs: number,
     toMs: number,
-    opts?: { maxRequests?: number; signal?: AbortSignal },
+    opts?: { maxRequests?: number; signal?: AbortSignal; onChunk?: (trades: FlowTrade[]) => void },
   ): Promise<{ trades: FlowTrade[]; coveredFromMs: number }> {
     const maxRequests = opts?.maxRequests ?? DEFAULT_MAX_BACKFILL_REQUESTS;
     const trades: FlowTrade[] = [];
@@ -211,6 +216,12 @@ class BinanceTradeSourceImpl implements TradeSource {
         }
       }
 
+      // Trades from THIS page only — collected separately from the running
+      // `trades` accumulator so we can hand them to `onChunk` as soon as the
+      // page is parsed, letting the caller paint the most-recent candles
+      // (chunks arrive newest→oldest, since pagination walks backward from
+      // `toMs`) within 1-2s instead of waiting for the entire walk to finish.
+      const pageTrades: FlowTrade[] = [];
       for (const item of page) {
         if (typeof item.a === 'number') {
           if (seenIds.has(item.a)) continue;
@@ -222,7 +233,18 @@ class BinanceTradeSourceImpl implements TradeSource {
         }
 
         if (item.T < fromMs) continue; // outside requested window — discard
-        trades.push(mapAggTrade(item));
+        const trade = mapAggTrade(item);
+        trades.push(trade);
+        pageTrades.push(trade);
+      }
+
+      if (pageTrades.length > 0 && opts?.onChunk) {
+        // FlowBinStore aggregation is order-independent (per-candle Map
+        // keyed by bucketed time — see flowBinStore.ts), so out-of-order
+        // chunk delivery across pages is safe; sort each chunk internally
+        // anyway for a predictable, testable per-call contract.
+        pageTrades.sort((a, b) => a.time - b.time);
+        opts.onChunk(pageTrades);
       }
 
       const earliestInPage = page[0].T;

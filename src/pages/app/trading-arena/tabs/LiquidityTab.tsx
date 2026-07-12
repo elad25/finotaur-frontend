@@ -109,6 +109,19 @@ const VISIBLE_BARS = 120;
 // tier (5s vs 1m) — same conservative constant MarketScanner uses.
 const APPROX_BAR_SPACING_PX = 8;
 
+// Depth-slice history is far sparser than candle history — the server's
+// own per-request span cap for 1m resolution is 48h (MAX_SPAN_1M in
+// useDepthSlices.ts), and the crypto_depth_slices tables are UNLOGGED
+// (wiped on every DB restart), so depth data older than ~48h realistically
+// never exists. The candle lookback, however, is 600 bars — up to 6.25
+// DAYS at 15m. Feeding that full candle window straight into useDepthSlices
+// as fromMs/toMs forced a 4-chunk historical fetch (+ worker decode +
+// full-grid rebuild over thousands of columns) on every mount and, before
+// the gap-based coverage fix in useDepthSlices.ts, on every ~30s slide
+// tick too — the busy-loop / frozen-heatmap bug on this tab. Cap the DEPTH
+// request window only; the candle series itself keeps its full lookback.
+const MAX_DEPTH_WINDOW_SEC = 48 * 60 * 60; // 48h
+
 // Re-slide the candle window every 30s so the chart keeps up with "now"
 // (same cadence MarketScanner uses).
 const SLIDE_INTERVAL_MS = 30_000;
@@ -222,9 +235,13 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
     };
   }, [interval]);
 
+  // Depth-only window, capped to MAX_DEPTH_WINDOW_SEC — see comment above
+  // the constant. Candles (candleDataSource/from/to below) are unaffected.
+  const depthFromSec = Math.max(from, to - MAX_DEPTH_WINDOW_SEC);
+
   const depthMatrix = useDepthSlices({
     symbol,
-    fromMs: from * 1000,
+    fromMs: depthFromSec * 1000,
     toMs: to * 1000,
     barSpacingPx: APPROX_BAR_SPACING_PX,
     candleIntervalMs: intervalMs(interval),

@@ -185,10 +185,35 @@ const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1
 
 function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, indicators }: CryptoFootprintBodyProps) {
   const { from, to } = useMemo(nowWindowCrypto, [symbol, interval]);
+
+  // Backfill-coverage snap — mirrors LiquidityTab.tsx's depthSnapFromSec /
+  // timeFitToken pattern (PR #1432): the natural INITIAL_VISIBLE_BARS window
+  // is often much wider than what the backfill walk actually covers (rate
+  // limits / request budget), so the pane would otherwise open on a wide
+  // window of mostly-empty footprint candles. Once useOrderFlow reports
+  // `backfillCoveredFromSec`, snap the visible window tight around the real
+  // coverage span so it opens fully painted. Runs at most once per
+  // (symbol, interval) — never fights a user's subsequent pan/zoom.
+  const [backfillSnapFromSec, setBackfillSnapFromSec] = useState<number | null>(null);
+  const backfillSnapAttemptedRef = useRef(false);
+
   const focusRange = useMemo(
-    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
-    [to, interval],
+    () => ({
+      from: backfillSnapFromSec ?? to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval),
+      to,
+    }),
+    [to, interval, backfillSnapFromSec],
   );
+
+  // Imperative re-fit token (FinotaurChart's `timeFitToken` prop) — bumped on
+  // symbol/interval change (re-arm the snap for the new dataset) and again
+  // once the coverage-driven snap fires below.
+  const [timeFitToken, setTimeFitToken] = useState(0);
+  useEffect(() => {
+    setTimeFitToken((t) => t + 1);
+    backfillSnapAttemptedRef.current = false;
+    setBackfillSnapFromSec(null);
+  }, [symbol, interval]);
 
   // Native-vs-aggregate resolution for the candlestick series (see
   // utils/intervals.ts) — arbitrary custom timeframes the resolved source
@@ -224,7 +249,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
   const rowSize = Math.max(suggestedRowSize, FALLBACK_TICK_SIZE) * densityMultiplier(controls.rowDensity);
   const intervalSec = intervalToSeconds(interval);
 
-  const { store, status, backfillCoveredFromSec } = useOrderFlow({
+  const { store, status, backfillCoveredFromSec, backfillInFlight } = useOrderFlow({
     symbol,
     intervalSec,
     rowSize,
@@ -232,10 +257,33 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
     backfillBars: 40,
   });
 
+  // Snap the visible window to the backfill's actual coverage once it's
+  // known — see the header comment above `backfillSnapFromSec`. Fires at
+  // most once per (symbol, interval); re-armed by the effect above.
+  useEffect(() => {
+    if (backfillSnapAttemptedRef.current) return;
+    if (backfillCoveredFromSec === null) return; // backfill hasn't reported yet
+
+    backfillSnapAttemptedRef.current = true;
+
+    const naturalFromSec = to - INITIAL_VISIBLE_BARS * intervalSec;
+    if (backfillCoveredFromSec <= naturalFromSec) return; // coverage already spans the natural window — no snap needed
+
+    const marginBars = 3;
+    const minBars = 8; // floor — never zoom tighter than ~8 bars
+    const flooredFromSec = to - minBars * intervalSec;
+    const snappedFromSec = Math.min(flooredFromSec, backfillCoveredFromSec - marginBars * intervalSec);
+
+    setBackfillSnapFromSec(snappedFromSec);
+    setTimeFitToken((t) => t + 1);
+  }, [backfillCoveredFromSec, to, intervalSec]);
+
   let statusNote: string | undefined;
   let historyLimitedNote: string | undefined;
   if (status === 'connecting') {
     statusNote = 'Loading order flow…';
+  } else if (backfillInFlight) {
+    statusNote = 'Loading trade history…';
   }
   if (backfillCoveredFromSec !== null) {
     const requestedFromSec = Math.floor(Date.now() / 1000) - 40 * intervalSec;
@@ -268,6 +316,7 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
           theme="dark"
           height="100%"
           focusRange={focusRange}
+          timeFitToken={timeFitToken}
           onBarsLoad={handleBarsLoad}
           footprint={{
             store,

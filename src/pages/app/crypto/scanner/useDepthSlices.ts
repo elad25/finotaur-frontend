@@ -126,6 +126,66 @@ function stepMsFor(res: SliceResolution): number {
   return res === '5s' ? 5_000 : 60_000;
 }
 
+// ── Fetched-window coverage tracking ─────────────────────────────────────────
+//
+// A range that has already been requested for a given resolution, with the
+// timestamp it was recorded. Used to avoid re-requesting data we already
+// have. See computeUncoveredGaps below for why this needs to be gap-based
+// rather than a single "does one prior window fully contain the new one?"
+// check: callers like LiquidityTab/MarketScanner pass a [from, to] window
+// that SLIDES forward every ~30s (from = now - lookback, to = now). A naive
+// containment check is never true for a sliding window (winTo always grows
+// past any prior recorded winTo), so every single tick re-triggered a full
+// multi-chunk refetch + worker decode + full-grid rebuild of the ENTIRE
+// window — a busy-loop-shaped repeating expensive cycle. Gap-based tracking
+// only fetches the new sliver each tick.
+interface FetchedRange {
+  from: number;
+  to: number;
+  res: SliceResolution;
+  fetchedAt: number;
+}
+
+/**
+ * How long a recorded "covered" range stays trusted before it's eligible to
+ * be re-verified against the server. Bounds retry frequency for a window
+ * that failed/timed out (so a wedged server can't cause a hot refetch loop
+ * every ~30s) while still recovering eventually if data becomes available.
+ */
+const REFETCH_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Client-side timeout for a single chunk fetch — prevents a hung/slow
+ * server request from staying in-flight indefinitely and stacking up
+ * across repeated fetchWindow calls. */
+const FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Returns the sub-ranges of [winFrom, winTo] NOT covered by `covered`
+ * (already-trusted ranges for the active resolution). Ranges are clipped to
+ * the requested window and merged by a simple left-to-right scan.
+ */
+function computeUncoveredGaps(
+  winFrom: number,
+  winTo: number,
+  covered: Array<{ from: number; to: number }>,
+): Array<{ from: number; to: number }> {
+  if (covered.length === 0) return [{ from: winFrom, to: winTo }];
+
+  const clipped = covered
+    .map(w => ({ from: Math.max(w.from, winFrom), to: Math.min(w.to, winTo) }))
+    .filter(w => w.to > w.from)
+    .sort((a, b) => a.from - b.from);
+
+  const gaps: Array<{ from: number; to: number }> = [];
+  let cursor = winFrom;
+  for (const seg of clipped) {
+    if (seg.from > cursor) gaps.push({ from: cursor, to: seg.from });
+    if (seg.to > cursor) cursor = seg.to;
+  }
+  if (cursor < winTo) gaps.push({ from: cursor, to: winTo });
+  return gaps;
+}
+
 // ── Dominant bin size ─────────────────────────────────────────────────────────
 
 function dominantBinSize(columns: DecodedColumn[]): number {
@@ -176,8 +236,9 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   const historicalRef = useRef<Map<number, DecodedColumn>>(new Map());
   // Live-edge columns keyed by their slot time (rounded to 5s boundary).
   const liveEdgeRef = useRef<Map<number, DecodedColumn>>(new Map());
-  // Track which [from, to, res] windows have already been fetched.
-  const fetchedWindowsRef = useRef<Array<{ from: number; to: number; res: SliceResolution }>>([]);
+  // Track which [from, to, res] windows have already been fetched — see
+  // FetchedRange / computeUncoveredGaps above for why this is gap-based.
+  const fetchedWindowsRef = useRef<FetchedRange[]>([]);
 
   const resolutionRef = useRef<SliceResolution>('5s');
 
@@ -302,38 +363,57 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     winTo: number,
     res: SliceResolution,
   ) => {
-    // Skip if already fetched
-    const already = fetchedWindowsRef.current.some(
-      w => w.from <= winFrom && w.to >= winTo && w.res === res,
-    );
-    if (already) return;
+    const now = Date.now();
 
-    // Chunk into API-allowed spans
+    // Only trust coverage recorded within the cooldown window — see
+    // REFETCH_COOLDOWN_MS comment. Stale entries are treated as gaps again
+    // so a failed/empty window gets re-verified eventually instead of
+    // caching a permanent hole, without hot-looping every ~30s.
+    const trusted = fetchedWindowsRef.current.filter(
+      w => w.res === res && (now - w.fetchedAt) < REFETCH_COOLDOWN_MS,
+    );
+    const gaps = computeUncoveredGaps(winFrom, winTo, trusted);
+    if (gaps.length === 0) return;
+
     const span = maxSpan(res);
-    let cursor = winFrom;
-    while (cursor < winTo) {
-      const chunkTo = Math.min(cursor + span, winTo);
-      const url = `/api/crypto/depth-slices?symbol=${sym}&from=${cursor}&to=${chunkTo}&res=${res}`;
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) break;
-        const data = await resp.json() as { symbol: string; res: string; slices: RawSlice[] };
-        if (data.slices && data.slices.length > 0) {
-          const decoded = await decodeSlices(data.slices);
-          for (const col of decoded) {
-            historicalRef.current.set(col.t, col);
+    for (const gap of gaps) {
+      let cursor = gap.from;
+      while (cursor < gap.to) {
+        const chunkTo = Math.min(cursor + span, gap.to);
+        const url = `/api/crypto/depth-slices?symbol=${sym}&from=${cursor}&to=${chunkTo}&res=${res}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        try {
+          const resp = await fetch(url, { signal: controller.signal });
+          if (!resp.ok) break;
+          const data = await resp.json() as { symbol: string; res: string; slices: RawSlice[] };
+          if (data.slices && data.slices.length > 0) {
+            const decoded = await decodeSlices(data.slices);
+            for (const col of decoded) {
+              historicalRef.current.set(col.t, col);
+            }
+            rebuildState(res);
           }
-          rebuildState(res);
+        } catch {
+          // Network errors / timeouts: stop this gap silently — heatmap
+          // degrades gracefully. Still recorded as covered below (with a
+          // cooldown) so a hung/erroring server can't cause a hot refetch
+          // loop every ~30s.
+          break;
+        } finally {
+          clearTimeout(timeoutId);
         }
-      } catch {
-        // Network errors: stop silently — heatmap degrades gracefully
-        break;
+        cursor = chunkTo;
       }
-      cursor = chunkTo;
     }
 
-    // Mark as fetched regardless of partial failure
-    fetchedWindowsRef.current.push({ from: winFrom, to: winTo, res });
+    // Replace prior coverage for this resolution with the full requested
+    // window — every part of it was either already trusted or just
+    // attempted above. Bounded to one entry per resolution so this can
+    // never grow unboundedly across ticks.
+    fetchedWindowsRef.current = fetchedWindowsRef.current.filter(w => w.res !== res);
+    fetchedWindowsRef.current.push({ from: winFrom, to: winTo, res, fetchedAt: now });
   }, [decodeSlices, rebuildState]);
 
   // ── Fetch on window or resolution change ─────────────────────────────────
