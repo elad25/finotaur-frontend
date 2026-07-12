@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { ToolbarTrigger } from './ToolbarTrigger';
 import type { FootprintCellMode } from '@/components/charting/orderflow/types';
 import type { FootprintColorScheme, FootprintLayout, FootprintSettings } from './footprintSettings';
-import { snapRowSizePriceToTick, snapRowSizeTicksToInt } from './footprintSettings';
+import { snapRowSizePriceToTick, snapRowSizeTicksToInt, FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE } from './footprintSettings';
 
 export interface FootprintSettingsMenuProps {
   settings: FootprintSettings;
@@ -124,17 +124,43 @@ export function FootprintSettingsMenu({ settings, onChange, tickSize, rowSizeCla
           {/* LAYOUT */}
           <div>
             <SectionLabel>Layout</SectionLabel>
-            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Footprint layout">
-              {LAYOUT_OPTIONS.map((opt) => (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Footprint layout">
+                {LAYOUT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onChange({ layout: opt.value })}
+                    className={pillClass(settings.layout === opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ATAS "Auto transform candles to footprint" (S1 "Arena WOW week") */}
+              <div className="flex items-center justify-between gap-2 text-[11px] text-[#C0C0C0]">
+                <span>Auto-transform to footprint</span>
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => onChange({ layout: opt.value })}
-                  className={pillClass(settings.layout === opt.value)}
+                  onClick={() => onChange({ autoTransform: !settings.autoTransform })}
+                  aria-pressed={settings.autoTransform}
+                  className={pillClass(settings.autoTransform)}
+                  title="Show full footprint detail only once a bar is wide enough to be legible; plain candles below the threshold"
                 >
-                  {opt.label}
+                  {settings.autoTransform ? 'On' : 'Off'}
                 </button>
-              ))}
+              </div>
+              {settings.autoTransform && (
+                <NumberField
+                  label="Candle width to auto transform (px)"
+                  value={settings.autoTransformMinPx}
+                  min={FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE.min}
+                  max={FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE.max}
+                  step={1}
+                  onCommit={(v) => onChange({ autoTransformMinPx: v })}
+                />
+              )}
             </div>
           </div>
 

@@ -81,6 +81,17 @@ export function getZonedParts(timestampSeconds: number, ianaZone: string): Zoned
   };
 }
 
+/**
+ * Resolves `tz` to its IANA zone name, or `undefined` for 'local' (the
+ * explicit "no override" case — browser-local time). Exported so other
+ * timezone-aware pure modules (sessionVolumeProfile.ts's session
+ * partitioning) can reuse the same zone table instead of maintaining a
+ * second copy that could drift from this one.
+ */
+export function resolveIanaZone(tz: ChartTimezone): string | undefined {
+  return IANA_ZONE_MAP[tz];
+}
+
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }

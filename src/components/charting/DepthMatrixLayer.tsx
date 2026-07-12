@@ -49,51 +49,115 @@
 //   qCut = round(log1p(sizeFilterPct/100 * expm1(qP99/1000)) * 1000)
 //   With sizeFilterPct=0 (All): no additional cut — same as current behavior.
 //   With sizeFilterPct>0: bins below qCut are fully transparent (not faint).
+//
+// Palette + smoothing (Task S2 — ATAS/Bookmap restyle):
+//   The color LUT itself now lives in depthPalettes.ts (3 palettes: 'finotaur'
+//   NEW default gold-on-black, 'classic' = the ORIGINAL hardcoded navy→cyan→
+//   yellow→white ramp bit-for-bit preserved, 'thermal' = ATAS/inferno-like).
+//   `palette` defaults to 'classic' when the prop is absent — MarketScanner.tsx
+//   never passes it, so its render stays pixel-identical to pre-S2.
+//   `smoothing` (default false when absent) adds two post-process passes to
+//   the offscreen raster ONLY (never per-frame — still gated by the same
+//   needsRepaint check as the rest of repaintOffscreen):
+//     1. Vertical 3-tap blend between adjacent price rows (kills hard cell
+//        banding), only blending painted (alpha>0) neighbors into each other.
+//     2. A soft "bloom" halo around cells whose normalized intensity t>=0.95
+//        (max-blended into their 4-neighbors) so the strongest walls read as
+//        bright hot streaks, ATAS-style.
 
 import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import { qToUsd } from '@/pages/app/crypto/scanner/useDepthSlices';
+import { getPaletteLUT, getPaletteFaintColor, type DepthPaletteId } from './depthPalettes';
 
-// ── Color LUT ─────────────────────────────────────────────────────────────────
+// Normalized-intensity threshold (pre-gamma, linear t ∈ [0,1]) above which a
+// cell is considered "hot" for the bloom pass.
+const BLOOM_HOT_THRESHOLD = 0.95;
+// Fraction of a hot cell's own alpha blended into each of its 4 neighbors.
+const BLOOM_NEIGHBOR_ALPHA_FRACTION = 0.35;
 
-const STOPS: Array<[number, [number, number, number]]> = [
-  [0.00, [10,  20,  45 ]],  // slightly lifted navy (not near-black)
-  [0.18, [20,  70,  160]],  // blue — ramp starts earlier
-  [0.40, [0,   200, 220]],  // cyan — medium walls reach here
-  [0.65, [255, 216, 61 ]],  // yellow — large walls
-  [0.88, [255, 255, 255]],  // white-hot — top of ramp
-];
-
-/** Precomputed 256-entry RGBA Uint32 LUT (ABGR in little-endian Uint32). */
-function buildLUT(): Uint32Array {
-  const lut = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    let r = 0, g = 0, b = 0;
-    for (let s = 1; s < STOPS.length; s++) {
-      const [t0, c0] = STOPS[s - 1];
-      const [t1, c1] = STOPS[s];
-      if (t >= t0 && t <= t1) {
-        const frac = (t - t0) / (t1 - t0);
-        r = Math.round(c0[0] + (c1[0] - c0[0]) * frac);
-        g = Math.round(c0[1] + (c1[1] - c0[1]) * frac);
-        b = Math.round(c0[2] + (c1[2] - c0[2]) * frac);
-        break;
-      }
-    }
-    // Pack as ABGR (ImageData is RGBA in memory, but Uint32 on little-endian
-    // hosts reads as ABGR where A is the most-significant byte stored last).
-    lut[i] = (0xff << 24) | (b << 16) | (g << 8) | r;
-  }
-  return lut;
+/** Unpacks an ABGR Uint32 into [r, g, b, a] bytes. */
+function unpackAbgr(color: number): [number, number, number, number] {
+  return [color & 0xff, (color >>> 8) & 0xff, (color >>> 16) & 0xff, (color >>> 24) & 0xff];
 }
 
-const LUT: Uint32Array = buildLUT();
+function packAbgr(r: number, g: number, b: number, a: number): number {
+  return ((a & 0xff) << 24) | ((b & 0xff) << 16) | ((g & 0xff) << 8) | (r & 0xff);
+}
 
-// Faint context color for cells below vLo (alpha 0x40 = 64/255 ≈ 25%).
-// navy at 25% opacity → ABGR = (0x40 << 24) | (45 << 16) | (20 << 8) | 10
-const FAINT_COLOR = (0x40 << 24) | (45 << 16) | (20 << 8) | 10;
+/**
+ * Vertical 3-tap smoothing pass — blends each painted (alpha>0) pixel with
+ * its immediate row-1/row+1 neighbors (weights 0.25/0.5/0.25). Transparent
+ * neighbors contribute the pixel's OWN color instead of black/zero, so edges
+ * against empty background never darken — only banding BETWEEN two painted
+ * rows softens. Operates on a copy so reads never see already-blended output.
+ */
+function applyVerticalSmoothing(buf: Uint32Array, numCols: number, numRows: number): void {
+  const src = buf.slice();
+  for (let row = 0; row < numRows; row++) {
+    const rowBase = row * numCols;
+    for (let col = 0; col < numCols; col++) {
+      const idx = rowBase + col;
+      const cur = src[idx];
+      const curA = (cur >>> 24) & 0xff;
+      if (curA === 0) continue; // never bleed color into empty background
+
+      const above = row > 0 ? src[idx - numCols] : 0;
+      const below = row < numRows - 1 ? src[idx + numCols] : 0;
+      const aboveA = (above >>> 24) & 0xff;
+      const belowA = (below >>> 24) & 0xff;
+
+      const [cr, cg, cb] = unpackAbgr(cur);
+      const [ar, ag, ab] = aboveA > 0 ? unpackAbgr(above) : [cr, cg, cb];
+      const [br, bg, bb] = belowA > 0 ? unpackAbgr(below) : [cr, cg, cb];
+
+      const r = Math.round(ar * 0.25 + cr * 0.5 + br * 0.25);
+      const g = Math.round(ag * 0.25 + cg * 0.5 + bg * 0.25);
+      const b = Math.round(ab * 0.25 + cb * 0.5 + bb * 0.25);
+      buf[idx] = packAbgr(r, g, b, curA);
+    }
+  }
+}
+
+/**
+ * Soft bloom pass — for every cell flagged hot in `hotMask` (t >= BLOOM_HOT_
+ * THRESHOLD, computed pre-gamma during rasterization), lightens its 4
+ * neighbors toward the hot cell's own color (component-wise max, so an
+ * already-brighter neighbor is never dimmed) at BLOOM_NEIGHBOR_ALPHA_FRACTION
+ * strength. Purely additive-looking without needing real alpha compositing.
+ */
+function applyBloom(buf: Uint32Array, hotMask: Uint8Array, numCols: number, numRows: number): void {
+  const hotColors = buf.slice(); // snapshot BEFORE bloom mutates neighbors
+  for (let row = 0; row < numRows; row++) {
+    const rowBase = row * numCols;
+    for (let col = 0; col < numCols; col++) {
+      const idx = rowBase + col;
+      if (!hotMask[idx]) continue;
+      const [hr, hg, hb] = unpackAbgr(hotColors[idx]);
+
+      const neighbors = [
+        row > 0 ? idx - numCols : -1,
+        row < numRows - 1 ? idx + numCols : -1,
+        col > 0 ? idx - 1 : -1,
+        col < numCols - 1 ? idx + 1 : -1,
+      ];
+      for (const nIdx of neighbors) {
+        if (nIdx < 0) continue;
+        const cur = buf[nIdx];
+        const curA = (cur >>> 24) & 0xff;
+        const [cr, cg, cb] = unpackAbgr(cur);
+        const r = Math.max(cr, Math.round(cr + (hr - cr) * BLOOM_NEIGHBOR_ALPHA_FRACTION));
+        const g = Math.max(cg, Math.round(cg + (hg - cg) * BLOOM_NEIGHBOR_ALPHA_FRACTION));
+        const b = Math.max(cb, Math.round(cb + (hb - cb) * BLOOM_NEIGHBOR_ALPHA_FRACTION));
+        // Give the halo at least a faint opacity even over previously-empty
+        // background so the glow is visible past the wall's own edge.
+        const a = Math.max(curA, Math.round(0xff * BLOOM_NEIGHBOR_ALPHA_FRACTION * 0.6));
+        buf[nIdx] = packAbgr(r, g, b, a);
+      }
+    }
+  }
+}
 
 // ── Histogram-based percentile (O(n), no sort) ───────────────────────────────
 
@@ -140,6 +204,22 @@ export interface DepthMatrixLayerProps {
   floorUsd?: number;
   /** Current candle interval in milliseconds — used to map column→px width */
   candleIntervalMs: number;
+  /**
+   * Color palette for the heatmap ramp — see depthPalettes.ts.
+   * Default 'classic': the ORIGINAL navy→blue→cyan→yellow→white ramp,
+   * preserved bit-for-bit for backward compat (MarketScanner.tsx never
+   * passes this prop). LiquidityTab.tsx passes 'finotaur' (the new default
+   * gold-on-black premium look) or 'thermal'.
+   */
+  palette?: DepthPaletteId;
+  /**
+   * Enables vertical band-smoothing + a soft bloom halo on the hottest walls
+   * (see applyVerticalSmoothing/applyBloom above). Both run ONLY inside the
+   * already dirty-gated offscreen rasterization — never per-frame.
+   * Default false when absent (safe no-op for MarketScanner.tsx and any
+   * other caller that doesn't pass this prop).
+   */
+  smoothing?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -154,6 +234,8 @@ export function DepthMatrixLayer({
   sizeFilterPct = 5,
   floorUsd = 1_000,
   candleIntervalMs,
+  palette = 'classic',
+  smoothing = false,
 }: DepthMatrixLayerProps) {
   const canvasRef          = useRef<HTMLCanvasElement>(null);
   const offscreenRef       = useRef<OffscreenCanvas | null>(null);
@@ -182,6 +264,8 @@ export function DepthMatrixLayer({
   const floorUsdRef        = useRef<number>(floorUsd);
   const sizeFilterRef      = useRef<number>(sizeFilterPct);
   const candleIntervalRef  = useRef<number>(candleIntervalMs);
+  const paletteRef         = useRef<DepthPaletteId>(palette);
+  const smoothingRef       = useRef<boolean>(smoothing);
 
   columnsRef.current        = columns;
   binSizeRef.current        = binSize;
@@ -190,6 +274,8 @@ export function DepthMatrixLayer({
   floorUsdRef.current       = floorUsd;
   sizeFilterRef.current     = sizeFilterPct;
   candleIntervalRef.current = candleIntervalMs;
+  paletteRef.current        = palette;
+  smoothingRef.current      = smoothing;
 
   // ── Normalization ─────────────────────────────────────────────────────────
 
@@ -258,6 +344,8 @@ export function DepthMatrixLayer({
     chartInst: IChartApi,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     seriesInst: ISeriesApi<any>,
+    paletteId: DepthPaletteId,
+    smoothingEnabled: boolean,
   ) {
     if (cols.length === 0) return;
 
@@ -306,6 +394,15 @@ export function DepthMatrixLayer({
 
     const imgData = octx.createImageData(needed_w, needed_h);
     const buf = new Uint32Array(imgData.data.buffer);
+    // Parallel mask (same row-major indexing as buf) marking cells whose
+    // normalized intensity cleared BLOOM_HOT_THRESHOLD — consumed by
+    // applyBloom() below when smoothingEnabled. Allocated unconditionally
+    // (cheap — one Uint8Array the size of the grid) but only ever written to
+    // / read from when smoothingEnabled, so it's a no-op cost otherwise.
+    const hotMask = smoothingEnabled ? new Uint8Array(needed_w * needed_h) : null;
+
+    const lut = getPaletteLUT(paletteId);
+    const faintColor = getPaletteFaintColor(paletteId);
 
     const floorQ = Math.round(Math.log1p(floor) * 1000);
     const dVLo = vLo;
@@ -321,8 +418,14 @@ export function DepthMatrixLayer({
       ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
       : 0;
 
+    // Set by qToColor on its most recent call — read immediately afterward by
+    // the fill loop (single-threaded, synchronous) to populate hotMask.
+    // Avoids qToColor allocating a [color, hot] tuple on every cell.
+    let lastCellWasHot = false;
+
     // Helper: map a q value to a canvas pixel color.
     function qToColor(q: number): number {
+      lastCellWasHot = false;
       if (q === 0 || q < floorQ) return 0; // transparent
 
       // Size filter: fully hide sub-threshold bins (not even faint context)
@@ -333,14 +436,15 @@ export function DepthMatrixLayer({
       if (usd < floor) return 0;
 
       let t = (usd - dVLo) / dRange;
-      if (t <= 0) return FAINT_COLOR; // below vLo → faint context
+      if (t <= 0) return faintColor; // below vLo → faint context
       if (t > 1) t = 1;
+      lastCellWasHot = t >= BLOOM_HOT_THRESHOLD;
 
       // gamma compression (0.50) — stronger mid-lift, cells pop earlier
       const gamma = Math.pow(t, 0.50);
       const idx = Math.min(255, (gamma * 255) | 0);
       // Ensure above-threshold cells are fully opaque for t≥0.35; floor ~0xB0 below.
-      const lutColor = LUT[idx];
+      const lutColor = lut[idx];
       if (t >= 0.35) {
         // Force full opacity (LUT already encodes 0xff alpha, but be explicit)
         return (lutColor & 0x00ffffff) | (0xff << 24);
@@ -410,7 +514,14 @@ export function DepthMatrixLayer({
 
         const pixelIdx = canvasRow * numCols + ci;
         buf[pixelIdx] = color;
+        if (hotMask && lastCellWasHot) hotMask[pixelIdx] = 1;
       }
+    }
+
+    // ── Smoothing / bloom post-process (offscreen-only, dirty-gated) ─────────
+    if (smoothingEnabled) {
+      applyVerticalSmoothing(buf, numCols, numRows);
+      if (hotMask) applyBloom(buf, hotMask, numCols, numRows);
     }
 
     octx.putImageData(imgData, 0, 0);
@@ -522,6 +633,8 @@ export function DepthMatrixLayer({
             sizeFilterRef.current,
             chartInstance,
             seriesInstance,
+            paletteRef.current,
+            smoothingRef.current,
           );
           paintedVersionRef.current = offscreenVersionRef.current;
         }
@@ -744,7 +857,7 @@ export function DepthMatrixLayer({
       offscreenVersionRef.current++;
       dirtyRef.current = true;
     });
-  }, [columns, binSize, sizeFilterPct, floorUsd]);
+  }, [columns, binSize, sizeFilterPct, floorUsd, palette, smoothing]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

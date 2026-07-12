@@ -31,6 +31,7 @@ import {
   prepareCandleDraw,
   drawCandleFootprint,
   formatCellValue,
+  resolveAutoTransformDetail,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
   type CandleProjection,
   type FootprintDrawExtras,
@@ -63,6 +64,25 @@ import {
 } from '../footprintTheme';
 
 // ─── computeDetailLevel ──────────────────────────────────────────────────────
+
+// ─── resolveAutoTransformDetail ──────────────────────────────────────────────
+
+describe('resolveAutoTransformDetail', () => {
+  it('returns "full" once candleWidthPx reaches minPx', () => {
+    expect(resolveAutoTransformDetail(20, 20)).toBe('full');
+    expect(resolveAutoTransformDetail(25, 20)).toBe('full');
+  });
+
+  it('returns "hidden" below minPx', () => {
+    expect(resolveAutoTransformDetail(19.9, 20)).toBe('hidden');
+    expect(resolveAutoTransformDetail(0, 20)).toBe('hidden');
+  });
+
+  it('is a pure binary gate — no "shaded" intermediate stage exists', () => {
+    const result = resolveAutoTransformDetail(15, 20);
+    expect(['full', 'hidden']).toContain(result);
+  });
+});
 
 describe('computeDetailLevel', () => {
   it('cold start (previousStage=hidden): candleWidth 40px / rowHeight 12px → shaded (wide enough to shade, too narrow for legible bid×ask text)', () => {

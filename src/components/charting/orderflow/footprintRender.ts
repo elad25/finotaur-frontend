@@ -148,6 +148,19 @@ export function computeDetailLevel(
 }
 
 /**
+ * ATAS "Auto transform candles to footprint" gate: a simple BINARY decision
+ * (no 'shaded' intermediate stage, no hysteresis) — 'full' detail once the
+ * rendered bar pixel width reaches `minPx`, otherwise 'hidden' (plain
+ * candles show through). Used by FootprintLayer when
+ * `FootprintConfig.autoTransformMinPx` is set — takes priority over both
+ * `forceFullDetail` and computeDetailLevel's 3-stage hysteresis. Pure,
+ * frame-safe (only a px comparison).
+ */
+export function resolveAutoTransformDetail(candleWidthPx: number, minPx: number): FootprintDetailLevel {
+  return candleWidthPx >= minPx ? 'full' : 'hidden';
+}
+
+/**
  * Row-merge factor (1, 2, or 4) targeting a legible on-screen row height —
  * ATAS/Exocharts parity is ~14-25 rows/bar at typical zoom, each row a
  * 14-20px cell (see FOOTPRINT_AUTO_ROW_HEIGHT_MIN/MAX in footprintTheme.ts).

@@ -232,6 +232,7 @@ export default function TradingArena() {
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             onChartStyleReset={resetChartStyle}
+            assetClass={assetClass}
           />
         </div>
 

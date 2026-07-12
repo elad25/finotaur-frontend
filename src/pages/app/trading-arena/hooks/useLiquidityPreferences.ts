@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isDepthPaletteId, type DepthPaletteId } from '@/components/charting/depthPalettes';
 
 export const LIQUIDITY_STORAGE_PREFIX = 'finotaur:arena:liquidity:v1';
 
@@ -23,15 +24,32 @@ export function liquiditySymbolStorageKey(symbol: string): string {
 /** 'auto' = adaptive per-symbol floor; a number = one of LiquidityTab.tsx's FLOOR_OPTIONS values (or any custom $ floor). */
 export type LiquidityFloorMode = 'auto' | number;
 export type LiquiditySizeFilterPct = 0 | 1 | 5 | 10 | 25;
+/** 'auto' = top ~2% of visible dominant-side trade volumes; a number = absolute volume floor. */
+export type LiquidityBubbleThreshold = 'auto' | number;
 
 export interface LiquidityPreferences {
   floorMode: LiquidityFloorMode;
   sizeFilterPct: LiquiditySizeFilterPct;
+  /** Depth matrix heatmap color palette (Task S2 — ATAS/Bookmap restyle). Default 'finotaur'. */
+  palette: DepthPaletteId;
+  /** Vertical band-smoothing + hot-wall bloom on the depth matrix. Default true. */
+  smoothing: boolean;
+  /** Executed-aggression volume bubbles overlay. Default true. */
+  bubbles: boolean;
+  /** Volume threshold that gates a bubble — see volumeBubbles.ts. Default 'auto'. */
+  bubbleThreshold: LiquidityBubbleThreshold;
+  /** Right-edge "what's waiting" resting-book gutter. Default true. */
+  sideProfile: boolean;
 }
 
 export const DEFAULT_LIQUIDITY_PREFERENCES: LiquidityPreferences = {
   floorMode: 'auto',
   sizeFilterPct: 0,
+  palette: 'finotaur',
+  smoothing: true,
+  bubbles: true,
+  bubbleThreshold: 'auto',
+  sideProfile: true,
 };
 
 const SIZE_FILTER_VALUES: readonly LiquiditySizeFilterPct[] = [0, 1, 5, 10, 25];
@@ -46,6 +64,20 @@ function asSizeFilterPct(v: unknown, fallback: LiquiditySizeFilterPct): Liquidit
   return typeof v === 'number' && (SIZE_FILTER_VALUES as readonly number[]).includes(v)
     ? (v as LiquiditySizeFilterPct)
     : fallback;
+}
+
+function asPalette(v: unknown, fallback: DepthPaletteId): DepthPaletteId {
+  return isDepthPaletteId(v) ? v : fallback;
+}
+
+function asBoolean(v: unknown, fallback: boolean): boolean {
+  return typeof v === 'boolean' ? v : fallback;
+}
+
+function asBubbleThreshold(v: unknown, fallback: LiquidityBubbleThreshold): LiquidityBubbleThreshold {
+  if (v === 'auto') return 'auto';
+  if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return v;
+  return fallback;
 }
 
 /**
@@ -64,6 +96,11 @@ export function sanitizeLiquidityPreferences(
   return {
     floorMode: asFloorMode(p.floorMode, fallback.floorMode),
     sizeFilterPct: asSizeFilterPct(p.sizeFilterPct, fallback.sizeFilterPct),
+    palette: asPalette(p.palette, fallback.palette),
+    smoothing: asBoolean(p.smoothing, fallback.smoothing),
+    bubbles: asBoolean(p.bubbles, fallback.bubbles),
+    bubbleThreshold: asBubbleThreshold(p.bubbleThreshold, fallback.bubbleThreshold),
+    sideProfile: asBoolean(p.sideProfile, fallback.sideProfile),
   };
 }
 

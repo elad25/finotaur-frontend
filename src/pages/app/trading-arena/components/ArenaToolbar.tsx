@@ -79,6 +79,8 @@ interface ArenaToolbarProps {
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
   onChartStyleReset: () => void;
+  /** Current asset class — passed straight through to ChartSettingsMenu (gates the footprint auto-transform toggle). */
+  assetClass: string;
 }
 
 export function ArenaToolbar({
@@ -91,6 +93,7 @@ export function ArenaToolbar({
   chartStyle,
   onChartStyleChange,
   onChartStyleReset,
+  assetClass,
 }: ArenaToolbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -156,6 +159,7 @@ export function ArenaToolbar({
         settings={chartStyle}
         onChange={onChartStyleChange}
         onReset={onChartStyleReset}
+        assetClass={assetClass}
       />
 
       {showChartOnlyMenus && (

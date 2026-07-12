@@ -31,6 +31,16 @@ export type { FootprintColorScheme, FootprintLayout };
 
 export type FootprintRowSizeMode = 'auto' | 'price' | 'ticks';
 
+/**
+ * ATAS "Candle width to auto transform" default (CSS px) — shared by both
+ * the Footprint tab's own autoTransform toggle (below) and ChartTab's
+ * `footprintOnZoom` opt-in bridge (chartStyleSettings.ts), which reuses this
+ * constant directly rather than exposing a second independently-configurable
+ * threshold on that tab (spec: "a single shared constant is fine").
+ */
+export const DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX = 20;
+export const FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE = { min: 8, max: 60 } as const;
+
 export interface FootprintStatsRowsVisibility {
   volume: boolean;
   delta: boolean;
@@ -57,6 +67,16 @@ export interface FootprintSettings {
   rowSizeMode: FootprintRowSizeMode;
   /** $ per row when rowSizeMode==='price'; tick count per row when rowSizeMode==='ticks'. Ignored (null) in 'auto' mode. */
   rowSizeValue: number | null;
+  /**
+   * ATAS "Auto transform candles to footprint" (S1 "Arena WOW week"). When
+   * true, FootprintLayer gates full-detail rendering on
+   * `autoTransformMinPx` (bar pixel width) instead of the tab's usual
+   * always-full `forceFullDetail`. When false, today's always-full behavior
+   * is unchanged. Default true.
+   */
+  autoTransform: boolean;
+  /** Min bar pixel width (CSS px) to reveal full footprint detail when autoTransform is on. Range [8, 60]. Default 20. */
+  autoTransformMinPx: number;
   showCvd: boolean;
   showDelta: boolean;
   showVolumeProfile: boolean;
@@ -86,6 +106,8 @@ export const DEFAULT_FOOTPRINT_SETTINGS: FootprintSettings = {
   imbalanceStackedOnly: false,
   rowSizeMode: 'auto',
   rowSizeValue: null,
+  autoTransform: true,
+  autoTransformMinPx: DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX,
   showCvd: false,
   showDelta: false,
   showVolumeProfile: false,
@@ -141,6 +163,14 @@ export function footprintSettingsToConfig(
     colorScheme: settings.colorScheme,
     showValueArea: settings.showValueArea,
     statsRows: settings.statsRows,
+    // autoTransformMinPx takes priority over forceFullDetail in
+    // FootprintLayer (see that file's detail-gate comment) — only set when
+    // the user has autoTransform ON, so autoTransform=false reproduces
+    // today's always-full behavior byte-for-byte (base.forceFullDetail /
+    // the caller's own `forceFullDetail: true` override still applies).
+    autoTransformMinPx: settings.autoTransform
+      ? Math.min(FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE.max, Math.max(FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE.min, settings.autoTransformMinPx))
+      : undefined,
   };
 }
 
