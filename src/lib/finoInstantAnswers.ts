@@ -483,8 +483,7 @@ function insufficientDataAnswer(key: string, title: string, question: string): I
     key,
     title,
     stats: [],
-    verdict:
-      'Not enough journal data yet — log at least 3 trades and this answer is computed instantly from your own journal, free.',
+    verdict: "Not enough journal data yet — log at least 3 trades and I'll have this for you.",
     followUp: question,
     followUpLabel: 'Ask FINO anyway',
   };
