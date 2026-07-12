@@ -36,6 +36,7 @@ import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
 import { FootprintLayer } from '@/components/charting/orderflow/FootprintLayer';
 import { VolumeProfileLayer } from '@/components/charting/orderflow/VolumeProfileLayer';
+import { SessionVolumeProfileLayer, type SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
 import type { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import type { FootprintConfig } from '@/components/charting/orderflow/types';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
@@ -738,6 +739,20 @@ export interface FinotaurChartProps {
     visible: boolean;
   };
   /**
+   * Optional Chart-tab-only SESSION Volume Profile overlay (ATAS-style,
+   * multi-session, OHLCV-bar-derived — see sessionVolumeProfile.ts). Distinct
+   * from `volumeProfile` above (tick-level, FlowBinStore-fed, visible-range
+   * only, Order Flow tab). Reads bars straight from this component's own
+   * `barsRef.current` — the caller only supplies render settings + visible.
+   * 🔴 Undefined is a COMPLETE no-op — every existing caller (including
+   * FootprintTab/LiquidityTab, which never pass this prop) is fully
+   * unaffected. Only ChartTab.tsx passes this.
+   */
+  sessionVolumeProfile?: {
+    settings: SessionVolumeProfileRenderSettings;
+    visible: boolean;
+  };
+  /**
    * Optional TradingView-style chart style overrides (candle colors,
    * canvas/grid/crosshair/watermark, price axis, timezone, price precision —
    * see chartStyleSettings.ts). Mapped to lw-charts options via
@@ -792,6 +807,7 @@ export function FinotaurChart({
   mutedCandles,
   refreshToken,
   volumeProfile,
+  sessionVolumeProfile,
   chartStyle,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1000,9 +1016,9 @@ export function FinotaurChart({
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: Math.floor(w), height: Math.floor(h) });
         // Also track size for WallHeatLayer (heatmap), DepthMatrixLayer (matrix),
-        // FootprintLayer, and VolumeProfileLayer (when their respective props
-        // are provided).
-        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile) {
+        // FootprintLayer, VolumeProfileLayer, and SessionVolumeProfileLayer
+        // (when their respective props are provided).
+        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile) {
           setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
         }
       }
@@ -1011,19 +1027,19 @@ export function FinotaurChart({
 
     // Seed initial size synchronously — ResizeObserver only fires on *changes*,
     // so if bars load before the first resize the layer would get 0×0 forever.
-    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile) {
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile) {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w > 0 && h > 0) setContainerSize({ w, h });
     }
 
     return () => ro.disconnect();
-    // footprint/volumeProfile are object props (new identity every render from
-    // most callers); gating on truthiness only (via the `!!` cast) avoids
-    // re-running this effect (and re-observing the ResizeObserver) on every
-    // parent render.
+    // footprint/volumeProfile/sessionVolumeProfile are object props (new
+    // identity every render from most callers); gating on truthiness only
+    // (via the `!!` cast) avoids re-running this effect (and re-observing the
+    // ResizeObserver) on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallRenderMode, !!footprint, !!volumeProfile]);
+  }, [wallRenderMode, !!footprint, !!volumeProfile, !!sessionVolumeProfile]);
 
   // ─── Overlay reposition: subscribe to pan/zoom + resize ────
   // Fires setOverlayTick (bumping counter) whenever the visible time range
@@ -1794,6 +1810,24 @@ export function FinotaurChart({
 
       {/* Chart canvas mount */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Session Volume Profile overlay (Chart tab only) — rendered BEHIND
+          candles (z-index 5, same as DepthMatrixLayer below). Fed directly by
+          this component's own barsRef.current — see the `sessionVolumeProfile`
+          prop's doc comment. Undefined = zero mount, zero cost. */}
+      {sessionVolumeProfile &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <SessionVolumeProfileLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          bars={barsRef.current}
+          settings={sessionVolumeProfile.settings}
+          visible={sessionVolumeProfile.visible}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+        />
+      )}
 
       {/* Wall heatmap canvas overlay — only in heatmap mode.
           Mounted unconditionally once the chart + series are ready (barCount > 0)

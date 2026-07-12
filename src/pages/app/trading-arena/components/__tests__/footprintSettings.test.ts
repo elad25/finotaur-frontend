@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_FOOTPRINT_SETTINGS,
+  DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX,
   footprintSettingsToConfig,
   resolveEffectiveRowSize,
   snapRowSizePriceToTick,
@@ -32,6 +33,8 @@ describe('DEFAULT_FOOTPRINT_SETTINGS', () => {
     expect(DEFAULT_FOOTPRINT_SETTINGS.imbalanceStackedOnly).toBe(false);
     expect(DEFAULT_FOOTPRINT_SETTINGS.rowSizeMode).toBe('auto');
     expect(DEFAULT_FOOTPRINT_SETTINGS.rowSizeValue).toBeNull();
+    expect(DEFAULT_FOOTPRINT_SETTINGS.autoTransform).toBe(true);
+    expect(DEFAULT_FOOTPRINT_SETTINGS.autoTransformMinPx).toBe(DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX);
     expect(DEFAULT_FOOTPRINT_SETTINGS.showCvd).toBe(false);
     expect(DEFAULT_FOOTPRINT_SETTINGS.showDelta).toBe(false);
     expect(DEFAULT_FOOTPRINT_SETTINGS.showVolumeProfile).toBe(false);
@@ -125,6 +128,22 @@ describe('footprintSettingsToConfig', () => {
       forceFullDetail: true,
     });
     expect(config.forceFullDetail).toBe(true);
+  });
+
+  it('autoTransform=true (the default) maps autoTransformMinPx through, clamped to [8,60]', () => {
+    const config = footprintSettingsToConfig(DEFAULT_FOOTPRINT_SETTINGS);
+    expect(config.autoTransformMinPx).toBe(DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX);
+
+    const clampedHigh = footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, autoTransformMinPx: 999 });
+    expect(clampedHigh.autoTransformMinPx).toBe(60);
+
+    const clampedLow = footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, autoTransformMinPx: 0 });
+    expect(clampedLow.autoTransformMinPx).toBe(8);
+  });
+
+  it('autoTransform=false omits autoTransformMinPx (undefined) — reproduces today\'s always-full behavior via forceFullDetail', () => {
+    const config = footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, autoTransform: false });
+    expect(config.autoTransformMinPx).toBeUndefined();
   });
 });
 

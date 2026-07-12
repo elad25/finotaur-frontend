@@ -11,7 +11,9 @@ import {
   CANDLE_COLOR_PRESETS,
   BACKGROUND_PRESETS,
   DEFAULT_CHART_STYLE,
+  DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS,
   sanitizeChartStyleSettings,
+  sanitizeSessionVolumeProfileSettings,
   type ChartStyleSettings,
 } from '../chartStyleSettings';
 
@@ -40,6 +42,10 @@ describe('DEFAULT_CHART_STYLE', () => {
     // Time
     expect(DEFAULT_CHART_STYLE.timezone).toBe('local');
     expect(DEFAULT_CHART_STYLE.pricePrecision).toBe('default');
+
+    // Session Volume Profile + footprint-on-zoom (S1 "Arena WOW week")
+    expect(DEFAULT_CHART_STYLE.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
+    expect(DEFAULT_CHART_STYLE.footprintOnZoom).toBe(false);
   });
 
   it('candle default is exactly the "classic" preset', () => {
@@ -114,6 +120,17 @@ describe('sanitizeChartStyleSettings', () => {
       priceAxisFontSize: 13,
       timezone: 'Asia/Jerusalem',
       pricePrecision: 2,
+      volumeProfile: {
+        enabled: false,
+        period: 'custom',
+        customSessionStart: '18:00',
+        customSessionEnd: '06:00',
+        showVpoc: false,
+        showVahVal: false,
+        profileWidthPct: 45,
+        opacity: 0.6,
+      },
+      footprintOnZoom: true,
     };
 
     const roundTripped = sanitizeChartStyleSettings(JSON.parse(JSON.stringify(custom)));
@@ -130,5 +147,36 @@ describe('sanitizeChartStyleSettings', () => {
     for (const tz of zones) {
       expect(sanitizeChartStyleSettings({ timezone: tz }).timezone).toBe(tz);
     }
+  });
+
+  it('degrades a corrupt/foreign nested volumeProfile object to defaults instead of throwing', () => {
+    const result = sanitizeChartStyleSettings({ volumeProfile: 'not-an-object', footprintOnZoom: 'yes' });
+    expect(result.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
+    expect(result.footprintOnZoom).toBe(false);
+  });
+});
+
+describe('sanitizeSessionVolumeProfileSettings', () => {
+  it('returns the fallback unchanged for null/non-object input', () => {
+    expect(sanitizeSessionVolumeProfileSettings(null)).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
+    expect(sanitizeSessionVolumeProfileSettings('garbage')).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
+  });
+
+  it('clamps profileWidthPct to [5, 60] and opacity to [0, 1]', () => {
+    expect(sanitizeSessionVolumeProfileSettings({ profileWidthPct: 999 }).profileWidthPct).toBe(60);
+    expect(sanitizeSessionVolumeProfileSettings({ profileWidthPct: -5 }).profileWidthPct).toBe(5);
+    expect(sanitizeSessionVolumeProfileSettings({ opacity: 5 }).opacity).toBe(1);
+    expect(sanitizeSessionVolumeProfileSettings({ opacity: -1 }).opacity).toBe(0);
+  });
+
+  it('rejects malformed HH:MM custom session strings, falling back to default', () => {
+    expect(sanitizeSessionVolumeProfileSettings({ customSessionStart: 'nine-thirty' }).customSessionStart)
+      .toBe(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS.customSessionStart);
+    expect(sanitizeSessionVolumeProfileSettings({ customSessionStart: '09:30' }).customSessionStart).toBe('09:30');
+  });
+
+  it('rejects an invalid period enum value', () => {
+    expect(sanitizeSessionVolumeProfileSettings({ period: 'quarter' }).period).toBe('day');
+    expect(sanitizeSessionVolumeProfileSettings({ period: 'custom' }).period).toBe('custom');
   });
 });

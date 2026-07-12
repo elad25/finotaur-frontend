@@ -96,6 +96,37 @@ export const TIMEZONE_OPTIONS: ReadonlyArray<{ value: ChartTimezone; label: stri
 ] as const;
 
 // ═══════════════════════════════════════════════════════════════
+// Session Volume Profile (Chart tab — ATAS-style, S1 "Arena WOW week")
+// ═══════════════════════════════════════════════════════════════
+export type SessionVolumeProfilePeriod = 'day' | 'week' | 'month' | 'custom';
+
+export interface SessionVolumeProfileSettings {
+  enabled: boolean;
+  period: SessionVolumeProfilePeriod;
+  /** 'HH:MM', only relevant when period === 'custom'. */
+  customSessionStart: string;
+  /** 'HH:MM', only relevant when period === 'custom'. */
+  customSessionEnd: string;
+  showVpoc: boolean;
+  showVahVal: boolean;
+  /** Max % of a session's horizontal span the histogram may occupy. Range [5, 60]. */
+  profileWidthPct: number;
+  /** Alpha multiplier applied to the whole overlay. Range [0, 1]. */
+  opacity: number;
+}
+
+export const DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS: SessionVolumeProfileSettings = {
+  enabled: true,
+  period: 'day',
+  customSessionStart: '09:30',
+  customSessionEnd: '16:00',
+  showVpoc: true,
+  showVahVal: true,
+  profileWidthPct: 30,
+  opacity: 1,
+};
+
+// ═══════════════════════════════════════════════════════════════
 // Settings shape
 // ═══════════════════════════════════════════════════════════════
 export interface ChartStyleSettings {
@@ -119,6 +150,19 @@ export interface ChartStyleSettings {
   // TIME
   timezone: ChartTimezone;
   pricePrecision: PricePrecision;
+
+  // SESSION VOLUME PROFILE (Chart tab only — see ChartTab.tsx's wiring)
+  volumeProfile: SessionVolumeProfileSettings;
+
+  /**
+   * ATAS "Auto transform candles to footprint" opt-in for the plain Chart
+   * tab. Default FALSE — the Chart tab stays plain unless the user opts in.
+   * Crypto only in this PR (see ChartTab.tsx's header comment for the
+   * futures deferral). Threshold (min bar px width to reveal cells) reuses
+   * FootprintTab's shared DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX constant —
+   * not independently configurable from this tab.
+   */
+  footprintOnZoom: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -150,6 +194,9 @@ export const DEFAULT_CHART_STYLE: ChartStyleSettings = {
 
   timezone: 'local',
   pricePrecision: 'default',
+
+  volumeProfile: DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS,
+  footprintOnZoom: false,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -182,6 +229,41 @@ function asPricePrecision(v: unknown, fallback: PricePrecision): PricePrecision 
   return fallback;
 }
 
+function asClampedNumber(v: unknown, fallback: number, min: number, max: number): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
+function asHHMM(v: unknown, fallback: string): string {
+  return typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v.trim()) ? v : fallback;
+}
+
+const SESSION_VOLUME_PROFILE_PERIOD_VALUES: SessionVolumeProfilePeriod[] = ['day', 'week', 'month', 'custom'];
+
+/**
+ * Validates an arbitrary parsed-JSON value for the nested `volumeProfile`
+ * object, field-by-field against `fallback` — same never-trust-the-shape
+ * contract as sanitizeChartStyleSettings itself.
+ */
+export function sanitizeSessionVolumeProfileSettings(
+  raw: unknown,
+  fallback: SessionVolumeProfileSettings = DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS,
+): SessionVolumeProfileSettings {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<SessionVolumeProfileSettings>;
+
+  return {
+    enabled: asBool(p.enabled, fallback.enabled),
+    period: asOneOf(p.period, SESSION_VOLUME_PROFILE_PERIOD_VALUES, fallback.period),
+    customSessionStart: asHHMM(p.customSessionStart, fallback.customSessionStart),
+    customSessionEnd: asHHMM(p.customSessionEnd, fallback.customSessionEnd),
+    showVpoc: asBool(p.showVpoc, fallback.showVpoc),
+    showVahVal: asBool(p.showVahVal, fallback.showVahVal),
+    profileWidthPct: asClampedNumber(p.profileWidthPct, fallback.profileWidthPct, 5, 60),
+    opacity: asClampedNumber(p.opacity, fallback.opacity, 0, 1),
+  };
+}
+
 /**
  * Validates an arbitrary parsed-JSON value field-by-field against
  * `fallback` (never trusts the shape of `raw` — corrupt/partial/foreign JSON
@@ -209,6 +291,9 @@ export function sanitizeChartStyleSettings(raw: unknown, fallback: ChartStyleSet
 
     timezone: asOneOf(p.timezone, TIMEZONE_VALUES, fallback.timezone),
     pricePrecision: asPricePrecision(p.pricePrecision, fallback.pricePrecision),
+
+    volumeProfile: sanitizeSessionVolumeProfileSettings(p.volumeProfile, fallback.volumeProfile),
+    footprintOnZoom: asBool(p.footprintOnZoom, fallback.footprintOnZoom),
   };
 }
 

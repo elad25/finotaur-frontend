@@ -215,3 +215,30 @@ export const VOLUME_PROFILE_VA_DIM_OUTSIDE_BG = 'rgba(8, 8, 10, 0.35)';
 
 /** Debounce window (ms) for recomputing the profile on visible-range change. */
 export const VOLUME_PROFILE_RECOMPUTE_DEBOUNCE_MS = 150;
+
+// ─── Session Volume Profile overlay tokens (Chart tab) ──────────────────────
+// Deliberately NOT the buy/sell green/red family above — this profile has no
+// aggressor-side data (OHLCV bars only), so it reads as a neutral steel/
+// graphite histogram with a gold vPOC, matching ATAS's session profile look
+// without borrowing ATAS's blue.
+
+/** Row fill — subtle slate, sits behind candles so it must stay unobtrusive. */
+export const SESSION_VP_ROW_FILL = 'rgba(148, 163, 184, 0.18)';
+/** Value-Area rows — brighter than the base fill, still behind candles. */
+export const SESSION_VP_ROW_FILL_VA = 'rgba(148, 163, 184, 0.34)';
+
+/** vPOC row + its extending ray + label — FINOTAUR gold, matches FOOTPRINT_POC_COLOR. */
+export const SESSION_VP_VPOC_COLOR = '#C9A646';
+export const SESSION_VP_VPOC_LINE_WIDTH = 1.5;
+export const SESSION_VP_LABEL_FONT = '10px "Inter", ui-monospace, SFMono-Regular, monospace';
+
+/** VAH/VAL boundary lines — faint dashed gold, dimmer than the vPOC ray. */
+export const SESSION_VP_VAHVAL_COLOR = 'rgba(201, 166, 70, 0.45)';
+export const SESSION_VP_VAHVAL_DASH: [number, number] = [3, 3];
+
+/** Session separator — dashed, very low opacity so it never competes with candles. */
+export const SESSION_VP_SEPARATOR_COLOR = 'rgba(255, 255, 255, 0.07)';
+export const SESSION_VP_SEPARATOR_DASH: [number, number] = [2, 4];
+
+/** Target row count per session (spec: "40-60 rows per typical session range"). */
+export const SESSION_VP_TARGET_ROW_COUNT = 50;

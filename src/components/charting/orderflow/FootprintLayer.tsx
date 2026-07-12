@@ -41,6 +41,7 @@ import {
   buildClusterStatsRow,
   getEnabledStatsRowDefs,
   prepareCandleDraw,
+  resolveAutoTransformDetail,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
   type ClusterStatsRow,
   type ClusterStatsRowMaxima,
@@ -487,11 +488,18 @@ export function FootprintLayer({
         const yAt1 = seriesInstance.priceToCoordinate(rowSize);
         const rowHeightPx = yAt0 !== null && yAt1 !== null ? Math.abs((yAt0 as number) - (yAt1 as number)) : 0;
 
-        // forceFullDetail (Trading Arena Footprint tab): skip the zoom-driven
-        // gate entirely and always render at 'full' — see FootprintConfig's
-        // doc comment. Every other caller leaves this undefined/false, so
-        // computeDetailLevel's existing hysteresis behavior is unaffected.
-        const detail = config.forceFullDetail ? 'full' : computeDetailLevel(candleWidthPx, rowHeightPx, currentStageRef.current);
+        // autoTransformMinPx (Trading Arena, opt-in on both the Footprint tab
+        // and ChartTab's footprintOnZoom bridge) takes priority over
+        // forceFullDetail — a simple binary full/hidden gate, no hysteresis.
+        // Falls through to forceFullDetail (Trading Arena Footprint tab's
+        // default: always 'full') or the zoom-driven 3-stage hysteresis
+        // (every other caller, unaffected) when unset — see FootprintConfig's
+        // doc comments on both fields.
+        const detail = config.autoTransformMinPx != null
+          ? resolveAutoTransformDetail(candleWidthPx, config.autoTransformMinPx)
+          : config.forceFullDetail
+            ? 'full'
+            : computeDetailLevel(candleWidthPx, rowHeightPx, currentStageRef.current);
         if (detail !== currentStageRef.current) {
           currentStageRef.current = detail;
           onStageChangeRef.current?.(detail);

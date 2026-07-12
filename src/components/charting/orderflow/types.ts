@@ -281,6 +281,17 @@ export interface FootprintConfig {
    */
   forceFullDetail?: boolean;
   /**
+   * ATAS "Auto transform candles to footprint" threshold, in CSS px. When
+   * set, FootprintLayer bypasses BOTH `forceFullDetail` and the zoom-driven
+   * `computeDetailLevel` hysteresis and instead renders a simple BINARY
+   * gate: 'full' detail when the rendered bar pixel width >= this value,
+   * 'hidden' (plain candles) below it. Takes priority over
+   * `forceFullDetail` when both are set. Optional, default/undefined =
+   * unchanged existing behavior for every caller that doesn't set it
+   * (forceFullDetail's always-full, or the zoom-driven 3-stage gate).
+   */
+  autoTransformMinPx?: number;
+  /**
    * Cell rendering layout — see FootprintLayout's doc comment. Default
    * 'numbers' (unchanged behavior). Dispatch for 'histogram' lands in PR 3.
    */
