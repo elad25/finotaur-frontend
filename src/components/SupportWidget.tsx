@@ -16,7 +16,7 @@ import {
   X, Send, MessageCircle, Shield, ArrowLeft, Plus,
   Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell,
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
-  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound, ThumbsUp
+  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { SkeletonText } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +31,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   attachments?: string[];
+  chatLogId?: string;
+  feedback?: 1 | -1;
 }
 
 type GuidedSupportStep = 'idle' | 'details' | 'impact' | 'contact' | 'ready';
@@ -180,6 +182,7 @@ export default function SupportWidget() {
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketEmail, setTicketEmail] = useState('');
   const [ticketProblem, setTicketProblem] = useState('');
+  const [chatSessionId, setChatSessionId] = useState<string>(() => crypto.randomUUID());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -649,6 +652,24 @@ async function loadTicketById(ticketId: string) {
     setGuidedMessages([]);
     setGuidedStep('idle');
     setGuidedTopic('');
+    setChatSessionId(crypto.randomUUID());
+  }
+
+  async function sendMessageFeedback(chatLogId: string, feedback: 1 | -1) {
+    // Optimistic UI: highlight the chosen thumb and disable both immediately
+    setGuidedMessages((prev) =>
+      prev.map((m) => (m.chatLogId === chatLogId ? { ...m, feedback } : m))
+    );
+
+    try {
+      await fetch('/api/support-ai/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatLogId, feedback }),
+      });
+    } catch (e) {
+      console.error('Support AI feedback error:', e);
+    }
   }
 
   function appendGuidedAdminMessage(content: string, delay = 700) {
@@ -746,7 +767,7 @@ async function loadTicketById(ticketId: string) {
       const res = await fetch('/api/support-ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, userName: userName || undefined }),
+        body: JSON.stringify({ messages: apiMessages, userName: userName || undefined, sessionId: chatSessionId }),
       });
 
       if (!res.ok) throw new Error(`AI ${res.status}`);
@@ -757,6 +778,10 @@ async function loadTicketById(ticketId: string) {
       setLastAiReason(data?.reason ?? null);
       setLastAiCategory(data?.category ?? null);
 
+      if (data?.sessionId && data.sessionId !== chatSessionId) {
+        setChatSessionId(data.sessionId);
+      }
+
       setGuidedMessages((prev) => [
         ...prev,
         {
@@ -764,6 +789,7 @@ async function loadTicketById(ticketId: string) {
           type: 'admin',
           content: replyText,
           timestamp: new Date().toISOString(),
+          chatLogId: data?.chatLogId || undefined,
         },
       ]);
 
@@ -1805,6 +1831,37 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                       {formatTime(msg.timestamp)}
                                     </span>
                                   </div>
+
+                                  {msg.type === 'admin' && msg.chatLogId && (
+                                    <div className="flex items-center gap-1.5 mt-1.5 pl-1">
+                                      <button
+                                        type="button"
+                                        title="Helpful"
+                                        disabled={msg.feedback !== undefined}
+                                        onClick={() => sendMessageFeedback(msg.chatLogId!, 1)}
+                                        className={`h-6 w-6 rounded-md flex items-center justify-center transition-all duration-200 disabled:cursor-default ${
+                                          msg.feedback === 1
+                                            ? 'bg-green-500/20 text-green-600'
+                                            : 'text-[#94A3B8] hover:text-green-600 hover:bg-green-500/10'
+                                        }`}
+                                      >
+                                        <ThumbsUp className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        title="Not helpful"
+                                        disabled={msg.feedback !== undefined}
+                                        onClick={() => sendMessageFeedback(msg.chatLogId!, -1)}
+                                        className={`h-6 w-6 rounded-md flex items-center justify-center transition-all duration-200 disabled:cursor-default ${
+                                          msg.feedback === -1
+                                            ? 'bg-red-500/20 text-red-600'
+                                            : 'text-[#94A3B8] hover:text-red-600 hover:bg-red-500/10'
+                                        }`}
+                                      >
+                                        <ThumbsDown className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               )

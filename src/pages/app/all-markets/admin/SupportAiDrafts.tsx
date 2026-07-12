@@ -71,6 +71,16 @@ interface Settings {
   drafter_model: string;
 }
 
+interface KbSuggestion {
+  id: string;
+  question_text: string;
+  proposed_answer: string;
+  rationale: string;
+  sample_questions: string[];
+  status: string;
+  created_at: string;
+}
+
 // ==================== Helpers ====================
 async function authedFetch(path: string, init?: RequestInit) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -120,6 +130,10 @@ export default function SupportAiDrafts({ embedded = false }: { embedded?: boole
   const [showKb, setShowKb] = useState(false);
   const [kb, setKb] = useState<KbEntry[]>([]);
   const [kbDraft, setKbDraft] = useState({ question_text: '', answer_text: '', category: 'general' });
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<KbSuggestion[]>([]);
+  const [suggestionEdits, setSuggestionEdits] = useState<Record<string, { question_text: string; answer_text: string }>>({});
+  const [suggestionSaving, setSuggestionSaving] = useState<string | null>(null);
 
   const initialLoad = useRef(false);
 
@@ -177,12 +191,25 @@ export default function SupportAiDrafts({ embedded = false }: { embedded?: boole
     }
   }
 
+  async function loadSuggestions() {
+    try {
+      const res = await authedFetch('/api/support/admin/kb/suggestions?status=pending');
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      const list = Array.isArray(data) ? data : (data?.suggestions || []);
+      setSuggestions(list);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   useEffect(() => {
     if (initialLoad.current) return;
     initialLoad.current = true;
     loadDrafts();
     loadSettings();
     loadKb();
+    loadSuggestions();
   }, []);
 
   useEffect(() => {
@@ -304,6 +331,54 @@ export default function SupportAiDrafts({ embedded = false }: { embedded?: boole
       }
     } catch (err: any) {
       toast.error(err?.message || 'Network error');
+    }
+  }
+
+  // ---- KB suggestions (learned from support chats) ----
+  async function handleApproveSuggestion(s: KbSuggestion) {
+    const edit = suggestionEdits[s.id];
+    const question_text = (edit?.question_text ?? s.question_text).trim();
+    const answer_text = (edit?.answer_text ?? s.proposed_answer).trim();
+    if (!question_text || !answer_text) {
+      toast.error('Question and answer are required');
+      return;
+    }
+    setSuggestionSaving(s.id);
+    try {
+      const res = await authedFetch(`/api/support/admin/kb/suggestions/${s.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ question_text, answer_text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || 'Failed to approve suggestion');
+        return;
+      }
+      toast.success('Added to knowledge base');
+      setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
+      loadKb();
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
+    } finally {
+      setSuggestionSaving(null);
+    }
+  }
+
+  async function handleRejectSuggestion(id: string) {
+    setSuggestionSaving(id);
+    try {
+      const res = await authedFetch(`/api/support/admin/kb/suggestions/${id}/reject`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || 'Failed to reject suggestion');
+        return;
+      }
+      toast.success('Suggestion rejected');
+      setSuggestions((prev) => prev.filter((x) => x.id !== id));
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
+    } finally {
+      setSuggestionSaving(null);
     }
   }
 
@@ -587,6 +662,92 @@ export default function SupportAiDrafts({ embedded = false }: { embedded?: boole
               ))}
               {kb.length === 0 && <div className="text-sm text-gray-500 italic">No entries yet.</div>}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* KB Suggestions panel — AI-proposed entries learned from support chats */}
+      <div className="mt-6 rounded-lg border border-gray-800 bg-[#0d0d0d]">
+        <button
+          onClick={() => {
+            setShowSuggestions((s) => !s);
+            if (!showSuggestions && suggestions.length === 0) loadSuggestions();
+          }}
+          className="w-full flex items-center justify-between p-4 hover:bg-black/40"
+        >
+          <span className="flex items-center gap-2 text-white font-semibold">
+            {showSuggestions ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            KB Suggestions
+            {suggestions.length > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">
+                {suggestions.length} pending
+              </span>
+            )}
+          </span>
+          <span className="text-xs text-gray-500">AI-proposed KB entries learned from support chats</span>
+        </button>
+
+        {showSuggestions && (
+          <div className="px-4 pb-4 space-y-3">
+            {suggestions.length === 0 && (
+              <div className="text-sm text-gray-500 italic p-2">No pending suggestions.</div>
+            )}
+            {suggestions.map((s) => {
+              const edit = suggestionEdits[s.id] || { question_text: s.question_text, answer_text: s.proposed_answer };
+              return (
+                <div key={s.id} className="rounded border border-gray-800 p-3 bg-black/30 space-y-2">
+                  <div className="text-[10px] text-gray-500">{fmtTime(s.created_at)}</div>
+                  <div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Question</div>
+                    <input
+                      value={edit.question_text}
+                      onChange={(e) => setSuggestionEdits((prev) => ({
+                        ...prev,
+                        [s.id]: { ...edit, question_text: e.target.value },
+                      }))}
+                      className="w-full bg-black/40 border border-gray-700 rounded px-2 py-1 text-sm text-white"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Answer</div>
+                    <textarea
+                      value={edit.answer_text}
+                      onChange={(e) => setSuggestionEdits((prev) => ({
+                        ...prev,
+                        [s.id]: { ...edit, answer_text: e.target.value },
+                      }))}
+                      rows={3}
+                      className="w-full bg-black/40 border border-gray-700 rounded px-2 py-1 text-sm text-white"
+                    />
+                  </div>
+                  {s.rationale && (
+                    <div className="text-[11px] text-gray-500">Rationale: {s.rationale}</div>
+                  )}
+                  {Array.isArray(s.sample_questions) && s.sample_questions.length > 0 && (
+                    <div className="text-[11px] text-gray-600">
+                      Sample questions: {s.sample_questions.join(' · ')}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleApproveSuggestion(s)}
+                      disabled={suggestionSaving === s.id}
+                      className="inline-flex items-center gap-2 bg-gradient-to-r from-[#D4AF37] to-[#C19A2F] text-black font-semibold px-3 py-1.5 rounded text-sm disabled:opacity-50"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {suggestionSaving === s.id ? 'Saving…' : 'Approve → Add to KB'}
+                    </button>
+                    <button
+                      onClick={() => handleRejectSuggestion(s.id)}
+                      disabled={suggestionSaving === s.id}
+                      className="px-3 py-1.5 border border-red-700 text-red-400 rounded hover:bg-red-900/30 text-sm disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
