@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom';
 import { Check, ChevronDown, Copy, Lock, Sparkles } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
+import { supabase } from '@/lib/supabase';
 import { Spinner } from '@/components/ds/Spinner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
@@ -54,6 +55,29 @@ function friendlyCodeError(error: ProvisionMemberReferralError): string {
   }
 }
 
+/** Live availability-check result for the self-chosen code input, driven by
+ * the `check_referral_code_availability` RPC (SECURITY DEFINER — a direct
+ * client-side table query returns empty under RLS for codes owned by other
+ * users, which would make every taken code look available). */
+type CodeCheckStatus = 'idle' | 'checking' | 'available' | 'taken' | 'reserved' | 'invalid';
+
+function describeCodeCheck(status: CodeCheckStatus): { text: string; className: string } | null {
+  switch (status) {
+    case 'checking':
+      return { text: 'Checking…', className: 'text-zinc-500' };
+    case 'available':
+      return { text: 'Available', className: 'text-emerald-400' };
+    case 'taken':
+      return { text: 'Already taken', className: 'text-red-400' };
+    case 'reserved':
+      return { text: 'That code is reserved', className: 'text-red-400' };
+    case 'invalid':
+      return { text: '4-15 letters and numbers only', className: 'text-red-400' };
+    default:
+      return null;
+  }
+}
+
 type InlineState =
   | { kind: 'checking' }
   | { kind: 'hidden' }
@@ -70,6 +94,7 @@ export function ReferralCodeInline() {
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [open, setOpen] = useState(false);
   const [requestedCode, setRequestedCode] = useState('');
+  const [codeCheck, setCodeCheck] = useState<CodeCheckStatus>('idle');
 
   // Resolve initial state: hidden while subscription is still loading, then
   // locked for free members, then check for an already-provisioned row.
@@ -99,6 +124,44 @@ export function ReferralCodeInline() {
   const handleRequestedCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRequestedCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15));
   };
+
+  // Live availability check — debounced ~450ms, only once there's enough
+  // input to possibly pass the format rule (4-15 chars).
+  useEffect(() => {
+    let cancelled = false;
+
+    if (requestedCode.length < 4) {
+      setCodeCheck('idle');
+      return;
+    }
+
+    setCodeCheck('checking');
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('check_referral_code_availability', {
+        p_code: requestedCode,
+      });
+      if (cancelled) return;
+
+      if (error || !data) {
+        setCodeCheck('idle');
+        return;
+      }
+      if (data.available) {
+        setCodeCheck('available');
+      } else if (data.reason === 'taken') {
+        setCodeCheck('taken');
+      } else if (data.reason === 'reserved') {
+        setCodeCheck('reserved');
+      } else {
+        setCodeCheck('invalid');
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [requestedCode]);
 
   const handleProvision = useCallback(async () => {
     setOpen(true);
@@ -236,7 +299,7 @@ export function ReferralCodeInline() {
               <>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="referral-requested-code-inline" className="text-xs font-medium text-zinc-400">
-                    Choose your code (optional)
+                    Choose your referral code
                   </label>
                   <input
                     id="referral-requested-code-inline"
@@ -249,15 +312,23 @@ export function ReferralCodeInline() {
                     disabled={state.kind === 'provisioning'}
                     className="rounded-md border border-zinc-700/30 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm uppercase tracking-wider text-zinc-200 placeholder:text-zinc-600 placeholder:normal-case focus:border-[#C9A646] focus:outline-none disabled:opacity-60"
                   />
+                  {describeCodeCheck(codeCheck) && (
+                    <p className={`text-xs ${describeCodeCheck(codeCheck)!.className}`}>
+                      {describeCodeCheck(codeCheck)!.text}
+                    </p>
+                  )}
                   <p className="text-xs text-zinc-500">
-                    4-15 characters, letters and numbers. Leave empty to auto-generate. Cannot be changed later.
+                    4-15 letters and numbers. Leave empty and we&apos;ll generate one for you. Cannot be changed
+                    later.
                   </p>
                 </div>
                 {state.kind === 'error' && <p className="text-xs text-red-400">{state.message}</p>}
                 <button
                   type="button"
                   onClick={handleProvision}
-                  disabled={state.kind === 'provisioning'}
+                  disabled={
+                    state.kind === 'provisioning' || (requestedCode.length > 0 && codeCheck !== 'available')
+                  }
                   className="inline-flex w-fit items-center gap-2 rounded-md bg-[#C9A646] px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-[#B8963F] disabled:opacity-60"
                 >
                   {state.kind === 'provisioning' ? (

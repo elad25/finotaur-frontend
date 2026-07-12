@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { Check, Copy, Gift, Lock } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
+import { supabase } from '@/lib/supabase';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Spinner } from '@/components/ds/Spinner';
@@ -44,6 +45,29 @@ function friendlyCodeError(error: ProvisionMemberReferralError): string {
   }
 }
 
+/** Live availability-check result for the self-chosen code input, driven by
+ * the `check_referral_code_availability` RPC (SECURITY DEFINER — a direct
+ * client-side table query returns empty under RLS for codes owned by other
+ * users, which would make every taken code look available). */
+type CodeCheckStatus = 'idle' | 'checking' | 'available' | 'taken' | 'reserved' | 'invalid';
+
+function describeCodeCheck(status: CodeCheckStatus): { text: string; className: string } | null {
+  switch (status) {
+    case 'checking':
+      return { text: 'Checking…', className: 'text-ink-tertiary' };
+    case 'available':
+      return { text: 'Available', className: 'text-emerald-400' };
+    case 'taken':
+      return { text: 'Already taken', className: 'text-num-negative' };
+    case 'reserved':
+      return { text: 'That code is reserved', className: 'text-num-negative' };
+    case 'invalid':
+      return { text: '4-15 letters and numbers only', className: 'text-num-negative' };
+    default:
+      return null;
+  }
+}
+
 type CardState =
   | { kind: 'checking' }
   | { kind: 'hidden' }
@@ -59,6 +83,7 @@ export function ReferFriendCard() {
   const [state, setState] = useState<CardState>({ kind: 'checking' });
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [requestedCode, setRequestedCode] = useState('');
+  const [codeCheck, setCodeCheck] = useState<CodeCheckStatus>('idle');
 
   // Resolve initial state: hidden while subscription is still loading, then
   // locked for free members, then check for an already-provisioned row.
@@ -89,6 +114,44 @@ export function ReferFriendCard() {
   const handleRequestedCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRequestedCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15));
   };
+
+  // Live availability check — debounced ~450ms, only once there's enough
+  // input to possibly pass the format rule (4-15 chars).
+  useEffect(() => {
+    let cancelled = false;
+
+    if (requestedCode.length < 4) {
+      setCodeCheck('idle');
+      return;
+    }
+
+    setCodeCheck('checking');
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('check_referral_code_availability', {
+        p_code: requestedCode,
+      });
+      if (cancelled) return;
+
+      if (error || !data) {
+        setCodeCheck('idle');
+        return;
+      }
+      if (data.available) {
+        setCodeCheck('available');
+      } else if (data.reason === 'taken') {
+        setCodeCheck('taken');
+      } else if (data.reason === 'reserved') {
+        setCodeCheck('reserved');
+      } else {
+        setCodeCheck('invalid');
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [requestedCode]);
 
   const handleProvision = useCallback(async () => {
     setState({ kind: 'provisioning' });
@@ -155,7 +218,7 @@ export function ReferFriendCard() {
         </p>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="refer-friend-card-requested-code" className="text-small font-medium text-ink-secondary">
-            Choose your code (optional)
+            Choose your referral code
           </label>
           <input
             id="refer-friend-card-requested-code"
@@ -168,8 +231,13 @@ export function ReferFriendCard() {
             disabled={state.kind === 'provisioning'}
             className="rounded-[8px] border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 font-mono text-small uppercase tracking-wider text-ink-primary placeholder:text-ink-muted placeholder:normal-case focus:border-gold-primary focus:outline-none focus:ring-[3px] focus:ring-gold-primary/15 disabled:opacity-60"
           />
+          {describeCodeCheck(codeCheck) && (
+            <p className={`text-small ${describeCodeCheck(codeCheck)!.className}`}>
+              {describeCodeCheck(codeCheck)!.text}
+            </p>
+          )}
           <p className="text-small text-ink-tertiary">
-            4-15 characters, letters and numbers. Leave empty to auto-generate. Cannot be changed later.
+            4-15 letters and numbers. Leave empty and we&apos;ll generate one for you. Cannot be changed later.
           </p>
         </div>
         {state.kind === 'error' && <p className="text-small text-num-negative">{state.message}</p>}
@@ -178,7 +246,7 @@ export function ReferFriendCard() {
           size="sm"
           showArrow={false}
           className="self-start"
-          disabled={state.kind === 'provisioning'}
+          disabled={state.kind === 'provisioning' || (requestedCode.length > 0 && codeCheck !== 'available')}
           onClick={handleProvision}
         >
           {state.kind === 'provisioning' ? (

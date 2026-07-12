@@ -65,9 +65,6 @@ const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const FinoScore = lazy(() => import("@/components/journal/FinoScore"));
 const BreakdownPanel = lazy(() => import("@/components/journal/BreakdownPanel"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
-const ReferFriendCard = lazy(() =>
-  import("@/features/affiliate/components/refer/ReferFriendCard").then((m) => ({ default: m.ReferFriendCard })),
-);
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
@@ -2327,17 +2324,8 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </>
         )}
 
-        {/* Member-refers-friend program — renders nothing for free users
-            (locked upsell shown instead) and nothing at all while the
-            server-side kill-switch is off. See ReferFriendCard for the
-            full state machine. */}
-        {!effectiveReadOnly && (
-          <ErrorBoundary fallback={null}>
-            <Suspense fallback={null}>
-              <ReferFriendCard />
-            </Suspense>
-          </ErrorBoundary>
-        )}
+        {/* Refer-a-friend card removed from Overview (Elad, 2026-07-12) —
+            the program lives on its dedicated page at /app/journal/refer. */}
       </div>
 
       {showReferModal && FEATURES.AFFILIATE_TRACKING && (
