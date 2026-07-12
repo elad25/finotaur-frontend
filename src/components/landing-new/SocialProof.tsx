@@ -214,26 +214,47 @@ function IntegrationsStrip() {
         Syncs With
       </p>
 
-      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 md:gap-x-14">
-        <img
-          src="/brokers/ninjatrader-official.svg"
-          alt="NinjaTrader"
-          className="h-6 w-auto opacity-60 hover:opacity-100 transition-opacity"
-        />
-        <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
-          Tradovate
-        </span>
-        <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
-          Interactive Brokers
-        </span>
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
-            Apex
+      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 md:gap-x-14">
+        <div className="flex flex-col items-center gap-2">
+          <img
+            src="/brokers/ninjatrader-mark.svg"
+            alt="NinjaTrader"
+            className="h-9 w-auto opacity-70 hover:opacity-100 transition-opacity"
+          />
+          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary">
+            NinjaTrader
           </span>
-          <span className="text-[9px] tracking-[0.2em] uppercase text-white/40">
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <img
+            src="/brokers/tradovate-mark.svg"
+            alt="Tradovate"
+            className="h-9 w-auto opacity-70 hover:opacity-100 transition-opacity"
+          />
+          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary">
+            Tradovate
+          </span>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <img
+            src="/brokers/ibkr-mark.svg"
+            alt="Interactive Brokers"
+            className="h-9 w-auto opacity-70 hover:opacity-100 transition-opacity"
+          />
+          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary">
+            Interactive Brokers
+          </span>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-9 flex items-center">
+            <span className="text-xl font-bold tracking-tight text-white/70">
+              APEX
+            </span>
+          </div>
+          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary">
             Trader Funding
           </span>
-        </span>
+        </div>
       </div>
     </div>
   );

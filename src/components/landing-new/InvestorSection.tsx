@@ -15,6 +15,9 @@ import { TrendingUp, Users, FileBarChart, Layers, Radio } from "lucide-react";
 import { Button } from "@/components/ds/Button";
 import { SectionShell, SectionEyebrow, SectionTitle } from "./_shared";
 import stockAnalyzerSearch from "@/assets/landing/stock-analyzer-search.webp";
+import reportTopsecret from "@/assets/landing/report-topsecret.webp";
+import reportWeekly from "@/assets/landing/report-weekly.webp";
+import reportDeepdive from "@/assets/landing/report-deepdive.webp";
 
 // ---------------------------------------------------------------------------
 // ClassifiedPanel — intelligence-dossier placeholder for screenshots
@@ -121,7 +124,12 @@ const InvestorSection = () => {
           transition={{ duration: 0.5 }}
           className="grid md:grid-cols-2 gap-8 items-center mb-16"
         >
-          <ClassifiedPanel label="Top Secret — Daily Briefing" className="min-h-[220px]" />
+          <ClassifiedPanel
+            label="Top Secret — Daily Briefing"
+            image={reportTopsecret}
+            alt="FINOTAUR Top Secret market analysis report cover"
+            className="min-h-[220px]"
+          />
           <div>
             <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary mb-3">
               Wake up knowing exactly what matters.
@@ -154,8 +162,18 @@ const InvestorSection = () => {
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
-            <ClassifiedPanel label="The Weekly Report — Sundays" className="min-h-[180px]" />
-            <ClassifiedPanel label="Deep Dive — Monthly" className="min-h-[180px]" />
+            <ClassifiedPanel
+              label="The Weekly Report — Sundays"
+              image={reportWeekly}
+              alt="FINOTAUR Weekly Tactical Review report cover"
+              className="min-h-[180px] max-h-[420px] object-contain"
+            />
+            <ClassifiedPanel
+              label="Deep Dive — Monthly"
+              image={reportDeepdive}
+              alt="FINOTAUR Company Intelligence deep-dive report cover"
+              className="min-h-[180px] max-h-[420px] object-contain"
+            />
           </div>
         </motion.div>
 
