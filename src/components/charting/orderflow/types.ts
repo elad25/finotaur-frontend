@@ -37,12 +37,21 @@ export interface TradeSource {
    * ascending by time. Never throws for partial coverage (rate limits,
    * exhausted request budget) — instead reports the actual `coveredFromMs`
    * so the caller can decide how to present a partially-filled window.
+   *
+   * `onChunk` (optional) — when the implementation fetches history in
+   * multiple paginated round-trips, it MAY invoke this callback with each
+   * page's trades (ascending by time, already deduped) as soon as that page
+   * is available, instead of making the caller wait for the whole walk to
+   * finish. Callers that apply chunks progressively must NOT also re-apply
+   * the final resolved `trades` array (would double-count). Implementations
+   * that don't support progressive delivery simply never call it — existing
+   * callers are unaffected (optional, backward-compatible).
    */
   backfill(
     symbol: string,
     fromMs: number,
     toMs: number,
-    opts?: { maxRequests?: number; signal?: AbortSignal },
+    opts?: { maxRequests?: number; signal?: AbortSignal; onChunk?: (trades: FlowTrade[]) => void },
   ): Promise<{ trades: FlowTrade[]; coveredFromMs: number }>;
 }
 

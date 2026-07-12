@@ -27,6 +27,8 @@ export interface UseOrderFlowResult {
   status: TradeSourceStatus;
   /** Epoch-ms coverage boundary the backfill actually reached (may be later than requested — see backfill contract). */
   backfillCoveredFromSec: number | null;
+  /** True while the historical backfill walk is still in flight (for a transient "Loading trade history…" UI hint). */
+  backfillInFlight: boolean;
 }
 
 export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
@@ -35,6 +37,7 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
   const storeRef = useRef<FlowBinStore>(new FlowBinStore({ intervalSec, rowSize }));
   const [status, setStatus] = useState<TradeSourceStatus>('connecting');
   const [backfillCoveredFromSec, setBackfillCoveredFromSec] = useState<number | null>(null);
+  const [backfillInFlight, setBackfillInFlight] = useState(false);
 
   // Re-bin in place when interval/rowSize change (no need to recreate the store).
   useEffect(() => {
@@ -49,6 +52,7 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     store.clear();
     setStatus('connecting');
     setBackfillCoveredFromSec(null);
+    setBackfillInFlight(false);
 
     const onTrades = (trades: FlowTrade[]) => {
       if (trades.length === 0) return;
@@ -61,15 +65,35 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
         const firstLiveTime = trades[0].time;
         const fromMs = firstLiveTime - backfillBars * intervalSec * 1000;
 
+        // appliedViaChunk tracks whether the source delivered progressive
+        // per-page chunks (BinanceTradeSource does — see its onChunk emission)
+        // so the store is fed as each page lands (most-recent candles gain
+        // cells within 1-2s, not after the whole multi-second walk finishes).
+        // If the source never calls onChunk (e.g. DatabentoTradeSource, which
+        // doesn't implement it), this falls back to the original single
+        // end-of-walk apply below — unchanged behavior for that path.
+        let appliedViaChunk = false;
+        setBackfillInFlight(true);
+
         source
-          .backfill(symbol, fromMs, firstLiveTime, { signal: controller.signal })
+          .backfill(symbol, fromMs, firstLiveTime, {
+            signal: controller.signal,
+            onChunk: (chunk) => {
+              if (controller.signal.aborted) return;
+              appliedViaChunk = true;
+              store.applyTrades(chunk);
+            },
+          })
           .then(({ trades: backfilled, coveredFromMs }) => {
             if (controller.signal.aborted) return;
-            store.applyTrades(backfilled);
+            if (!appliedViaChunk) store.applyTrades(backfilled);
             setBackfillCoveredFromSec(Math.floor(coveredFromMs / 1000));
           })
           .catch(() => {
             // Backfill is best-effort — live trades already flowing regardless.
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) setBackfillInFlight(false);
           });
       }
 
@@ -86,5 +110,5 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, source]);
 
-  return { store: storeRef.current, status, backfillCoveredFromSec };
+  return { store: storeRef.current, status, backfillCoveredFromSec, backfillInFlight };
 }
