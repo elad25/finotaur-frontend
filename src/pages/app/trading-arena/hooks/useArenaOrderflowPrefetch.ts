@@ -19,11 +19,25 @@
  *
  * Aborted on symbol/asset-class change or unmount via the source's own
  * AbortSignal support (BinanceTradeSource.backfill's `opts.signal`).
+ *
+ * In-flight de-dup: landing directly on the Footprint tab mounts this
+ * prefetch AND useOrderFlow.ts's own cache-miss backfill walk in the same
+ * render pass, before either one's cache write lands — a plain cache check
+ * alone can't see the other's in-progress walk. Both sides register/check a
+ * shared in-flight-promise registry in flowStoreCache.ts keyed by the same
+ * cache key; whichever one starts first wins, the other skips/reuses its
+ * result instead of firing a near-duplicate REST walk.
  */
 
 import { useEffect } from 'react';
 import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTradeSource';
-import { buildCacheKey, getCachedTrades, putCachedTrades } from '@/components/charting/orderflow/flowStoreCache';
+import {
+  buildCacheKey,
+  getCachedTrades,
+  putCachedTrades,
+  getInFlightBackfill,
+  registerInFlightBackfill,
+} from '@/components/charting/orderflow/flowStoreCache';
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
 
 // Mirrors useOrderFlow.ts's PHASE1_MAX_REQUESTS — a fast, small first-paint
@@ -46,12 +60,13 @@ export function useArenaOrderflowPrefetch(symbol: string, assetClass: AssetClass
 
     const cacheKey = buildCacheKey('binance', symbol);
     if (getCachedTrades(cacheKey)) return; // already warm — nothing to do
+    if (getInFlightBackfill(cacheKey)) return; // useOrderFlow's own cache-miss walk already covers this key — avoid a duplicate REST walk
 
     const controller = new AbortController();
     const toMs = Date.now();
     const fromMs = toMs - PREFETCH_WINDOW_MS;
 
-    BinanceTradeSource.backfill(symbol, fromMs, toMs, {
+    const backfillPromise = BinanceTradeSource.backfill(symbol, fromMs, toMs, {
       signal: controller.signal,
       maxRequests: PREFETCH_MAX_REQUESTS,
     })
@@ -66,6 +81,8 @@ export function useArenaOrderflowPrefetch(symbol: string, assetClass: AssetClass
         // Best-effort warm-up only — the Order Flow tab's own backfill is
         // the source of truth if this fails or never completes in time.
       });
+
+    registerInFlightBackfill(cacheKey, backfillPromise);
 
     return () => {
       controller.abort();

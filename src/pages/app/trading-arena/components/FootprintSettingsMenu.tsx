@@ -10,10 +10,10 @@
  * `settings`/`onChange` (see useFootprintPreferences.ts); this component
  * never touches localStorage itself.
  *
- * Layout/Colors are wired end-to-end here (persisted, selectable) even
- * though footprintRender.ts's rendering dispatch for non-default values
- * lands in PR 3 — the still-unimplemented options carry a small "soon"
- * badge so the UI is honest about what actually changes the chart today.
+ * Layout/Colors are wired end-to-end here (persisted, selectable) — and
+ * fully rendered: footprintRender.ts's dispatch handles layout==='histogram'
+ * and all three colorSchemes ('delta' | 'volumeHeat' | 'solid'), shipped and
+ * verified live in production.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -40,15 +40,15 @@ const CONTENT_OPTIONS: { value: FootprintCellMode; label: string }[] = [
   { value: 'volumeDelta', label: 'Vol+Δ' },
 ];
 
-const LAYOUT_OPTIONS: { value: FootprintLayout; label: string; soon: boolean }[] = [
-  { value: 'numbers', label: 'Numbers', soon: false },
-  { value: 'histogram', label: 'Histogram', soon: true },
+const LAYOUT_OPTIONS: { value: FootprintLayout; label: string }[] = [
+  { value: 'numbers', label: 'Numbers' },
+  { value: 'histogram', label: 'Histogram' },
 ];
 
-const COLOR_SCHEME_OPTIONS: { value: FootprintColorScheme; label: string; soon: boolean }[] = [
-  { value: 'delta', label: 'Delta', soon: false },
-  { value: 'volumeHeat', label: 'Volume heat', soon: true },
-  { value: 'solid', label: 'Solid', soon: true },
+const COLOR_SCHEME_OPTIONS: { value: FootprintColorScheme; label: string }[] = [
+  { value: 'delta', label: 'Delta' },
+  { value: 'volumeHeat', label: 'Volume heat' },
+  { value: 'solid', label: 'Solid' },
 ];
 
 function pillClass(active: boolean): string {
@@ -57,14 +57,6 @@ function pillClass(active: boolean): string {
     active
       ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
       : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
-  );
-}
-
-function SoonBadge() {
-  return (
-    <span className="ml-1 rounded px-1 text-[8px] font-semibold uppercase tracking-wide text-[#C9A646] bg-[rgba(201,166,70,0.15)]">
-      soon
-    </span>
   );
 }
 
@@ -139,10 +131,8 @@ export function FootprintSettingsMenu({ settings, onChange, tickSize, rowSizeCla
                   type="button"
                   onClick={() => onChange({ layout: opt.value })}
                   className={pillClass(settings.layout === opt.value)}
-                  title={opt.soon ? 'Rendering support ships in a future update — your choice is saved now' : undefined}
                 >
                   {opt.label}
-                  {opt.soon && <SoonBadge />}
                 </button>
               ))}
             </div>
@@ -160,10 +150,8 @@ export function FootprintSettingsMenu({ settings, onChange, tickSize, rowSizeCla
                   type="button"
                   onClick={() => onChange({ colorScheme: opt.value })}
                   className={pillClass(settings.colorScheme === opt.value)}
-                  title={opt.soon ? 'Rendering support ships in a future update — your choice is saved now' : undefined}
                 >
                   {opt.label}
-                  {opt.soon && <SoonBadge />}
                 </button>
               ))}
             </div>

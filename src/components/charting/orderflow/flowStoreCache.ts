@@ -98,3 +98,39 @@ export function __cacheSizeForTests(): number {
 export function __clearCacheForTests(): void {
   cache.clear();
 }
+
+// ── In-flight backfill registry ──────────────────────────────────────────
+// Guards against two independent callers racing a duplicate REST backfill
+// walk for the same (venue, symbol) key: useArenaOrderflowPrefetch.ts's
+// Arena-mount warm-up and useOrderFlow.ts's own cache-miss walk both mount
+// in the same render pass when a user lands directly on the Footprint tab —
+// before either one's cache write via putCachedTrades() lands, so a plain
+// getCachedTrades() check alone can't see the other's in-progress work.
+// Keyed by the same buildCacheKey() string as the cache itself; deliberately
+// a separate map (not folded into `cache`) since it tracks promises, not
+// trade snapshots, and has no LRU/eviction semantics of its own.
+const inFlightBackfills = new Map<string, Promise<void>>();
+
+/**
+ * Registers `promise` as the in-flight backfill walk for `key`, so a
+ * concurrent caller can await/reuse it instead of starting a duplicate REST
+ * walk. Auto-clears itself from the registry once `promise` settles
+ * (success or failure) — a later resubscribe to the same key must not be
+ * blocked by a stale entry.
+ */
+export function registerInFlightBackfill(key: string, promise: Promise<void>): void {
+  inFlightBackfills.set(key, promise);
+  promise.finally(() => {
+    if (inFlightBackfills.get(key) === promise) inFlightBackfills.delete(key);
+  });
+}
+
+/** Returns the in-flight backfill promise for `key`, if any caller has registered one. */
+export function getInFlightBackfill(key: string): Promise<void> | undefined {
+  return inFlightBackfills.get(key);
+}
+
+/** Clears the in-flight registry — exposed for tests only. */
+export function __clearInFlightForTests(): void {
+  inFlightBackfills.clear();
+}
