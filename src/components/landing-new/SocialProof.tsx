@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useInView } from "framer-motion";
-import { Users, Cpu, Star, Swords } from "lucide-react";
+import { Cpu, Star, Swords } from "lucide-react";
 import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
 import { cn } from "@/lib/utils";
@@ -61,16 +61,6 @@ function buildStats(data: PublicStats): StatDef[] {
       suffix: "+",
       format: "locale",
       label: "AI Analyses Run",
-    });
-  }
-
-  if (data.activeTraders >= 25) {
-    result.push({
-      icon: Users,
-      target: data.activeTraders,
-      suffix: "+",
-      format: "none",
-      label: "Active Traders",
     });
   }
 
@@ -161,14 +151,14 @@ function StatCell({ stat, index, active }: StatCellProps) {
       <span
         className={cn(
           "font-mono font-medium tabular-nums tracking-[-0.02em]",
-          "text-5xl lg:text-6xl",
+          "text-4xl lg:text-5xl",
           "bg-gradient-gold-vertical bg-clip-text text-transparent",
           "leading-none",
         )}
         aria-label={`${display}${stat.suffix}`}
       >
         {display}
-        <span className="text-3xl lg:text-4xl">{stat.suffix}</span>
+        <span className="text-2xl lg:text-3xl">{stat.suffix}</span>
       </span>
 
       {/* Micro hairline under number */}
@@ -209,8 +199,8 @@ function AnimatedHairline({ active }: { active: boolean }) {
 // ---------------------------------------------------------------------------
 function IntegrationsStrip() {
   return (
-    <div className="py-6 md:py-8">
-      <p className="text-center text-xs tracking-[0.3em] text-gold-primary/80 uppercase mb-6">
+    <div className="py-2 md:py-2.5">
+      <p className="text-center text-xs tracking-[0.3em] text-gold-primary/80 uppercase mb-4">
         Syncs With
       </p>
 
@@ -294,7 +284,7 @@ const SocialProof = () => {
     <SectionShell
       atmosphere="none"
       beam={false}
-      className="py-12 md:py-16"
+      className="py-4 md:py-6"
     >
       <div ref={containerRef} className="max-w-6xl mx-auto px-6 relative">
         {/* Subtle ambient gold beam — behind content */}
@@ -316,7 +306,7 @@ const SocialProof = () => {
         {hasStats && (
           <>
             {/* Eyebrow */}
-            <div className="py-4 md:py-6">
+            <div className="py-2 md:py-3">
               <SectionEyebrow className="mb-0">
                 Trusted by the Community
               </SectionEyebrow>

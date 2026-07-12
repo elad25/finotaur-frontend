@@ -524,7 +524,7 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden pt-28 md:pt-32 pb-32">
+    <section className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden pt-28 md:pt-32 pb-16">
 
       {/* ========== DEEP DARK BASE ========== */}
       <div className="absolute inset-0 bg-[#080808]" aria-hidden="true" />

@@ -2,8 +2,7 @@
 // ================================================
 // THE FINOTAUR PLAN — everything, one terminal.
 // 4 engine cards (adapted from AISection's card idiom) → value stack table
-// (absorbed mechanically from Vision.tsx, numbers unchanged) → Copilot
-// "coming soon" teaser (no CTA) → single gold CTA.
+// (absorbed mechanically from Vision.tsx, numbers unchanged) → single gold CTA.
 // ================================================
 
 import { motion } from "framer-motion";
@@ -73,7 +72,7 @@ const FinotaurPlanSection = () => {
         </div>
 
         {/* Row of 4 engine cards */}
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 mb-16">
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           {engineCards.map((card, index) => {
             const Icon = card.icon;
             return (
@@ -106,14 +105,14 @@ const FinotaurPlanSection = () => {
         </div>
 
         {/* Hairline divider */}
-        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-16" aria-hidden="true" />
+        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-10" aria-hidden="true" />
 
         {/* Value stack table — absorbed from Vision.tsx, numbers unchanged */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="max-w-xl mx-auto relative rounded-xl overflow-hidden bg-section-card-rest border border-gold-border shadow-card-rest mb-16"
+          className="max-w-xl mx-auto relative rounded-xl overflow-hidden bg-section-card-rest border border-gold-border shadow-card-rest mb-8"
         >
           {/* Corner brackets */}
           <span className="absolute top-2 left-2 w-3 h-3 border-t border-l border-construction-marker pointer-events-none" aria-hidden="true" />
@@ -160,16 +159,6 @@ const FinotaurPlanSection = () => {
             </div>
           </div>
         </motion.div>
-
-        {/* Copilot teaser strip — no CTA */}
-        <div className="flex flex-col items-center gap-2 text-center mb-12">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-gold-muted bg-gold-border text-gold-primary text-[9px] font-semibold uppercase tracking-[0.3em]">
-            Coming Soon
-          </span>
-          <p className="text-ink-muted text-sm">
-            Copilot — an AI portfolio manager that trades alongside you, 24/7.
-          </p>
-        </div>
 
         {/* CTA */}
         <div className="text-center">

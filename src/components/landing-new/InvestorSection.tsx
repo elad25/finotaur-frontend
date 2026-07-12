@@ -65,7 +65,7 @@ const InvestorSection = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="grid md:grid-cols-5 gap-8 items-start mb-16"
+          className="grid md:grid-cols-5 gap-8 items-start mb-10"
         >
           <div className="md:col-span-2">
             <img
@@ -113,7 +113,7 @@ const InvestorSection = () => {
         </motion.div>
 
         {/* Hairline divider */}
-        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-16" aria-hidden="true" />
+        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-10" aria-hidden="true" />
 
         {/* Block 3 — image: Stock Analyzer */}
         <motion.div
@@ -121,7 +121,7 @@ const InvestorSection = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="grid md:grid-cols-2 gap-8 items-center mb-16"
+          className="grid md:grid-cols-2 gap-8 items-center mb-10"
         >
           <div className="order-2 md:order-1">
             <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary mb-3">
@@ -142,7 +142,7 @@ const InvestorSection = () => {
         </motion.div>
 
         {/* Hairline divider */}
-        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-16" aria-hidden="true" />
+        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-8" aria-hidden="true" />
 
         {/* CTA */}
         <div className="text-center">
