@@ -22,13 +22,29 @@ export type DomDepthCount = 5 | 10 | 20 | 40;
 export type DomUpdateMs = 100 | 150 | 250;
 export type DomAutoCenterSec = 15 | 30 | 60 | 120;
 export type DomRecenterTicks = 3 | 5 | 10 | 20;
+export type DomRowSizeTicks = 1 | 2 | 5 | 10;
+/** 'auto' = ~2bp-of-price heuristic (domLadderMath.ts); numeric = a fixed tick multiple. */
+export type DomRowSize = 'auto' | DomRowSizeTicks;
 
 export const DOM_DEPTH_COUNT_OPTIONS: readonly DomDepthCount[] = [5, 10, 20, 40];
 export const DOM_UPDATE_MS_OPTIONS: readonly DomUpdateMs[] = [100, 150, 250];
 export const DOM_AUTO_CENTER_SEC_OPTIONS: readonly DomAutoCenterSec[] = [15, 30, 60, 120];
 export const DOM_RECENTER_TICKS_OPTIONS: readonly DomRecenterTicks[] = [3, 5, 10, 20];
+export const DOM_ROW_SIZE_TICK_OPTIONS: readonly DomRowSizeTicks[] = [1, 2, 5, 10];
 
 export interface DomPreferences {
+  /**
+   * Row aggregation width. 'auto' (default) targets ~2 basis points of
+   * price, snapped down to a "nice" 1/2/5×10^n increment, floored at the
+   * inferred tick — see domLadderMath.ts `computeAutoRowSize`. Fixes the
+   * production-verified bug where a 1-tick row (BTCUSDT tick = $0.01) made
+   * the ladder recenter constantly against a market moving dollars/sec.
+   * A numeric value is a TICK MULTIPLE (1/2/5/10), NOT a dollar amount —
+   * storing a multiplier keeps this symbol-agnostic like every other field
+   * here (depthCount, orderQty, etc. all differ reasonably per symbol, but
+   * the STORAGE shape shouldn't hardcode one symbol's price scale).
+   */
+  rowSize: DomRowSize;
   /** Ladder rows shown per side (above/below center). Default 10. */
   depthCount: DomDepthCount;
   /** Row-model render throttle, ms. Default 150. */
@@ -48,6 +64,7 @@ export interface DomPreferences {
 }
 
 export const DEFAULT_DOM_PREFERENCES: DomPreferences = {
+  rowSize: 'auto',
   depthCount: 10,
   updateMs: 150,
   autoCenter: true,
@@ -59,6 +76,13 @@ export const DEFAULT_DOM_PREFERENCES: DomPreferences = {
 };
 
 const MIN_ORDER_QTY = 0.001;
+
+function asRowSize(v: unknown, fallback: DomRowSize): DomRowSize {
+  if (v === 'auto') return 'auto';
+  return typeof v === 'number' && (DOM_ROW_SIZE_TICK_OPTIONS as readonly number[]).includes(v)
+    ? (v as DomRowSize)
+    : fallback;
+}
 
 function asDepthCount(v: unknown, fallback: DomDepthCount): DomDepthCount {
   return typeof v === 'number' && (DOM_DEPTH_COUNT_OPTIONS as readonly number[]).includes(v)
@@ -105,6 +129,7 @@ export function sanitizeDomPreferences(
   if (!raw || typeof raw !== 'object') return fallback;
   const p = raw as Partial<DomPreferences>;
   return {
+    rowSize: asRowSize(p.rowSize, fallback.rowSize),
     depthCount: asDepthCount(p.depthCount, fallback.depthCount),
     updateMs: asUpdateMs(p.updateMs, fallback.updateMs),
     autoCenter: asBoolean(p.autoCenter, fallback.autoCenter),

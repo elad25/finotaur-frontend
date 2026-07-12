@@ -15,6 +15,7 @@ import {
   DOM_UPDATE_MS_OPTIONS,
   DOM_AUTO_CENTER_SEC_OPTIONS,
   DOM_RECENTER_TICKS_OPTIONS,
+  DOM_ROW_SIZE_TICK_OPTIONS,
   type DomPreferences,
 } from '../hooks/useDomPreferences';
 
@@ -79,15 +80,39 @@ export function DomSettingsMenu({ preferences, onChange }: DomSettingsMenuProps)
             <SectionLabel>Ladder</SectionLabel>
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2 text-[11px] text-[#C0C0C0]">
-                <span>Depth</span>
-                <div className="flex items-center gap-1" role="group" aria-label="Rows per side">
+                <span>Row size</span>
+                <div className="flex items-center gap-1" role="group" aria-label="Row aggregation size">
+                  <button
+                    type="button"
+                    onClick={() => onChange({ rowSize: 'auto' })}
+                    className={pillClass(preferences.rowSize === 'auto')}
+                    title="Auto — ~2 basis points of price, snapped to a round increment"
+                  >
+                    Auto
+                  </button>
+                  {DOM_ROW_SIZE_TICK_OPTIONS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => onChange({ rowSize: t })}
+                      className={pillClass(preferences.rowSize === t)}
+                      title={`${t} tick${t === 1 ? '' : 's'} per row`}
+                    >
+                      {t}t
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-[11px] text-[#C0C0C0]">
+                <span>Book depth</span>
+                <div className="flex items-center gap-1" role="group" aria-label="Book aggregation window, rows per side">
                   {DOM_DEPTH_COUNT_OPTIONS.map((n) => (
                     <button
                       key={n}
                       type="button"
                       onClick={() => onChange({ depthCount: n })}
                       className={pillClass(preferences.depthCount === n)}
-                      title={`${n} rows above and below center`}
+                      title={`Aggregate resting book quantity ${n} rows above and below center (rendered row count fills the panel independently)`}
                     >
                       {n}
                     </button>
