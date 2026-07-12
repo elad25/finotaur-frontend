@@ -87,7 +87,8 @@ export const ADMIN_TABS: AdminTab[] = [
     path: '/app/admin/voice',
     icon: MessageSquare,
     phase: 2,
-    enabled: true,
+    // disabled 2026-07-12: no live data source (re-enable when wired)
+    enabled: false,
     description: 'Product-feedback intelligence — requests, churn themes, bugs, pain points',
   },
   {
@@ -96,7 +97,8 @@ export const ADMIN_TABS: AdminTab[] = [
     path: '/app/admin/growth',
     icon: TrendingUp,
     phase: 2,
-    enabled: true,
+    // disabled 2026-07-12: no live data source (re-enable when wired)
+    enabled: false,
     description: 'Traffic, sources, funnel and signup attribution',
   },
   {
@@ -105,7 +107,8 @@ export const ADMIN_TABS: AdminTab[] = [
     path: '/app/admin/attribution',
     icon: Megaphone,
     phase: 2,
-    enabled: true,
+    // disabled 2026-07-12: no live data source (re-enable when wired)
+    enabled: false,
     description: 'Signup attribution by ad, campaign and platform',
   },
   {
@@ -179,7 +182,8 @@ export const ADMIN_TABS: AdminTab[] = [
     path: '/app/admin/ai',
     icon: Sparkles,
     phase: 2,
-    enabled: true,
+    // disabled 2026-07-12: no live data source (re-enable when wired)
+    enabled: false,
     description: 'AI-generated growth & retention recommendations — approve, dismiss, or snooze',
   },
   // 'executive' sidebar entry removed — forecast content folded into OverviewTab.
