@@ -38,11 +38,15 @@ import { AggregatingSource } from '@/components/charting/dataSources/Aggregating
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
 import { cn } from '@/lib/utils';
 import { intervalToSeconds, resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
+import { useLiquidityPreferences } from '../hooks/useLiquidityPreferences';
+import { TickDataRequiredState } from '../components/TickDataRequiredState';
 
 interface LiquidityTabProps {
   symbol: string;
   interval: ArenaInterval;
   assetClass: AssetClass;
+  /** Wired to the Arena's symbol setter — powers the stocks/forex empty state's quick-switch chips. */
+  onSelectSymbol?: (symbol: string) => void;
 }
 
 // One module-level singleton per file — BinanceSource is stateless (same
@@ -126,15 +130,9 @@ const MAX_DEPTH_WINDOW_SEC = 48 * 60 * 60; // 48h
 // (same cadence MarketScanner uses).
 const SLIDE_INTERVAL_MS = 30_000;
 
-export function LiquidityTab({ symbol, interval, assetClass }: LiquidityTabProps) {
+export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: LiquidityTabProps) {
   if (assetClass !== 'crypto') {
-    return (
-      <div className="flex h-full w-full items-center justify-center px-6">
-        <p className="text-[13px] text-zinc-600 max-w-sm text-center">
-          Liquidity heatmap is available for crypto markets.
-        </p>
-      </div>
-    );
+    return <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />;
   }
 
   // Keyed by symbol — forces a clean remount (and therefore a clean WS
@@ -151,15 +149,17 @@ interface LiquidityBodyProps {
 function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const book = useBinanceOrderBook(symbol);
 
-  const [floorMode, setFloorMode] = useState<'auto' | number>('auto');
+  // Persisted per-symbol (PR 3, task K.1) — floorMode/sizeFilterPct survive
+  // a tab-switch or reload for THIS symbol; a different symbol starts back
+  // at 'auto'/0 (see useLiquidityPreferences.ts's header comment for why a
+  // shared __default split isn't appropriate here, unlike footprint's
+  // settings). This component is already remounted per-symbol (see the
+  // `key={symbol}` in LiquidityTab above), so the hook's lazy initializer
+  // alone is enough to pick up the right record — no extra resync needed.
+  const { preferences, update: updateLiquidityPreferences } = useLiquidityPreferences(symbol);
+  const { floorMode, sizeFilterPct } = preferences;
   const [autoFloorUsd, setAutoFloorUsd] = useState<number>(FLOOR_DEFAULT);
   const floorUsd = floorMode === 'auto' ? autoFloorUsd : floorMode;
-
-  // Default to "All" (0) so the heatmap is fully populated on first paint —
-  // a nonzero default hides most bins before the user ever touches the
-  // control, which (combined with the sparse-depth-coverage sliver below)
-  // made the tab look nearly empty on open.
-  const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(0);
 
   // Seed the adaptive floor from server-side 72h wall history on mount
   // (component is keyed by symbol, so this naturally reruns per symbol).
@@ -214,11 +214,18 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   // 30s slide — that would fight the user's pan). Symbol change already
   // re-mounts this whole component via the `key=` in LiquidityTab above.
   const [timeFitToken, setTimeFitToken] = useState(0);
+  // Status chip (PR 3, task K.2) — true while the depth-slice backfill for
+  // the current (symbol, interval) hasn't produced any real (non-synthetic,
+  // flags-bit-0-clear — see useDepthSlices.ts) column yet. Reset alongside
+  // depthSnapAttemptedRef on interval change; cleared by the coverage-snap
+  // effect below the first time real depth data shows up.
+  const [depthHistoryLoading, setDepthHistoryLoading] = useState(true);
   useEffect(() => {
     setTimeFitToken((t) => t + 1);
     // Interval changed — re-arm the depth-coverage snap for the new interval.
     depthSnapAttemptedRef.current = false;
     setDepthSnapFromSec(null);
+    setDepthHistoryLoading(true);
   }, [interval]);
 
   // Native-vs-aggregate resolution for the candlestick series (see
@@ -260,8 +267,14 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   // decided (snap or no-op), it never fires again — so it never fights a
   // user's subsequent pan.
   useEffect(() => {
-    if (depthSnapAttemptedRef.current) return;
     const firstReal = depthMatrix.columns.find((col) => (col.flags & 1) === 0);
+
+    // Status chip: the first real column we ever see for this (symbol,
+    // interval) clears the "loading" state, independent of whether a snap
+    // is also warranted below.
+    if (firstReal && depthHistoryLoading) setDepthHistoryLoading(false);
+
+    if (depthSnapAttemptedRef.current) return;
     if (!firstReal) return; // no decoded depth data yet — wait for more
 
     depthSnapAttemptedRef.current = true;
@@ -278,11 +291,14 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
 
     setDepthSnapFromSec(snappedFromSec);
     setTimeFitToken((t) => t + 1);
-  }, [depthMatrix.columns, to, interval]);
+  }, [depthMatrix.columns, to, interval, depthHistoryLoading]);
 
-  const handleFloorSelect = useCallback((mode: 'auto' | number) => {
-    setFloorMode(mode);
-  }, []);
+  const handleFloorSelect = useCallback(
+    (mode: 'auto' | number) => {
+      updateLiquidityPreferences({ floorMode: mode });
+    },
+    [updateLiquidityPreferences],
+  );
 
   if (book.status === 'error') {
     return (
@@ -346,7 +362,7 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setSizeFilterPct(opt.value)}
+                onClick={() => updateLiquidityPreferences({ sizeFilterPct: opt.value })}
                 className={cn(
                   'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
                   isActive ? 'text-[#C9A646]' : 'text-white/40 hover:text-white/60',
@@ -359,9 +375,16 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
           })}
         </div>
 
+        {depthHistoryLoading && (
+          <span className="text-[10px] text-[#707070] ml-auto" aria-live="polite">
+            Loading depth history…
+          </span>
+        )}
+
         <span
           className={cn(
-            'flex items-center gap-1 text-[10px] font-medium ml-auto',
+            'flex items-center gap-1 text-[10px] font-medium',
+            !depthHistoryLoading && 'ml-auto',
             book.status === 'live' && 'text-emerald-400',
             book.status === 'connecting' && 'text-[#707070]',
           )}

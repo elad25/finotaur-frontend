@@ -10,7 +10,9 @@ import type {
   FlowBin,
   FlowCandleView,
   FootprintCellMode,
+  FootprintColorScheme,
   FootprintConfig,
+  FootprintLayout,
   ImbalancePreset,
 } from './types';
 import {
@@ -19,6 +21,7 @@ import {
   STANDARD_IMBALANCE_RATIO,
   STRICT_IMBALANCE_RATIO,
 } from './types';
+import { computeValueArea } from './valueArea';
 import {
   FOOTPRINT_AUTO_ROW_HEIGHT_HYSTERESIS,
   FOOTPRINT_AUTO_ROW_HEIGHT_MAX,
@@ -36,6 +39,9 @@ import {
   FOOTPRINT_CELL_PADDING_X,
   FOOTPRINT_DELTA_NEUTRAL_DARK,
   FOOTPRINT_FONT_FAMILY,
+  FOOTPRINT_HISTO_BUY_FILL,
+  FOOTPRINT_HISTO_NEUTRAL_FILL,
+  FOOTPRINT_HISTO_SELL_FILL,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_SHADING,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_SHADING_EXIT,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT,
@@ -52,6 +58,7 @@ import {
   FOOTPRINT_SELL_COLOR_BRIGHT,
   FOOTPRINT_SKELETON_BODY_WIDTH_PX,
   FOOTPRINT_SKELETON_WICK_WIDTH_PX,
+  FOOTPRINT_SOLID_SCHEME_BG,
   FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX,
   FOOTPRINT_STACKED_BUY_BAND,
   FOOTPRINT_STACKED_BUY_BAND_BORDER,
@@ -62,6 +69,12 @@ import {
   FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
   FOOTPRINT_TOTALS_BG,
   FOOTPRINT_TOTALS_FONT_SIZE,
+  FOOTPRINT_VOLUME_HEAT_COLOR,
+  FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA,
+  FOOTPRINT_VOLUME_HEAT_WEAK_ALPHA,
+  VOLUME_PROFILE_VA_BOUNDARY_COLOR,
+  VOLUME_PROFILE_VA_BOUNDARY_DASH,
+  VOLUME_PROFILE_VA_DIM_OUTSIDE_BG,
 } from './footprintTheme';
 
 // ─── Zoom-dependent detail level ────────────────────────────────────────────
@@ -457,6 +470,16 @@ export interface PreparedCandleDraw {
   pocBinPrice: number | null;
   /** Max single-row volume across the (merged) rows — for delta-shading normalization. */
   maxRowVol: number;
+  /** Max single-SIDE volume (max(buyVol, sellVol) per row) across the merged rows — histogram-layout bidAsk normalization (F1). */
+  maxRowSideVol: number;
+  /** Max |delta| across the merged rows — histogram-layout delta/volumeDelta normalization (F1). */
+  maxAbsDelta: number;
+  /** Max trades count across the merged rows — histogram-layout 'trades' normalization (F1). */
+  maxTrades: number;
+  /** binPrice of the merged row at the Value Area High boundary, or null (only computed when config.showValueArea — F4). */
+  vahBinPrice: number | null;
+  /** binPrice of the merged row at the Value Area Low boundary, or null (only computed when config.showValueArea — F4). */
+  valBinPrice: number | null;
 }
 
 /**
@@ -477,15 +500,35 @@ export function prepareCandleDraw(
   }
 
   let maxRowVol = 0;
+  let maxRowSideVol = 0;
+  let maxAbsDelta = 0;
+  let maxTrades = 0;
   let pocBinPrice: number | null = null;
   let pocVol = -1;
   for (const row of merged) {
     const rowVol = row.buyVol + row.sellVol;
     if (rowVol > maxRowVol) maxRowVol = rowVol;
+    const rowSideVol = Math.max(row.buyVol, row.sellVol);
+    if (rowSideVol > maxRowSideVol) maxRowSideVol = rowSideVol;
+    const rowAbsDelta = Math.abs(row.buyVol - row.sellVol);
+    if (rowAbsDelta > maxAbsDelta) maxAbsDelta = rowAbsDelta;
+    if (row.trades > maxTrades) maxTrades = row.trades;
     if (rowVol > pocVol) {
       pocVol = rowVol;
       pocBinPrice = row.binPrice;
     }
+  }
+
+  // Per-bar Value Area (F4) — only computed when the toggle is on, since it's
+  // an extra O(rows) walk on top of the loop above. Uses the same shared
+  // `computeValueArea` helper as volumeProfile.ts (single source of truth for
+  // the 70%-of-volume accumulate-from-POC algorithm).
+  let vahBinPrice: number | null = null;
+  let valBinPrice: number | null = null;
+  if (config.showValueArea && merged.length > 0) {
+    const va = computeValueArea(merged.map((r) => ({ price: r.binPrice, vol: r.buyVol + r.sellVol })));
+    vahBinPrice = va.vahIdx === null ? null : merged[va.vahIdx].binPrice;
+    valBinPrice = va.valIdx === null ? null : merged[va.valIdx].binPrice;
   }
 
   return {
@@ -498,6 +541,11 @@ export function prepareCandleDraw(
     delta: candle.delta,
     pocBinPrice,
     maxRowVol,
+    maxRowSideVol,
+    maxAbsDelta,
+    maxTrades,
+    vahBinPrice,
+    valBinPrice,
   };
 }
 
@@ -530,6 +578,19 @@ export interface FootprintDrawExtras {
    * simply skips the skeleton — no behavior change for those call sites.
    */
   ohlc?: { open: number; high: number; low: number; close: number };
+  /**
+   * F6 (stacked-zone first-revisit kill): given a candle's formation time
+   * (seconds), returns the combined [low, high] range touched by ANY candle
+   * STRICTLY AFTER that time — not just the single latest candle — so
+   * `drawStackedZones` correctly kills a zone the first time price re-enters
+   * its band, even when that happens on an older (non-latest) candle. Built
+   * ONCE per data-dirty pass by FootprintLayer from the full loaded `bars`
+   * array (a suffix hi/lo structure), never recomputed per frame. Optional —
+   * callers that omit it (magnifier popup, single-candle draws, existing
+   * tests) fall back to the previous "check only `latestCandleRange`"
+   * behavior, unchanged.
+   */
+  touchedRangeSince?: (formationTimeSec: number) => { low: number; high: number } | null;
 }
 
 /**
@@ -590,6 +651,13 @@ export function drawCandleFootprint(
     const rowImbalance = prepared.imbalances[i];
     const imbalance: ImbalanceSide = rowImbalance?.highlighted ? rowImbalance.side : null;
 
+    // Value Area dimming (F4) — only meaningful when showValueArea produced
+    // boundary indices for this candle; otherwise every row is "in" (no dim).
+    const dimmed =
+      config.showValueArea && prepared.vahBinPrice !== null && prepared.valBinPrice !== null
+        ? row.binPrice < prepared.valBinPrice || row.binPrice > prepared.vahBinPrice
+        : false;
+
     drawCell(ctx, {
       leftX,
       rightX,
@@ -597,12 +665,22 @@ export function drawCandleFootprint(
       height: cellHeight,
       row,
       cellMode: config.cellMode,
+      layout: config.layout,
+      colorScheme: config.colorScheme,
       maxRowVol: prepared.maxRowVol,
+      maxRowSideVol: prepared.maxRowSideVol,
+      maxAbsDelta: prepared.maxAbsDelta,
+      maxTrades: prepared.maxTrades,
       showText,
       isPoc,
       imbalanceSide: imbalance,
       fontSize: cellFontSize,
+      dimmed,
     });
+  }
+
+  if (config.showValueArea) {
+    drawValueAreaHairlines(ctx, prepared, projection, leftX, rightX);
   }
 
   drawStackedZones(ctx, prepared, projection, extras);
@@ -653,16 +731,32 @@ interface DrawCellArgs {
   height: number;
   row: MergedBin;
   cellMode: FootprintCellMode;
+  /** Cell rendering layout — 'histogram' replaces the flat background wash with per-row volume bars (F1). */
+  layout: FootprintLayout;
+  /** Cell background color scheme — 'delta' (default) preserves today's exact per-cellMode shading (F2). */
+  colorScheme: FootprintColorScheme;
   maxRowVol: number;
+  /** Max single-SIDE volume across the candle's rows — bidAsk histogram normalization (F1). */
+  maxRowSideVol: number;
+  /** Max |delta| across the candle's rows — delta/volumeDelta histogram normalization (F1). */
+  maxAbsDelta: number;
+  /** Max trades count across the candle's rows — 'trades' histogram normalization (F1). */
+  maxTrades: number;
   showText: boolean;
   isPoc: boolean;
   imbalanceSide: ImbalanceSide;
   /** Auto font size (px) for this draw pass — see computeCellFontSize. */
   fontSize: number;
+  /** Value Area dimming (F4) — true when this row's price is outside the candle's VAH/VAL band. */
+  dimmed: boolean;
 }
 
 function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
-  const { leftX, rightX, top, height, row, cellMode, maxRowVol, showText, isPoc, imbalanceSide, fontSize } = args;
+  const {
+    leftX, rightX, top, height, row, cellMode, layout, colorScheme,
+    maxRowVol, maxRowSideVol, maxAbsDelta, maxTrades,
+    showText, isPoc, imbalanceSide, fontSize, dimmed,
+  } = args;
   const width = rightX - leftX;
   const midX = leftX + width / 2;
   // Half the bidAsk center gutter — background fills and text anchors inset
@@ -671,12 +765,6 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   const delta = row.buyVol - row.sellVol;
   const rowVol = row.buyVol + row.sellVol;
   const isEmpty = rowVol <= 0;
-  const magnitude = maxRowVol > 0 ? Math.min(1, Math.abs(delta) / maxRowVol) : 0;
-  // Volume-keyed magnitude for bidAsk mode's half-fills — total row volume
-  // relative to the bar's busiest row (NOT |delta|, since bidAsk shows both
-  // sides independently rather than a net figure). Same normalization shape
-  // as the delta-mode `magnitude` above, reused via mixAlpha below.
-  const volMagnitude = maxRowVol > 0 ? Math.min(1, rowVol / maxRowVol) : 0;
 
   // ── POC band (drawn first, behind everything else in the cell) ───────────
   // Solid gold top/bottom rule (FOOTPRINT_POC_COLOR) over the tinted fill
@@ -699,13 +787,10 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.stroke();
   }
 
-  // ── Cell background shading ────────────────────────────────────────────
+  // ── Cell background: histogram bars (F1) OR flat shading (F2 dispatch) ──
   // Note: the shaded (zoomed-out) stage never reaches this per-cell function
   // with showText=true — it draws its own delta-shading independently of
-  // cellMode upstream in drawCandleFootprint/FootprintLayer. Background
-  // shading here (the 'full' stage) still varies by cellMode as before;
-  // 'trades' and 'volumeDelta' use the same neutral background as 'volume'
-  // since neither is a delta-magnitude-driven mode.
+  // cellMode upstream in drawCandleFootprint/FootprintLayer.
   //
   // Zero-volume rows get NO fill in ANY mode (ATAS parity) — the chart
   // background shows through instead of a wash of neutral/red/green tint.
@@ -714,33 +799,35 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   // price band with no prints at all (sparse tape, wide rowSize) can still
   // be empty — this guard is what stops those rows from painting.
   if (!isEmpty) {
-    if (cellMode === 'delta') {
-      const bg = delta === 0
-        ? FOOTPRINT_DELTA_NEUTRAL_DARK
-        : delta > 0
-          ? mixAlpha(FOOTPRINT_BUY_BG, FOOTPRINT_BUY_BG_STRONG, magnitude)
-          : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
-      ctx.fillStyle = bg;
-      ctx.fillRect(leftX, top, width, height);
-    } else if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
-      ctx.fillStyle = FOOTPRINT_NEUTRAL_BG;
-      ctx.fillRect(leftX, top, width, height);
+    if (layout === 'histogram') {
+      drawHistogramBar(ctx, {
+        leftX, rightX, top, height, row, cellMode, delta, rowVol,
+        maxRowSideVol, maxAbsDelta, maxTrades, maxRowVol, midX, halfGutter,
+      });
     } else {
-      // 'bidAsk' — split background: sell tint left half, buy tint right
-      // half. Alpha is keyed by this row's total volume relative to the
-      // bar's busiest row (volMagnitude) instead of a fixed alpha, so heavy
-      // rows read as visually "hotter" than thin ones — same mixAlpha
-      // interpolation approach as delta mode, weak→strong endpoints from
-      // the theme (FOOTPRINT_BIDASK_BG_WEAK_ALPHA/STRONG_ALPHA).
-      // Each half is inset from the midline by halfGutter so a small visual
-      // gutter separates the bid and ask columns (FOOTPRINT_CELL_GUTTER_PX).
-      const sellBg = mixAlphaValue(FOOTPRINT_SELL_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude);
-      const buyBg = mixAlphaValue(FOOTPRINT_BUY_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude);
-      const halfCellWidth = Math.max(0, width / 2 - halfGutter);
-      ctx.fillStyle = sellBg;
-      ctx.fillRect(leftX, top, halfCellWidth, height);
-      ctx.fillStyle = buyBg;
-      ctx.fillRect(midX + halfGutter, top, halfCellWidth, height);
+      const bg = resolveCellBackground(colorScheme, cellMode, delta, rowVol, maxRowVol);
+      if (bg.kind === 'single') {
+        ctx.fillStyle = bg.fill;
+        ctx.fillRect(leftX, top, width, height);
+      } else {
+        // 'split' (bidAsk + 'delta' colorScheme only) — sell tint left half,
+        // buy tint right half, each inset from the midline by halfGutter so a
+        // small visual gutter separates the bid and ask columns
+        // (FOOTPRINT_CELL_GUTTER_PX).
+        const halfCellWidth = Math.max(0, width / 2 - halfGutter);
+        ctx.fillStyle = bg.sellFill;
+        ctx.fillRect(leftX, top, halfCellWidth, height);
+        ctx.fillStyle = bg.buyFill;
+        ctx.fillRect(midX + halfGutter, top, halfCellWidth, height);
+      }
+    }
+
+    // Value Area dim overlay (F4) — painted over whatever background/bar was
+    // just drawn, so rows outside the candle's 70%-volume band read as
+    // visually de-emphasized without touching the POC band or imbalance text.
+    if (dimmed) {
+      ctx.fillStyle = VOLUME_PROFILE_VA_DIM_OUTSIDE_BG;
+      ctx.fillRect(leftX, top, width, height);
     }
   }
 
@@ -838,6 +925,197 @@ function mixAlphaValue(hexColor: string, alphaLo: number, alphaHi: number, t: nu
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+// ─── Color-scheme dispatcher (PR 3, F2) ─────────────────────────────────────
+
+type CellBackground =
+  | { kind: 'single'; fill: string }
+  | { kind: 'split'; sellFill: string; buyFill: string };
+
+/**
+ * Resolve one row's cell background per the active `colorScheme`:
+ * - 'delta' (default): EXACT pre-PR-3 behavior — background varies by
+ *   `cellMode` exactly as it always has (byte-identical decisions, see the
+ *   regression test in footprintRender.test.ts). 'bidAsk' is the only mode
+ *   that splits into two halves; every other mode fills the whole cell.
+ * - 'volumeHeat': single neutral/gold heat ramp, alpha scaled by this row's
+ *   total volume relative to the candle's busiest row — independent of
+ *   buy/sell sign and of `cellMode` (always a full-cell single fill, even
+ *   for 'bidAsk', since the ramp carries no directional meaning to split on).
+ * - 'solid': fixed weak uniform background for every non-empty cell,
+ *   regardless of `cellMode` or magnitude.
+ */
+function resolveCellBackground(
+  colorScheme: FootprintColorScheme,
+  cellMode: FootprintCellMode,
+  delta: number,
+  rowVol: number,
+  maxRowVol: number,
+): CellBackground {
+  if (colorScheme === 'volumeHeat') {
+    const volMagnitude = maxRowVol > 0 ? Math.min(1, rowVol / maxRowVol) : 0;
+    return {
+      kind: 'single',
+      fill: mixAlphaValue(FOOTPRINT_VOLUME_HEAT_COLOR, FOOTPRINT_VOLUME_HEAT_WEAK_ALPHA, FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA, volMagnitude),
+    };
+  }
+  if (colorScheme === 'solid') {
+    return { kind: 'single', fill: FOOTPRINT_SOLID_SCHEME_BG };
+  }
+
+  // 'delta' — EXACT current per-cellMode behavior (golden path, unchanged).
+  const magnitude = maxRowVol > 0 ? Math.min(1, Math.abs(delta) / maxRowVol) : 0;
+  const volMagnitude = maxRowVol > 0 ? Math.min(1, rowVol / maxRowVol) : 0;
+
+  if (cellMode === 'delta') {
+    const bg = delta === 0
+      ? FOOTPRINT_DELTA_NEUTRAL_DARK
+      : delta > 0
+        ? mixAlpha(FOOTPRINT_BUY_BG, FOOTPRINT_BUY_BG_STRONG, magnitude)
+        : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
+    return { kind: 'single', fill: bg };
+  }
+  if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
+    return { kind: 'single', fill: FOOTPRINT_NEUTRAL_BG };
+  }
+  // 'bidAsk' — split background: sell tint left half, buy tint right half.
+  // Alpha keyed by this row's total volume relative to the bar's busiest row
+  // (volMagnitude), weak→strong endpoints from the theme.
+  return {
+    kind: 'split',
+    sellFill: mixAlphaValue(FOOTPRINT_SELL_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude),
+    buyFill: mixAlphaValue(FOOTPRINT_BUY_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude),
+  };
+}
+
+// ─── Histogram-in-cell layout (PR 3, F1) ────────────────────────────────────
+
+/**
+ * Bar width (px) for a histogram cell: |value| as a fraction of `maxAbs`
+ * (clamped to [0,1] — a candle's OWN maximum can never be exceeded by
+ * construction, but the clamp guards against float drift), scaled to
+ * `availWidth`. Pure — exported for direct unit coverage of the
+ * proportional + capped contract.
+ */
+export function histogramBarWidth(value: number, maxAbs: number, availWidth: number): number {
+  if (maxAbs <= 0 || availWidth <= 0) return 0;
+  const frac = Math.min(1, Math.abs(value) / maxAbs);
+  return frac * availWidth;
+}
+
+interface DrawHistogramBarArgs {
+  leftX: number;
+  rightX: number;
+  top: number;
+  height: number;
+  row: MergedBin;
+  cellMode: FootprintCellMode;
+  delta: number;
+  rowVol: number;
+  maxRowSideVol: number;
+  maxAbsDelta: number;
+  maxTrades: number;
+  maxRowVol: number;
+  midX: number;
+  halfGutter: number;
+}
+
+/**
+ * Draw one row's histogram bar(s), replacing the flat background wash when
+ * `config.layout === 'histogram'`. Two shapes:
+ * - bidAsk: two-sided — sell bar grows LEFTWARD from the center gutter, buy
+ *   bar grows RIGHTWARD, each capped at the half-cell width.
+ * - every other cellMode (single-value content): one bar growing from the
+ *   cell's LEFT edge. delta/volumeDelta are delta-signed (colored by sign);
+ *   volume/trades are neutral (no direction to a raw count).
+ */
+function drawHistogramBar(ctx: CanvasRenderingContext2D, args: DrawHistogramBarArgs): void {
+  const { leftX, rightX, top, height, row, cellMode, delta, rowVol, maxRowSideVol, maxAbsDelta, maxTrades, maxRowVol, midX, halfGutter } = args;
+
+  if (cellMode === 'bidAsk') {
+    const halfCellWidth = Math.max(0, (rightX - leftX) / 2 - halfGutter);
+    const sellW = histogramBarWidth(row.sellVol, maxRowSideVol, halfCellWidth);
+    const buyW = histogramBarWidth(row.buyVol, maxRowSideVol, halfCellWidth);
+    ctx.fillStyle = FOOTPRINT_HISTO_SELL_FILL;
+    ctx.fillRect(midX - halfGutter - sellW, top, sellW, height);
+    ctx.fillStyle = FOOTPRINT_HISTO_BUY_FILL;
+    ctx.fillRect(midX + halfGutter, top, buyW, height);
+    return;
+  }
+
+  const availWidth = rightX - leftX;
+  let value: number;
+  let maxAbs: number;
+  let signed: boolean;
+  if (cellMode === 'delta' || cellMode === 'volumeDelta') {
+    value = delta;
+    maxAbs = maxAbsDelta;
+    signed = true;
+  } else if (cellMode === 'trades') {
+    value = row.trades;
+    maxAbs = maxTrades;
+    signed = false;
+  } else {
+    // 'volume'
+    value = rowVol;
+    maxAbs = maxRowVol;
+    signed = false;
+  }
+
+  const w = histogramBarWidth(value, maxAbs, availWidth);
+  const fill = !signed
+    ? FOOTPRINT_HISTO_NEUTRAL_FILL
+    : value === 0
+      ? FOOTPRINT_HISTO_NEUTRAL_FILL
+      : value > 0
+        ? FOOTPRINT_HISTO_BUY_FILL
+        : FOOTPRINT_HISTO_SELL_FILL;
+  ctx.fillStyle = fill;
+  ctx.fillRect(leftX, top, w, height);
+}
+
+// ─── Per-bar Value Area hairlines (PR 3, F4) ────────────────────────────────
+
+/**
+ * Draw subtle VAH/VAL boundary hairlines across a candle's cell columns —
+ * dashed gold lines at the top edge of the VAH row and bottom edge of the
+ * VAL row, reusing the Volume Profile overlay's own boundary tokens so the
+ * per-bar VA reads as part of the same visual family. No-op when the candle
+ * has no VA boundary indices (config.showValueArea off, or an empty candle).
+ */
+function drawValueAreaHairlines(
+  ctx: CanvasRenderingContext2D,
+  prepared: PreparedCandleDraw,
+  projection: CandleProjection,
+  leftX: number,
+  rightX: number,
+): void {
+  if (prepared.vahBinPrice === null || prepared.valBinPrice === null) return;
+  const { priceToY, rowSize } = projection;
+  const groupSize = rowSize * prepared.mergeFactor;
+
+  const yVah = priceToY(prepared.vahBinPrice + groupSize); // top edge of the VAH row
+  const yVal = priceToY(prepared.valBinPrice); // bottom edge of the VAL row
+
+  ctx.strokeStyle = VOLUME_PROFILE_VA_BOUNDARY_COLOR;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(VOLUME_PROFILE_VA_BOUNDARY_DASH);
+
+  if (yVah !== null) {
+    ctx.beginPath();
+    ctx.moveTo(leftX, yVah + 0.5);
+    ctx.lineTo(rightX, yVah + 0.5);
+    ctx.stroke();
+  }
+  if (yVal !== null) {
+    ctx.beginPath();
+    ctx.moveTo(leftX, yVal - 0.5);
+    ctx.lineTo(rightX, yVal - 0.5);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash([]); // restore canvas default so callers aren't surprised
+}
+
 // Totals band: two stacked mini-rows (Volume, Delta) pinned above the time
 // axis. Kept as a standalone function (`drawTotalsRowAt`) rather than folded
 // into `drawCandleFootprint` because it needs an explicit `top` y computed
@@ -845,6 +1123,13 @@ function mixAlphaValue(hexColor: string, alphaLo: number, alphaHi: number, t: nu
 // see FootprintLayer.tsx for how the two calls are sequenced per candle.
 const TOTALS_ROW_HEIGHT = 12;
 export const FOOTPRINT_TOTALS_BAND_HEIGHT = TOTALS_ROW_HEIGHT * 2;
+
+// Stats-band row height — declared here (ahead of computeFootprintBandHeightPx
+// below, which reads it via getEnabledStatsRowDefs's row count) rather than
+// down by STATS_ROW_DEFS where the rest of the Cluster Statistics section
+// lives, purely so the lexical-order lint rule doesn't flag a forward
+// reference (the two are otherwise unrelated to placement).
+const STATS_ROW_HEIGHT = 12;
 
 /**
  * Shared geometry helper: how tall is the bottom-pinned totals/stats band for
@@ -855,11 +1140,21 @@ export const FOOTPRINT_TOTALS_BAND_HEIGHT = TOTALS_ROW_HEIGHT * 2;
  * never have to re-derive or duplicate FootprintLayer's own show/hide logic.
  */
 export function computeFootprintBandHeightPx(
-  config: Pick<FootprintConfig, 'showStats' | 'showTotals'>,
+  config: Pick<FootprintConfig, 'showStats' | 'showTotals' | 'statsRows'>,
   detail: FootprintDetailLevel,
 ): number {
   if (detail !== 'full') return 0;
-  if (config.showStats) return FOOTPRINT_STATS_BAND_HEIGHT;
+  if (config.showStats) {
+    // F5 (toggleable stats rows): band height tracks the ENABLED row count —
+    // default (all 6 enabled) reproduces the pre-PR-3 6-row height exactly
+    // (no-op for callers that never touch statsRows). All rows disabled →
+    // no stats band at all; falls through to the totals-row height below
+    // (same "stats has nothing to show → totals renders instead" rule
+    // FootprintLayer's draw loop applies — keeps this height in lockstep
+    // with what actually paints, since WallHeatLayer's clip depends on it).
+    const enabledCount = getEnabledStatsRowDefs(config.statsRows).length;
+    if (enabledCount > 0) return enabledCount * STATS_ROW_HEIGHT;
+  }
   if (config.showTotals) return FOOTPRINT_TOTALS_BAND_HEIGHT;
   return 0;
 }
@@ -957,12 +1252,11 @@ export interface ClusterStatsRowMaxima {
   sessionDelta: number;
 }
 
-const STATS_ROW_HEIGHT = 12;
 const STATS_ROW_COUNT = 6;
 /** Extra label-gutter is handled by the caller's leftX offset — band height is just row-count * row-height. */
 export const FOOTPRINT_STATS_BAND_HEIGHT = STATS_ROW_HEIGHT * STATS_ROW_COUNT;
 
-interface StatsRowDef {
+export interface StatsRowDef {
   key: keyof ClusterStatsRow & keyof ClusterStatsRowMaxima;
   label: string;
   /** Pre-formatted label for this row's value, or undefined to use formatCellValue(value). */
@@ -979,6 +1273,28 @@ const STATS_ROW_DEFS: StatsRowDef[] = [
   { key: 'minDelta', label: 'Min Δ', formatValue: (s) => formatCellValue(s.minDelta), colorBySign: true },
   { key: 'sessionDelta', label: 'Session Δ', formatValue: (s) => formatCellValue(s.sessionDelta), colorBySign: true },
 ];
+
+/** All 6 rows enabled — the pre-PR-3 default, used whenever a caller omits `statsRows` (backward compatible). */
+const ALL_STATS_ROWS_ENABLED: FootprintConfig['statsRows'] = {
+  volume: true,
+  delta: true,
+  deltaPct: true,
+  maxDelta: true,
+  minDelta: true,
+  sessionDelta: true,
+};
+
+/**
+ * F5 (toggleable stats rows): the subset of STATS_ROW_DEFS enabled by
+ * `statsRows`, in the SAME fixed order as today (Volume/Delta/Delta%/Max Δ/
+ * Min Δ/Session Δ) — disabled rows are simply absent, never reordered.
+ * `statsRows` defaults to all-enabled when omitted, so existing callers that
+ * never pass it keep today's unconditional 6-row render.
+ */
+export function getEnabledStatsRowDefs(statsRows?: FootprintConfig['statsRows']): StatsRowDef[] {
+  const enabled = statsRows ?? ALL_STATS_ROWS_ENABLED;
+  return STATS_ROW_DEFS.filter((def) => enabled[def.key]);
+}
 
 /** One bar's column input to drawStatsBandAt. */
 export interface StatsBarColumn {
@@ -1010,9 +1326,15 @@ export interface StatsBarColumn {
 export function drawStatsBandAt(
   ctx: CanvasRenderingContext2D,
   bars: StatsBarColumn[],
-  bounds: { top: number; labelGutterWidth: number; rowMaxima: ClusterStatsRowMaxima },
+  bounds: { top: number; labelGutterWidth: number; rowMaxima: ClusterStatsRowMaxima; statsRows?: FootprintConfig['statsRows'] },
 ): void {
-  const { top, labelGutterWidth, rowMaxima } = bounds;
+  const { top, labelGutterWidth, rowMaxima, statsRows } = bounds;
+  // F5 (toggleable stats rows): only the enabled defs render, in their fixed
+  // order — `statsRows` omitted (existing callers/tests) = all 6, identical
+  // to pre-PR-3 behavior. Band height shrinks with the row count.
+  const enabledDefs = getEnabledStatsRowDefs(statsRows);
+  const bandHeight = enabledDefs.length * STATS_ROW_HEIGHT;
+  if (bandHeight <= 0) return; // all rows disabled — nothing to draw
 
   ctx.font = `${FOOTPRINT_TOTALS_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
   ctx.textBaseline = 'middle';
@@ -1020,10 +1342,10 @@ export function drawStatsBandAt(
   // Backdrop across the whole strip (label gutter + all bar columns).
   const rightmostX = bars.reduce((max, b) => Math.max(max, b.rightX), labelGutterWidth);
   ctx.fillStyle = FOOTPRINT_TOTALS_BG;
-  ctx.fillRect(0, top, rightmostX, FOOTPRINT_STATS_BAND_HEIGHT);
+  ctx.fillRect(0, top, rightmostX, bandHeight);
 
-  for (let rowIdx = 0; rowIdx < STATS_ROW_DEFS.length; rowIdx++) {
-    const def = STATS_ROW_DEFS[rowIdx];
+  for (let rowIdx = 0; rowIdx < enabledDefs.length; rowIdx++) {
+    const def = enabledDefs[rowIdx];
     const rowTop = top + rowIdx * STATS_ROW_HEIGHT;
     const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
     const rowMax = rowMaxima[def.key];
@@ -1071,10 +1393,10 @@ export function drawStatsBandAt(
   // the first visible bar's cells are, then the labels themselves.
   if (labelGutterWidth > 0) {
     ctx.fillStyle = FOOTPRINT_TOTALS_BG;
-    ctx.fillRect(0, top, labelGutterWidth, FOOTPRINT_STATS_BAND_HEIGHT);
+    ctx.fillRect(0, top, labelGutterWidth, bandHeight);
   }
-  for (let rowIdx = 0; rowIdx < STATS_ROW_DEFS.length; rowIdx++) {
-    const def = STATS_ROW_DEFS[rowIdx];
+  for (let rowIdx = 0; rowIdx < enabledDefs.length; rowIdx++) {
+    const def = enabledDefs[rowIdx];
     const rowTop = top + rowIdx * STATS_ROW_HEIGHT;
     const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
@@ -1087,8 +1409,16 @@ export function drawStatsBandAt(
 
 /**
  * Draw stacked-imbalance zone bands: a semi-transparent side-colored band
- * extending right from the candle to the live edge, killed once the latest
- * candle's range has traded back through the zone's price band.
+ * extending right from the candle to the live edge, killed the first time
+ * price trades back through the zone's price band.
+ *
+ * F6: prefers `extras.touchedRangeSince(prepared.time)` — the combined range
+ * touched by ANY candle strictly after this zone's formation candle — over
+ * the legacy `extras.latestCandleRange` (which only checked the single
+ * newest candle, so a zone revisited by an OLDER candle incorrectly
+ * persisted). Falls back to `latestCandleRange` when `touchedRangeSince` is
+ * not provided (magnifier popup, single-candle draws, existing tests) —
+ * unchanged behavior for those callers.
  */
 function drawStackedZones(
   ctx: CanvasRenderingContext2D,
@@ -1099,6 +1429,9 @@ function drawStackedZones(
   if (prepared.stackedZones.length === 0) return;
   const { priceToY, rowSize } = projection;
   const groupSize = rowSize * prepared.mergeFactor;
+  const touchedRange = extras.touchedRangeSince
+    ? extras.touchedRangeSince(prepared.time)
+    : extras.latestCandleRange;
 
   for (const zone of prepared.stackedZones) {
     const fromRow = prepared.merged[zone.fromIdx];
@@ -1109,8 +1442,8 @@ function drawStackedZones(
     const priceHi = Math.max(fromRow.binPrice, toRow.binPrice) + groupSize;
 
     // Kill the zone visually once price has traded back through its band.
-    if (extras.latestCandleRange) {
-      const { low, high } = extras.latestCandleRange;
+    if (touchedRange) {
+      const { low, high } = touchedRange;
       if (high >= priceLo && low <= priceHi) continue; // price re-entered the zone — dead
     }
 

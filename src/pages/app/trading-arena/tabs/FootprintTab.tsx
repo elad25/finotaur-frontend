@@ -54,6 +54,7 @@ import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTick
 import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
+import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTradeSource';
 import type { TradeSourceStatus } from '@/components/charting/orderflow/types';
 import {
   FUTURES_CONTRACTS,
@@ -65,6 +66,7 @@ import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
 import { footprintSettingsToConfig, resolveEffectiveRowSize } from '../components/footprintSettings';
 import { FootprintSettingsMenu, type FootprintSettingsMenuProps } from '../components/FootprintSettingsMenu';
 import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
+import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { cn } from '@/lib/utils';
 
 interface FootprintTabProps {
@@ -75,6 +77,8 @@ interface FootprintTabProps {
   isAdmin: boolean;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
+  /** Wired to the Arena's symbol setter — powers the stocks/forex empty state's quick-switch chips. */
+  onSelectSymbol?: (symbol: string) => void;
 }
 
 // Initial visible bar count — wide enough that candles clear the footprint's
@@ -124,7 +128,7 @@ function quickPillClass(active: boolean): string {
 // pattern ChartTab.tsx and LiquidityTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
 
-export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators }: FootprintTabProps) {
+export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, onSelectSymbol }: FootprintTabProps) {
   const [futuresRoot, setFuturesRoot] = useState<FuturesRoot>('NQ');
 
   const isCrypto = assetClass === 'crypto';
@@ -152,13 +156,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
     );
   }
 
-  return (
-    <div className="flex h-full w-full items-center justify-center px-6">
-      <p className="text-[13px] text-zinc-600 max-w-sm text-center">
-        Footprint requires a live trades feed — available for crypto and futures.
-      </p>
-    </div>
-  );
+  return <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />;
 }
 
 // ─── Shared "Settings ▾ + quick toggles" strip ──────────────────────────────
@@ -474,6 +472,15 @@ interface FuturesFootprintBodyProps {
 }
 
 function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin }: FuturesFootprintBodyProps) {
+  // Server-side cache warm-up (H5, admin-only — this body only ever mounts
+  // when isFutures = assetClass==='futures' && isAdmin, per FootprintTab's
+  // own gate above). Fire-and-forget: pre-populates the server's durable
+  // orderflow trade-window repo for this root so the tab's own backfill is
+  // more likely to hit a warm cache instead of a cold Databento call.
+  useEffect(() => {
+    warmOrderflowCache(root);
+  }, [root]);
+
   const contractSymbol = useMemo(() => frontMonthContract(root), [root]);
   // resolveTradeSource('futures', root, ...) only returns null when !isAdmin
   // or `root` isn't a known FuturesRoot — neither can happen here (this body

@@ -169,6 +169,8 @@ async function fetchBackfillWindow(
 // ── Implementation ──────────────────────────────────────────────────────
 
 class DatabentoTradeSourceImpl implements TradeSource {
+  readonly venueId = 'databento';
+
   subscribe(
     symbol: string,
     onTrades: (trades: FlowTrade[]) => void,
@@ -506,3 +508,40 @@ class DatabentoTradeSourceImpl implements TradeSource {
 
 /** Singleton instance — stateless aside from per-call closures, safe to share. */
 export const DatabentoTradeSource: TradeSource = new DatabentoTradeSourceImpl();
+
+// ── Cache warm-up (H5 — PR 3) ────────────────────────────────────────────
+//
+// Fire-and-forget: asks the server to pre-populate its durable
+// orderflow_trade_windows repo for `root` (POST /api/orderflow/warm — see
+// finotaur-server/src/routes/orderflowRouter.js) so the FIRST real backfill
+// request a user's session makes (when they actually open the futures Order
+// Flow tab) is more likely to hit a warm repo row instead of a cold
+// Databento call. Mirrors fetchBackfillWindow's auth (authFetch, same
+// requireAuthJWT + requireAdmin gate as /backfill) — response is ignored
+// entirely (202/409/4xx/network failure all silently swallowed): this is
+// pure optimization, never a source of truth for actual chart data, and
+// must never surface an error to the user for a background warm-up.
+//
+// Server contract (confirmed by reading orderflowRouter.js directly, NOT
+// guessed): POST /api/orderflow/warm takes `{ symbols: string, days?: number }`
+// in the JSON body (comma-separated root symbols, e.g. "NQ,ES"; NOT
+// fromMs/toMs — the server walks its own backward window per `days`). A
+// single-root warm call only ever needs ONE symbol and a small `days` value
+// — a mount-triggered warm doesn't need the server's full
+// DEFAULT_WARM_DAYS=3 walk.
+const WARM_ENDPOINT = '/api/orderflow/warm';
+const WARM_DAYS = 1;
+
+export function warmOrderflowCache(root: string): void {
+  const bareRoot = extractRoot(root);
+
+  authFetch(WARM_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols: bareRoot, days: WARM_DAYS }),
+  }).catch((err) => {
+    if (import.meta.env.DEV) {
+      console.debug('[DatabentoTradeSource] warmOrderflowCache failed (non-fatal):', err);
+    }
+  });
+}

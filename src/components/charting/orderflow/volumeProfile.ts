@@ -13,6 +13,7 @@
 // would need to be an arbitrary UTC-day or exchange-funding-window cut).
 
 import type { FlowBin, FlowCandleView } from './types';
+import { computeValueArea } from './valueArea';
 
 /** One row of the profile: an absolute price bin with split buy/sell volume. */
 export interface VolumeProfileRow {
@@ -74,68 +75,14 @@ export function computeVolumeProfile(candles: FlowCandleView[]): VolumeProfile {
 
   const maxRowVol = rows.reduce((max, r) => Math.max(max, r.totalVol), 0);
 
-  const pocIdx = computePocIndex(rows);
+  const { pocIdx, vahIdx, valIdx } = computeValueArea(
+    rows.map((r) => ({ price: r.binPrice, vol: r.totalVol })),
+  );
   const poc = pocIdx === null ? null : rows[pocIdx].binPrice;
-
-  const { vahIdx, valIdx } = computeValueArea(rows, pocIdx);
   const vah = vahIdx === null ? null : rows[vahIdx].binPrice;
   const val = valIdx === null ? null : rows[valIdx].binPrice;
 
   return { rows, poc, vah, val, maxRowVol };
-}
-
-/** Index of the row with the largest totalVol (first one wins on ties). */
-function computePocIndex(rows: VolumeProfileRow[]): number | null {
-  if (rows.length === 0) return null;
-  let bestIdx = 0;
-  let bestVol = rows[0].totalVol;
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].totalVol > bestVol) {
-      bestVol = rows[i].totalVol;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
-}
-
-/**
- * Standard Value Area algorithm (TradingView/ATAS convention):
- * start at POC, greedily expand the boundary toward whichever neighbor row
- * (one above the current high boundary, one below the current low boundary)
- * has the LARGER volume, accumulating until >= 70% of total volume is
- * enclosed. Ties prefer expanding upward (arbitrary but deterministic).
- */
-function computeValueArea(
-  rows: VolumeProfileRow[],
-  pocIdx: number | null,
-): { vahIdx: number | null; valIdx: number | null } {
-  if (pocIdx === null || rows.length === 0) return { vahIdx: null, valIdx: null };
-
-  const totalVol = rows.reduce((sum, r) => sum + r.totalVol, 0);
-  if (totalVol <= 0) return { vahIdx: pocIdx, valIdx: pocIdx };
-
-  const targetVol = totalVol * 0.7;
-
-  let hi = pocIdx;
-  let lo = pocIdx;
-  let accumulated = rows[pocIdx].totalVol;
-
-  while (accumulated < targetVol && (hi < rows.length - 1 || lo > 0)) {
-    const nextHiVol = hi < rows.length - 1 ? rows[hi + 1].totalVol : -1;
-    const nextLoVol = lo > 0 ? rows[lo - 1].totalVol : -1;
-
-    if (nextHiVol < 0 && nextLoVol < 0) break; // both exhausted
-
-    if (nextHiVol >= nextLoVol) {
-      hi += 1;
-      accumulated += nextHiVol;
-    } else {
-      lo -= 1;
-      accumulated += nextLoVol;
-    }
-  }
-
-  return { vahIdx: hi, valIdx: lo };
 }
 
 /** Convenience: split a row's total into buy/sell fractions for rendering. */

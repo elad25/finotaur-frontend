@@ -25,12 +25,18 @@ import {
   computeDetailLevel,
   computeRowMergeFactor,
   computeCellFontSize,
+  computeFootprintBandHeightPx,
+  getEnabledStatsRowDefs,
+  histogramBarWidth,
   prepareCandleDraw,
   drawCandleFootprint,
   formatCellValue,
+  FOOTPRINT_TOTALS_BAND_HEIGHT,
   type CandleProjection,
   type FootprintDrawExtras,
 } from '../footprintRender';
+import { computeValueArea } from '../valueArea';
+import { computeVolumeProfile } from '../volumeProfile';
 import type { FlowCandleView, FlowTrade, FootprintConfig } from '../types';
 import { DEFAULT_FOOTPRINT_CONFIG } from '../types';
 import { FlowBinStore } from '../flowBinStore';
@@ -45,8 +51,15 @@ import {
   FOOTPRINT_CELL_GUTTER_PX,
   FOOTPRINT_CELL_FONT_MIN,
   FOOTPRINT_CELL_FONT_MAX,
+  FOOTPRINT_BUY_BG_STRONG,
+  FOOTPRINT_HISTO_BUY_FILL,
+  FOOTPRINT_HISTO_NEUTRAL_FILL,
+  FOOTPRINT_HISTO_SELL_FILL,
+  FOOTPRINT_STACKED_BUY_BAND,
   FOOTPRINT_STACKED_BUY_BAND_BORDER,
   FOOTPRINT_STACKED_SELL_BAND_BORDER,
+  FOOTPRINT_SOLID_SCHEME_BG,
+  FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA,
 } from '../footprintTheme';
 
 // ─── computeDetailLevel ──────────────────────────────────────────────────────
@@ -1204,5 +1217,343 @@ describe('drawCandleFootprint — stacked zone bands render a hairline border', 
       (e) => e.kind === 'strokeLine' && e.strokeStyle === FOOTPRINT_STACKED_SELL_BAND_BORDER,
     );
     expect(sellBorderStrokes.length).toBe(0);
+  });
+});
+
+// ─── PR 3 — F1: histogram-in-cell layout ────────────────────────────────────
+
+describe('histogram-in-cell layout (F1)', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  it('histogramBarWidth: proportional to |value|/maxAbs, capped at availWidth, safe for zero maxAbs/value', () => {
+    expect(histogramBarWidth(5, 10, 100)).toBeCloseTo(50, 5);
+    expect(histogramBarWidth(10, 10, 100)).toBeCloseTo(100, 5); // exactly at max — full width
+    expect(histogramBarWidth(20, 10, 100)).toBeCloseTo(100, 5); // over-max (float drift guard) — still capped
+    expect(histogramBarWidth(0, 10, 100)).toBe(0);
+    expect(histogramBarWidth(5, 0, 100)).toBe(0); // maxAbs 0 — no crash, no bar
+    expect(histogramBarWidth(5, 10, 0)).toBe(0); // zero available width — no bar
+  });
+
+  it('bidAsk histogram: sell bar grows leftward from the gutter, buy bar grows rightward, both proportional to maxRowSideVol and capped at the half-cell width', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 10, buyerAggressor: true },
+      { time: 1, price: 100, qty: 2, buyerAggressor: false },
+      { time: 2, price: 110, qty: 4, buyerAggressor: true },
+      { time: 3, price: 110, qty: 20, buyerAggressor: false },
+    ];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', layout: 'histogram' };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    expect(prepared.maxRowSideVol).toBe(20); // row @110's sellVol=20 is the candle's busiest single side
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 200, candleWidthPx: 100, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const sellBars = ctx.log.filter((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_HISTO_SELL_FILL);
+    const buyBars = ctx.log.filter((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_HISTO_BUY_FILL);
+    expect(sellBars.length).toBe(2);
+    expect(buyBars.length).toBe(2);
+
+    const halfCellWidth = 100 / 2 - FOOTPRINT_CELL_GUTTER_PX / 2; // 48
+    const allWidths = [...sellBars, ...buyBars].map((b) => (b as { w: number }).w);
+    // The row at maxRowSideVol (110's sellVol=20) must hit exactly the capped half-cell width.
+    expect(Math.max(...allWidths)).toBeCloseTo(halfCellWidth, 5);
+
+    const sortedSellWidths = sellBars.map((b) => (b as { w: number }).w).sort((a, b) => a - b);
+    const sortedBuyWidths = buyBars.map((b) => (b as { w: number }).w).sort((a, b) => a - b);
+    // 100's sellVol=2 → (2/20)*halfCellWidth.
+    expect(sortedSellWidths[0]).toBeCloseTo((2 / 20) * halfCellWidth, 5);
+    // 100's buyVol=10 → (10/20)*halfCellWidth.
+    expect(sortedBuyWidths[1]).toBeCloseTo((10 / 20) * halfCellWidth, 5);
+  });
+
+  it("single-value histogram ('delta' cellMode): one bar per row from the cell's LEFT edge, width proportional to |delta|/maxAbsDelta, colored by sign", () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 10, buyerAggressor: true }, // delta +10 = maxAbsDelta
+      { time: 1, price: 110, qty: 4, buyerAggressor: false }, // delta -4
+    ];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'delta', layout: 'histogram' };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    expect(prepared.maxAbsDelta).toBe(10);
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 200, candleWidthPx: 100, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const buyBar = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_HISTO_BUY_FILL) as
+      | { x: number; w: number }
+      | undefined;
+    const sellBar = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_HISTO_SELL_FILL) as
+      | { x: number; w: number }
+      | undefined;
+    expect(buyBar).toBeDefined();
+    expect(sellBar).toBeDefined();
+
+    const leftX = 200 - 100 / 2; // 150 — single-value bars start at the cell's LEFT edge, not the bidAsk gutter.
+    expect(buyBar!.x).toBeCloseTo(leftX, 5);
+    expect(sellBar!.x).toBeCloseTo(leftX, 5);
+    // Positive row (+10 = maxAbsDelta) fills the entire cell width; negative row (-4) is 40%.
+    expect(buyBar!.w).toBeCloseTo(100, 5);
+    expect(sellBar!.w).toBeCloseTo(40, 5);
+  });
+
+  it('histogram layout skips the flat background wash — only histogram-family fills paint (no FOOTPRINT_NEUTRAL_BG etc.)', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 10, buyerAggressor: true }];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'volume', layout: 'histogram', showPoc: false };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 200, candleWidthPx: 100, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const fillStyles = ctx.log
+      .filter((e) => e.kind === 'fillRect')
+      .map((e) => (e as { fillStyle: string }).fillStyle);
+    expect(fillStyles.length).toBeGreaterThan(0);
+    expect(fillStyles.every((f) => f === FOOTPRINT_HISTO_NEUTRAL_FILL)).toBe(true);
+  });
+});
+
+// ─── PR 3 — F2: color-scheme dispatcher ─────────────────────────────────────
+
+describe('color-scheme dispatcher (F2)', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  function buildFixture(colorScheme: FootprintConfig['colorScheme'], cellMode: FootprintConfig['cellMode'] = 'delta') {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 10, buyerAggressor: true }, // delta +10, rowVol 10 = candle's max
+      { time: 1, price: 110, qty: 4, buyerAggressor: false }, // delta -4, rowVol 4
+    ];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode, colorScheme, showPoc: false };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 200, candleWidthPx: 100, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    return ctx.log.filter((e) => e.kind === 'fillRect') as { kind: 'fillRect'; x: number; y: number; w: number; h: number; fillStyle: string }[];
+  }
+
+  it("'delta' colorScheme (default) reproduces the exact pre-PR-3 per-cellMode background — regression guard", () => {
+    const fills = buildFixture('delta', 'delta');
+    // Positive-delta row (delta=+10=maxRowVol → magnitude=1) must hit the STRONG buy background EXACTLY.
+    const strongBuy = fills.find((f) => f.fillStyle === FOOTPRINT_BUY_BG_STRONG);
+    expect(strongBuy).toBeDefined();
+  });
+
+  it("'volumeHeat' colorScheme: single gold ramp, alpha monotonically increases with row-volume magnitude, independent of buy/sell sign", () => {
+    const fills = buildFixture('volumeHeat', 'delta');
+    const goldFills = fills.filter((f) => f.fillStyle.includes('201, 166, 70'));
+    expect(goldFills.length).toBe(2);
+    const alphaOf = (rgba: string) => parseFloat(rgba.match(/rgba\([^)]+,\s*([\d.]+)\)/)![1]);
+    const alphas = goldFills.map((f) => alphaOf(f.fillStyle)).sort((a, b) => a - b);
+    expect(alphas[0]).toBeLessThan(alphas[1]);
+    // Row @100 (rowVol=10) IS the candle's max row volume → hits the STRONG endpoint exactly.
+    expect(alphas[1]).toBeCloseTo(FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA, 5);
+  });
+
+  it("'solid' colorScheme: every non-empty cell gets the exact same fixed background, regardless of row magnitude", () => {
+    const fills = buildFixture('solid', 'delta');
+    expect(fills.length).toBeGreaterThan(0);
+    for (const f of fills) {
+      expect(f.fillStyle).toBe(FOOTPRINT_SOLID_SCHEME_BG);
+    }
+  });
+
+  it('bidAsk histogramless single-cell fill under volumeHeat is NOT split into sell/buy halves (single ramp, independent of side)', () => {
+    // buildFixture sets showPoc: false, so every fillRect here is a cell
+    // background — a split (sell+buy halves) would be 4 calls for 2 rows; a
+    // single full-cell ramp is exactly 2 (one per non-empty row).
+    const fills = buildFixture('volumeHeat', 'bidAsk');
+    expect(fills.length).toBe(2);
+    expect(fills.every((f) => f.w === 100)).toBe(true); // full cell width, not a half-cell split
+  });
+
+  it('POC gold band is unaffected by colorScheme (still renders under volumeHeat)', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 10, buyerAggressor: true }];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, colorScheme: 'volumeHeat', showPoc: true };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 200, candleWidthPx: 100, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    const pocFill = ctx.log.find((e) => e.kind === 'fillRect' && (e as { fillStyle: string }).fillStyle === 'rgba(201, 166, 70, 0.18)');
+    expect(pocFill).toBeDefined(); // FOOTPRINT_POC_BG, unaffected by colorScheme
+  });
+});
+
+// ─── PR 3 — F4: computeValueArea (shared helper) ────────────────────────────
+
+describe('computeValueArea (F4) — cross-check against volumeProfile.ts on the same fixture', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  it('produces the same pocIdx/vahIdx/valIdx-derived prices as computeVolumeProfile for an identical row set', () => {
+    const trades: FlowTrade[] = [];
+    // 6 price levels, deliberately uneven volume so POC/VA boundaries are non-trivial.
+    const vols = [5, 10, 40, 15, 8, 3]; // level 2 is the heaviest → POC
+    vols.forEach((v, i) => trades.push({ time: i, price: 100 + i * rowSize, qty: v, buyerAggressor: true }));
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+
+    const profile = computeVolumeProfile([candle]);
+    const rows = candle.bins.map((b) => ({ price: b.binPrice, vol: b.buyVol + b.sellVol }));
+    const va = computeValueArea(rows);
+
+    expect(va.pocIdx).not.toBeNull();
+    expect(rows[va.pocIdx!].price).toBe(profile.poc);
+    expect(rows[va.vahIdx!].price).toBe(profile.vah);
+    expect(rows[va.valIdx!].price).toBe(profile.val);
+  });
+
+  it('prepareCandleDraw wires per-bar VAH/VAL only when showValueArea is on, matching the standalone helper', () => {
+    const trades: FlowTrade[] = [];
+    const vols = [5, 10, 40, 15, 8, 3];
+    vols.forEach((v, i) => trades.push({ time: i, price: 100 + i * rowSize, qty: v, buyerAggressor: true }));
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+
+    const offConfig: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, showValueArea: false };
+    const preparedOff = prepareCandleDraw(candle, rowSize, 1, offConfig);
+    expect(preparedOff.vahBinPrice).toBeNull();
+    expect(preparedOff.valBinPrice).toBeNull();
+
+    const onConfig: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, showValueArea: true };
+    const preparedOn = prepareCandleDraw(candle, rowSize, 1, onConfig);
+    const rows = preparedOn.merged.map((r) => ({ price: r.binPrice, vol: r.buyVol + r.sellVol }));
+    const va = computeValueArea(rows);
+    expect(preparedOn.vahBinPrice).toBe(va.vahIdx !== null ? rows[va.vahIdx].price : null);
+    expect(preparedOn.valBinPrice).toBe(va.valIdx !== null ? rows[va.valIdx].price : null);
+  });
+});
+
+// ─── PR 3 — F5: toggleable stats rows ───────────────────────────────────────
+
+describe('toggleable stats rows (F5)', () => {
+  it('getEnabledStatsRowDefs: default (all enabled) returns 6 defs in the fixed order; a disabled row is absent from the output', () => {
+    const allDefs = getEnabledStatsRowDefs(DEFAULT_FOOTPRINT_CONFIG.statsRows);
+    expect(allDefs.map((d) => d.key)).toEqual(['volume', 'delta', 'deltaPct', 'maxDelta', 'minDelta', 'sessionDelta']);
+
+    const partial = getEnabledStatsRowDefs({ ...DEFAULT_FOOTPRINT_CONFIG.statsRows, delta: false, maxDelta: false, minDelta: false });
+    expect(partial.map((d) => d.key)).toEqual(['volume', 'deltaPct', 'sessionDelta']);
+    expect(partial.find((d) => d.key === 'delta')).toBeUndefined();
+  });
+
+  it('computeFootprintBandHeightPx: band height for 6/3/0 enabled rows (showTotals off)', () => {
+    const base = { showStats: true, showTotals: false };
+    expect(computeFootprintBandHeightPx({ ...base, statsRows: DEFAULT_FOOTPRINT_CONFIG.statsRows }, 'full')).toBe(72); // 6 * 12px — matches today's default, no-op
+
+    const threeRows = { ...DEFAULT_FOOTPRINT_CONFIG.statsRows, delta: false, maxDelta: false, minDelta: false };
+    expect(computeFootprintBandHeightPx({ ...base, statsRows: threeRows }, 'full')).toBe(36); // 3 * 12px
+
+    const zeroRows = { volume: false, delta: false, deltaPct: false, maxDelta: false, minDelta: false, sessionDelta: false };
+    expect(computeFootprintBandHeightPx({ ...base, statsRows: zeroRows }, 'full')).toBe(0); // all disabled, no totals fallback → height 0
+  });
+
+  it('all-rows-disabled falls back to the totals-row height when showTotals is also on', () => {
+    const zeroRows = { volume: false, delta: false, deltaPct: false, maxDelta: false, minDelta: false, sessionDelta: false };
+    const height = computeFootprintBandHeightPx({ showStats: true, showTotals: true, statsRows: zeroRows }, 'full');
+    expect(height).toBe(FOOTPRINT_TOTALS_BAND_HEIGHT);
+  });
+
+  it('detail !== "full" always yields height 0, regardless of statsRows', () => {
+    expect(computeFootprintBandHeightPx({ showStats: true, showTotals: false, statsRows: DEFAULT_FOOTPRINT_CONFIG.statsRows }, 'shaded')).toBe(0);
+    expect(computeFootprintBandHeightPx({ showStats: true, showTotals: false, statsRows: DEFAULT_FOOTPRINT_CONFIG.statsRows }, 'hidden')).toBe(0);
+  });
+});
+
+// ─── PR 3 — F6: stacked-zone first-revisit kill ─────────────────────────────
+
+describe('stacked-zone first-revisit kill (F6)', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  /** Same fixture as the earlier stacked-zone border tests: a qualifying stacked-buy zone spanning price [100, 140). */
+  function buildStackedBuyCandle(): FlowCandleView {
+    const trades: FlowTrade[] = [];
+    for (let level = 0; level < 4; level++) {
+      trades.push({ time: level * 10, price: 100 + level * rowSize, qty: 1, buyerAggressor: false });
+      trades.push({ time: level * 10 + 1, price: 100 + level * rowSize, qty: 50, buyerAggressor: true });
+    }
+    const store = new FlowBinStore({ intervalSec, rowSize });
+    store.applyTrades(trades);
+    const candle = store.getCandle(0);
+    if (!candle) throw new Error('test setup error');
+    return candle;
+  }
+
+  function buildFixture() {
+    const candle = buildStackedBuyCandle();
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, imbalancePreset: 'stacked', imbalanceStackedOnly: true };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    expect(prepared.stackedZones.length).toBeGreaterThan(0); // sanity: a zone actually formed
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 100, candleWidthPx: 40, priceToY, rowHeightPx, rowSize };
+    return { prepared, projection, config };
+  }
+
+  it('zone survives when touchedRangeSince reports no candle touched its price band', () => {
+    const { prepared, projection, config } = buildFixture();
+    const extras: FootprintDrawExtras = {
+      liveEdgeX: 400,
+      latestCandleRange: null,
+      clipRightX: 400,
+      touchedRangeSince: () => null,
+    };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    const buyBandFills = ctx.log.filter((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_STACKED_BUY_BAND);
+    expect(buyBandFills.length).toBeGreaterThan(0);
+  });
+
+  it('zone is killed when a MIDDLE (non-latest) candle touched its price band, even though latestCandleRange alone says "untouched"', () => {
+    const { prepared, projection, config } = buildFixture();
+    const extras: FootprintDrawExtras = {
+      liveEdgeX: 400,
+      latestCandleRange: null, // the OLD "only check latest" signal says "untouched"
+      clipRightX: 400,
+      // A candle strictly between formation and now DID trade back through
+      // [100,140) — touchedRangeSince (F6's suffix-based signal) reports it.
+      touchedRangeSince: () => ({ low: 105, high: 110 }),
+    };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    const buyBandFills = ctx.log.filter((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_STACKED_BUY_BAND);
+    expect(buyBandFills.length).toBe(0); // killed
+  });
+
+  it('falls back to latestCandleRange when touchedRangeSince is omitted (backward compatible for callers without a bars-derived suffix structure)', () => {
+    const { prepared, projection, config } = buildFixture();
+    const extras: FootprintDrawExtras = {
+      liveEdgeX: 400,
+      latestCandleRange: { low: 105, high: 110 }, // legacy signal — this alone should still kill the zone
+      clipRightX: 400,
+      // touchedRangeSince intentionally omitted.
+    };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    const buyBandFills = ctx.log.filter((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_STACKED_BUY_BAND);
+    expect(buyBandFills.length).toBe(0);
   });
 });

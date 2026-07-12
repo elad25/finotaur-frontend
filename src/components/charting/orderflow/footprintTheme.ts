@@ -158,6 +158,29 @@ export const FOOTPRINT_STACKED_SELL_BAND_BORDER = 'rgba(220, 38, 38, 0.45)';
  */
 export const FOOTPRINT_CELL_GUTTER_PX = 4;
 
+// ─── Histogram-in-cell layout (PR 3, F1) ────────────────────────────────────
+// `config.layout === 'histogram'` draws per-row horizontal volume bars BEHIND
+// the numbers instead of the flat delta/volumeHeat/solid background tint —
+// same buy/sell/neutral hue family as the rest of the footprint, at a modest
+// alpha so the numbers on top stay legible.
+
+export const FOOTPRINT_HISTO_BUY_FILL = 'rgba(34, 197, 94, 0.32)';
+export const FOOTPRINT_HISTO_SELL_FILL = 'rgba(220, 38, 38, 0.32)';
+export const FOOTPRINT_HISTO_NEUTRAL_FILL = 'rgba(161, 161, 170, 0.30)'; // zinc-400 family, matches FOOTPRINT_NEUTRAL_BG's hue
+
+// ─── Color-scheme dispatcher (PR 3, F2) ─────────────────────────────────────
+// 'volumeHeat' and 'solid' cell background schemes — see resolveCellBackground
+// in footprintRender.ts. 'delta' (default) reuses the existing buy/sell/neutral
+// tokens above unchanged.
+
+/** 'volumeHeat' scheme: single neutral/gold heat ramp, independent of buy/sell sign — reuses the FINOTAUR gold (matches FOOTPRINT_POC_COLOR). */
+export const FOOTPRINT_VOLUME_HEAT_COLOR = '#C9A646';
+export const FOOTPRINT_VOLUME_HEAT_WEAK_ALPHA = 0.08;
+export const FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA = 0.35;
+
+/** 'solid' scheme: fixed weak uniform background for every non-empty cell, no magnitude scaling. */
+export const FOOTPRINT_SOLID_SCHEME_BG = 'rgba(161, 161, 170, 0.08)';
+
 // ─── Volume Profile overlay tokens ──────────────────────────────────────────
 // Shares the buy/sell/gold palette above so the profile reads as part of the
 // same order-flow family as the footprint clusters, not a separate visual.
@@ -179,6 +202,16 @@ export const VOLUME_PROFILE_POC_DASH: [number, number] = [4, 3];
 /** VAH/VAL boundary line — thinner, dimmer gold than POC. */
 export const VOLUME_PROFILE_VA_BOUNDARY_COLOR = 'rgba(201, 166, 70, 0.55)';
 export const VOLUME_PROFILE_VA_BOUNDARY_DASH: [number, number] = [2, 2];
+
+/**
+ * PR 3 F4 (per-bar footprint Value Area, `config.showValueArea`): dim overlay
+ * for footprint cells OUTSIDE the 70%-volume Value Area band, drawn over the
+ * cell's existing background/histogram fill so the VAH/VAL band reads as the
+ * "in-focus" price range for that candle. Same near-black family as
+ * FOOTPRINT_TOTALS_BG (not the gold VA_BG above, which highlights rather than
+ * dims) — part of the Value Area token family by naming/placement.
+ */
+export const VOLUME_PROFILE_VA_DIM_OUTSIDE_BG = 'rgba(8, 8, 10, 0.35)';
 
 /** Debounce window (ms) for recomputing the profile on visible-range change. */
 export const VOLUME_PROFILE_RECOMPUTE_DEBOUNCE_MS = 150;

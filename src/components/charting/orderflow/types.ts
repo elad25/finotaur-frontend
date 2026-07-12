@@ -22,6 +22,16 @@ export type TradeSourceStatus = 'connecting' | 'live' | 'reconnecting' | 'error'
 
 export interface TradeSource {
   /**
+   * Stable venue identifier (e.g. 'binance', 'databento') — used by
+   * flowStoreCache.ts to key its raw-trade LRU cache so two venues can
+   * never collide on the same symbol string. Optional/undefined degrades to
+   * 'unknown' at the call site (see useOrderFlow.ts) — every current
+   * implementation sets it, but this stays optional so a hand-rolled
+   * TradeSource in a test doesn't need to supply one.
+   */
+  venueId?: string;
+
+  /**
    * Live subscription. Returns an unsubscribe fn.
    * Implementations should batch + deliver trades on an interval (not per
    * tick) to keep consumers (React state, aggregation store) cheap.
