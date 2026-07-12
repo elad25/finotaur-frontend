@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 const API_BASE =
   (import.meta as any).env?.VITE_SUPPORT_API_BASE ||
   (import.meta as any).env?.VITE_API_BASE_URL ||
-  'https://api.finotaur.com';
+  ''; // same-origin: /api/* is proxied to the support server (api.finotaur.com has no DNS record)
 
 // ==================== Types ====================
 interface DraftListItem {

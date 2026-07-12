@@ -24,7 +24,7 @@ export function AdminSidebarNav({
   onNavigate,
 }: AdminSidebarProps & { onNavigate?: () => void }) {
   const visible = ADMIN_TABS.filter(
-    (tab) => !tab.superAdminOnly || isSuperAdmin
+    (tab) => tab.enabled && (!tab.superAdminOnly || isSuperAdmin)
   );
 
   return (

@@ -7,6 +7,7 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { SkeletonTable } from '@/components/ds/Skeleton';
 import {
   MessageCircle,
@@ -108,6 +109,9 @@ interface SystemUpdate {
   published_at: string | null;
   views_count: number;
   metadata?: SystemUpdateMetadata;
+  // Optional — column may not exist yet (migration applied separately).
+  // 'manual' = admin-authored announcement, 'auto' = system/report-generated.
+  source?: 'manual' | 'auto' | null;
 }
 
 interface ChurnedUser {
@@ -127,6 +131,20 @@ interface ChurnedUser {
 type TabType = 'support' | 'ai_drafts' | 'updates' | 'churned';
 type TargetGroup = 'all' | 'trading_journal' | 'war_zone' | 'top_secret';
 
+const VALID_TABS: TabType[] = ['support', 'ai_drafts', 'updates', 'churned'];
+
+/**
+ * Resolve a system_update row's origin. Prefers the `source` column when
+ * present; falls back to the legacy metadata.report_type heuristic when the
+ * column doesn't exist yet — so behavior is unchanged until the migration
+ * that adds `source` is applied.
+ */
+function effectiveUpdateSource(u: SystemUpdate): 'manual' | 'auto' {
+  if (u.source === 'manual' || u.source === 'auto') return u.source;
+  const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
+  return metadata?.report_type ? 'auto' : 'manual';
+}
+
 const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string }[] = [
   { key: 'all', label: 'Everyone', icon: Users, color: 'blue' },
   { key: 'trading_journal', label: 'Trading Journal', icon: Target, color: 'green' },
@@ -134,7 +152,7 @@ const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string
   { key: 'top_secret', label: 'INVESTOR', icon: Crown, color: 'purple' },
 ];
 
-type UpdatesSubTab = 'manual' | 'reports';
+type UpdatesSubTab = 'manual' | 'reports' | 'all';
 
 const REPORT_TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
   ism: { label: 'ISM Manufacturing', icon: BarChart3, color: 'blue' },
@@ -143,8 +161,13 @@ const REPORT_TYPE_CONFIG: Record<string, { label: string; icon: any; color: stri
 };
 
 export default function SupportTickets() {
+  const [searchParams] = useSearchParams();
+
 // ==================== TAB STATE ====================
-  const [activeTab, setActiveTab] = useState<TabType>('support');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const t = searchParams.get('tab');
+    return (VALID_TABS as string[]).includes(t || '') ? (t as TabType) : 'support';
+  });
   const [updatesSubTab, setUpdatesSubTab] = useState<UpdatesSubTab>('manual');
 
   // ==================== SUPPORT STATE ====================
@@ -598,11 +621,11 @@ async function loadUpdates() {
 
       if (error) throw error;
 
-      // Filter: Manual updates = no metadata.report_type
-      const manualUpdates = (data || []).filter(u => {
-        const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
-        return !metadata?.report_type;
-      });
+      // Filter: Manual updates = source 'manual' (or, when the `source`
+      // column doesn't exist yet, no metadata.report_type — legacy heuristic).
+      const manualUpdates = (data || []).filter(
+        (u) => effectiveUpdateSource(u) === 'manual'
+      );
 
       setUpdates(manualUpdates);
 
@@ -628,11 +651,11 @@ async function loadUpdates() {
 
       if (error) throw error;
 
-      // Filter: Report notifications = has metadata.report_type
-      const reports = (data || []).filter(u => {
-        const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
-        return metadata?.report_type;
-      }).map(u => ({
+      // Filter: Report notifications = source 'auto' (or, when the `source`
+      // column doesn't exist yet, has metadata.report_type — legacy heuristic).
+      const reports = (data || []).filter(
+        (u) => effectiveUpdateSource(u) === 'auto'
+      ).map(u => ({
         ...u,
         metadata: typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata
       }));
@@ -704,18 +727,27 @@ async function loadUpdates() {
         if (error) throw error;
         toast.success('Update saved successfully');
       } else {
-        const { error } = await supabase
+        const basePayload = {
+          title: formTitle.trim(),
+          content: formContent.trim(),
+          type: formType,
+          target_group: formTargetGroup,
+          is_pinned: formIsPinned,
+          is_active: true,
+          published_at: new Date().toISOString(),
+          views_count: 0,
+        };
+
+        // Admin-created updates are always 'manual'. The `source` column may
+        // not exist yet (migration applied separately) — if the insert fails
+        // because of it, retry once without the field instead of failing.
+        let { error } = await supabase
           .from('system_updates')
-          .insert({
-            title: formTitle.trim(),
-            content: formContent.trim(),
-            type: formType,
-            target_group: formTargetGroup,
-            is_pinned: formIsPinned,
-            is_active: true,
-            published_at: new Date().toISOString(),
-            views_count: 0,
-          });
+          .insert({ ...basePayload, source: 'manual' });
+
+        if (error && (error.code === '42703' || /column .*source.* does not exist/i.test(error.message))) {
+          ({ error } = await supabase.from('system_updates').insert(basePayload));
+        }
 
         if (error) throw error;
         toast.success('Update published successfully');
@@ -1469,44 +1501,35 @@ toast.success('Update deleted');
 {/* ==================== UPDATES TAB ==================== */}
       {activeTab === 'updates' && (
         <>
-          {/* Sub-Tab Navigation */}
-          <div className="flex items-center gap-2 mb-6">
-            <button
-              onClick={() => setUpdatesSubTab('manual')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                updatesSubTab === 'manual'
-                  ? 'bg-[#D4AF37] text-black'
-                  : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
-              }`}
-            >
-              <Megaphone className="h-4 w-4" />
-              Manual Updates
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                updatesSubTab === 'manual' ? 'bg-black/20' : 'bg-zinc-700'
-              }`}>
-                {updateStats.total}
-              </span>
-            </button>
-            <button
-              onClick={() => setUpdatesSubTab('reports')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                updatesSubTab === 'reports'
-                  ? 'bg-[#D4AF37] text-black'
-                  : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              Report Notifications
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                updatesSubTab === 'reports' ? 'bg-black/20' : 'bg-zinc-700'
-              }`}>
-                {reportStats.total}
-              </span>
-            </button>
+          {/* Source filter — segmented control (Announcements/manual vs Auto reports vs All) */}
+          <div className="inline-flex bg-zinc-900/60 border border-gray-800 p-1 rounded-lg mb-6">
+            {(
+              [
+                { key: 'manual' as const, label: 'Announcements (manual)', icon: Megaphone, count: updateStats.total },
+                { key: 'reports' as const, label: 'Auto reports', icon: FileText, count: reportStats.total },
+                { key: 'all' as const, label: 'All', icon: Bell, count: updateStats.total + reportStats.total },
+              ]
+            ).map((seg) => (
+              <button
+                key={seg.key}
+                onClick={() => setUpdatesSubTab(seg.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-all ${
+                  updatesSubTab === seg.key
+                    ? 'bg-[#D4AF37] text-black shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <seg.icon className="h-3.5 w-3.5" />
+                {seg.label}
+                <span className={`ml-1 text-[10px] font-normal ${updatesSubTab === seg.key ? 'text-black/60' : 'text-gray-600'}`}>
+                  {seg.count}
+                </span>
+              </button>
+            ))}
           </div>
 
-          {/* ==================== MANUAL UPDATES SUB-TAB ==================== */}
-          {updatesSubTab === 'manual' && (
+          {/* ==================== MANUAL UPDATES (ANNOUNCEMENTS) SUB-TAB ==================== */}
+          {(updatesSubTab === 'manual' || updatesSubTab === 'all') && (
             <>
               {/* Stats Bar */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -1741,7 +1764,7 @@ toast.success('Update deleted');
           )}
 
           {/* ==================== REPORT NOTIFICATIONS SUB-TAB ==================== */}
-          {updatesSubTab === 'reports' && (
+          {(updatesSubTab === 'reports' || updatesSubTab === 'all') && (
             <>
               {/* Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
