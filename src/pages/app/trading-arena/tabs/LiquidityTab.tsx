@@ -46,6 +46,7 @@ import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
 import { useLiveDepthColumns } from '../hooks/useLiveDepthColumns';
 import { resolveTradeSource } from '@/components/charting/orderflow/sourceRegistry';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
+import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
 import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
 import {
@@ -54,6 +55,7 @@ import {
   toNt8Symbol,
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
+import { LiquiditySettingsMenu } from '../components/LiquiditySettingsMenu';
 
 interface LiquidityTabProps {
   symbol: string;
@@ -243,6 +245,23 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
     notionalMultiplier: pointValue,
   });
 
+  // Persisted per-contract-root (Task S2 restyle) — mirrors FootprintTab.tsx's
+  // FuturesFootprintBody, which persists footprint settings by root too (a
+  // quarterly front-month rollover shouldn't reset the user's chosen look).
+  const { preferences, update: updateLiquidityPreferences } = useLiquidityPreferences(root);
+
+  // Right-edge depth-profile gutter snapshot — same 5s poll cadence as the
+  // crypto body above; `book` here is the NT8 bridge's own local order book
+  // (useNt8OrderBook), no new network activity.
+  const [restingBookSnapshot, setRestingBookSnapshot] = useState(() => book.getBook());
+  useEffect(() => {
+    const id = setInterval(() => setRestingBookSnapshot(book.getBook()), 5_000);
+    return () => clearInterval(id);
+    // book.getBook is useCallback-stable ([] deps in useNt8OrderBook.ts) —
+    // [] is intentional, not stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [timeTick, setTimeTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTimeTick((t) => t + 1), SLIDE_INTERVAL_MS);
@@ -294,6 +313,8 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
           </span>
         )}
 
+        {isLive && <LiquiditySettingsMenu preferences={preferences} onChange={updateLiquidityPreferences} />}
+
         <span
           className={cn('flex items-center gap-1 text-[10px] font-medium ml-auto', isLive ? 'text-emerald-400' : 'text-[#707070]')}
         >
@@ -321,6 +342,19 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
             depthMatrixSizeFilterPct={5}
             depthMatrixFloorUsd={0}
             depthMatrixCandleIntervalMs={intervalSec * 1000}
+            depthMatrixPalette={preferences.palette}
+            depthMatrixSmoothing={preferences.smoothing}
+            volumeBubbles={{
+              store,
+              visible: preferences.bubbles,
+              thresholdSetting: preferences.bubbleThreshold,
+            }}
+            depthProfile={{
+              bids: restingBookSnapshot.bids,
+              asks: restingBookSnapshot.asks,
+              binSize: depth.binSize,
+              visible: preferences.sideProfile,
+            }}
           />
         ) : (
           <Nt8ConnectPanel variant="depth" />
@@ -349,6 +383,40 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const { floorMode, sizeFilterPct } = preferences;
   const [autoFloorUsd, setAutoFloorUsd] = useState<number>(FLOOR_DEFAULT);
   const floorUsd = floorMode === 'auto' ? autoFloorUsd : floorMode;
+
+  // Executed-aggression trade feed (Task S2 — "Arena WOW" volume bubbles).
+  // 🔴 Deliberately NOT useOrderFlow/BinanceTradeSource here — that would open
+  // a SECOND WebSocket subscribed to the same `<symbol>@aggTrade` stream
+  // useBinanceOrderBook(symbol) above already has open (it subscribes to the
+  // combined `@depth@100ms/@aggTrade` stream and buffers trades internally —
+  // see useBinanceOrderBook.ts's `drainTrades()`). Instead, this store is fed
+  // directly from that SAME connection's trade ring buffer on a 1s drain —
+  // "one shared feed, no extra sockets" per the task spec. No historical
+  // backfill (bubbles only need live/recent prints, not full history), and no
+  // flowStoreCache warm-start either (that cache is for the Footprint tab's
+  // own useOrderFlow instances) — an intentional v1 tradeoff to avoid any new
+  // network activity from this tab.
+  const flowStoreRef = useRef(
+    new FlowBinStore({ intervalSec: intervalSeconds(interval), rowSize: 1 }),
+  );
+  useEffect(() => {
+    flowStoreRef.current.clear();
+  }, [symbol]);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const trades = book.drainTrades();
+      if (trades.length === 0) return;
+      flowStoreRef.current.applyTrades(
+        trades.map((t) => ({ time: t.time, price: t.price, qty: t.qty, buyerAggressor: !t.isBuyerMaker })),
+      );
+    }, 1_000);
+    return () => clearInterval(id);
+    // book.drainTrades is useCallback-stable for the lifetime of this
+    // useBinanceOrderBook(symbol) instance (see that hook's own deps=[] on
+    // drainTrades); this component itself remounts on symbol change (see
+    // `key={symbol}` in LiquidityTab above) — `[]` is correct, not stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Seed the adaptive floor from server-side 72h wall history on mount
   // (component is keyed by symbol, so this naturally reruns per symbol).
@@ -445,6 +513,33 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
     floorUsd,
     isLive: book.status === 'live',
   });
+
+  // Keep flowStoreRef's bin config in sync with the depth matrix's own
+  // adaptive binSize (so bubble price levels line up with the heatmap's
+  // rows) and the current candle interval. FlowBinStore.setConfig() only
+  // re-bins its (small, live-only) raw ring when the config actually
+  // changes — cheap even on every render.
+  useEffect(() => {
+    flowStoreRef.current.setConfig({
+      intervalSec: intervalSeconds(interval),
+      rowSize: depthMatrix.binSize > 0 ? depthMatrix.binSize : 1,
+    });
+  }, [interval, depthMatrix.binSize]);
+
+  // Right-edge depth-profile gutter — a snapshot of the current resting book,
+  // refreshed on the SAME 5s cadence the depth-slice live edge already uses
+  // (SLIDE_INTERVAL_MS's own timeTick effect above already re-renders this
+  // component every 30s for the candle window; the gutter needs a tighter
+  // cadence, so it gets its own lightweight 5s poll of book.getBook() — no
+  // new network/WS activity, `book` already streams live via useBinanceOrderBook).
+  const [restingBookSnapshot, setRestingBookSnapshot] = useState(() => book.getBook());
+  useEffect(() => {
+    const id = setInterval(() => setRestingBookSnapshot(book.getBook()), 5_000);
+    return () => clearInterval(id);
+    // book.getBook is useCallback-stable for this component's lifetime — see
+    // the drainTrades effect's identical note above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Snap the initial visible window to where depth-slice data actually
   // exists. The server serves recent depth windows fine but times out
@@ -564,6 +659,10 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
           })}
         </div>
 
+        <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+        <LiquiditySettingsMenu preferences={preferences} onChange={updateLiquidityPreferences} />
+
         {depthHistoryLoading && (
           <span className="text-[10px] text-[#707070] ml-auto" aria-live="polite">
             Loading depth history…
@@ -600,6 +699,19 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
           depthMatrixSizeFilterPct={sizeFilterPct}
           depthMatrixFloorUsd={floorUsd}
           depthMatrixCandleIntervalMs={intervalMs(interval)}
+          depthMatrixPalette={preferences.palette}
+          depthMatrixSmoothing={preferences.smoothing}
+          volumeBubbles={{
+            store: flowStoreRef.current,
+            visible: preferences.bubbles,
+            thresholdSetting: preferences.bubbleThreshold,
+          }}
+          depthProfile={{
+            bids: restingBookSnapshot.bids,
+            asks: restingBookSnapshot.asks,
+            binSize: depthMatrix.binSize,
+            visible: preferences.sideProfile,
+          }}
         />
       </div>
     </div>

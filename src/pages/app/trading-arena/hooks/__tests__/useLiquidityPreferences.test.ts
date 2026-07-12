@@ -76,6 +76,39 @@ describe('sanitizeLiquidityPreferences', () => {
     expect(result.floorMode).toBe(1_000_000);
     expect(result.sizeFilterPct).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sizeFilterPct);
   });
+
+  it("accepts a valid palette id, falls back to default ('finotaur') otherwise", () => {
+    expect(sanitizeLiquidityPreferences({ palette: 'classic' }).palette).toBe('classic');
+    expect(sanitizeLiquidityPreferences({ palette: 'thermal' }).palette).toBe('thermal');
+    expect(sanitizeLiquidityPreferences({ palette: 'not-a-palette' }).palette).toBe('finotaur');
+    expect(sanitizeLiquidityPreferences({}).palette).toBe('finotaur');
+  });
+
+  it('accepts boolean smoothing/bubbles/sideProfile, falls back to defaults otherwise', () => {
+    expect(sanitizeLiquidityPreferences({ smoothing: false }).smoothing).toBe(false);
+    expect(sanitizeLiquidityPreferences({ smoothing: 'nope' }).smoothing).toBe(true);
+    expect(sanitizeLiquidityPreferences({ bubbles: false }).bubbles).toBe(false);
+    expect(sanitizeLiquidityPreferences({ bubbles: 1 }).bubbles).toBe(true);
+    expect(sanitizeLiquidityPreferences({ sideProfile: false }).sideProfile).toBe(false);
+    expect(sanitizeLiquidityPreferences({ sideProfile: null }).sideProfile).toBe(true);
+  });
+
+  it("accepts bubbleThreshold 'auto' or a non-negative finite number, falls back otherwise", () => {
+    expect(sanitizeLiquidityPreferences({ bubbleThreshold: 'auto' }).bubbleThreshold).toBe('auto');
+    expect(sanitizeLiquidityPreferences({ bubbleThreshold: 250 }).bubbleThreshold).toBe(250);
+    expect(sanitizeLiquidityPreferences({ bubbleThreshold: -1 }).bubbleThreshold).toBe('auto');
+    expect(sanitizeLiquidityPreferences({ bubbleThreshold: NaN }).bubbleThreshold).toBe('auto');
+    expect(sanitizeLiquidityPreferences({ bubbleThreshold: 'nope' }).bubbleThreshold).toBe('auto');
+  });
+
+  it('defaults match DEFAULT_LIQUIDITY_PREFERENCES for every new field when absent', () => {
+    const result = sanitizeLiquidityPreferences({});
+    expect(result.palette).toBe(DEFAULT_LIQUIDITY_PREFERENCES.palette);
+    expect(result.smoothing).toBe(DEFAULT_LIQUIDITY_PREFERENCES.smoothing);
+    expect(result.bubbles).toBe(DEFAULT_LIQUIDITY_PREFERENCES.bubbles);
+    expect(result.bubbleThreshold).toBe(DEFAULT_LIQUIDITY_PREFERENCES.bubbleThreshold);
+    expect(result.sideProfile).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sideProfile);
+  });
 });
 
 describe('readLiquidityPreferencesForSymbol — round-trip + corrupt JSON', () => {

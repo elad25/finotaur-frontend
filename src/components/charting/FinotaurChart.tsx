@@ -34,7 +34,10 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
+import type { DepthPaletteId } from '@/components/charting/depthPalettes';
 import { FootprintLayer } from '@/components/charting/orderflow/FootprintLayer';
+import { VolumeBubblesLayer } from '@/components/charting/orderflow/VolumeBubblesLayer';
+import type { BubbleThresholdSetting } from '@/components/charting/orderflow/volumeBubbles';
 import { VolumeProfileLayer } from '@/components/charting/orderflow/VolumeProfileLayer';
 import { SessionVolumeProfileLayer, type SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
 import type { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
@@ -43,6 +46,7 @@ import type { FootprintDetailLevel } from '@/components/charting/orderflow/footp
 import { computeFootprintBandHeightPx } from '@/components/charting/orderflow/footprintRender';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import { ChartStyleContext, type ChartStyleSettings } from '@/pages/app/trading-arena/components/chartStyleSettings';
+import { DepthProfileGutter } from '@/pages/app/trading-arena/components/DepthProfileGutter';
 import { chartStyleToChartOptions, chartStyleToSeriesOptions } from '@/pages/app/trading-arena/components/chartStyleMapping';
 import {
   createChart,
@@ -660,6 +664,44 @@ export interface FinotaurChartProps {
   /** Current candle interval in ms — used to map column→px width (matrix mode). */
   depthMatrixCandleIntervalMs?: number;
   /**
+   * Color palette for the depth matrix heatmap (matrix mode only) — see
+   * depthPalettes.ts. Default 'classic' (the original navy→cyan→yellow→white
+   * ramp) when omitted — MarketScanner.tsx never passes this, so its render
+   * is unaffected. LiquidityTab.tsx passes 'finotaur' (new default) or
+   * 'thermal' via its settings menu.
+   */
+  depthMatrixPalette?: DepthPaletteId;
+  /**
+   * Enables the depth matrix's vertical band-smoothing + hot-wall bloom
+   * (matrix mode only — see DepthMatrixLayer.tsx). Default false when
+   * omitted (safe no-op for MarketScanner.tsx and every other caller).
+   */
+  depthMatrixSmoothing?: boolean;
+  /**
+   * Optional "executed aggression" volume bubbles overlay (ATAS/Bookmap-
+   * style sized circles at (time, price) for trade prints whose dominant-
+   * side volume clears a threshold — see volumeBubbles.ts). Mounts
+   * VolumeBubblesLayer, fed by `store` — pass the SAME FlowBinStore instance
+   * a footprint/volumeProfile overlay on this chart already uses to avoid a
+   * second aggregation pass over the same trades.
+   * 🔴 Undefined (every existing caller) is a COMPLETE no-op.
+   */
+  volumeBubbles?: {
+    store: FlowBinStore;
+    visible: boolean;
+    thresholdSetting: BubbleThresholdSetting;
+  };
+  /**
+   * Optional right-edge "what's waiting" resting-book gutter (DepthProfileGutter —
+   * see that component's header comment). Undefined = zero mount, zero cost.
+   */
+  depthProfile?: {
+    bids: ReadonlyMap<number, number>;
+    asks: ReadonlyMap<number, number>;
+    binSize: number;
+    visible: boolean;
+  };
+  /**
    * When provided, the candlestick price scale is auto-fitted to this band
    * instead of the default lw-charts auto-scale (which fits all candles).
    * Used by MarketScanner to focus the visible price range on the ±2% resting
@@ -800,6 +842,8 @@ export function FinotaurChart({
   depthMatrixSizeFilterPct = 5,
   depthMatrixFloorUsd = 1_000,
   depthMatrixCandleIntervalMs = 60_000,
+  depthMatrixPalette = 'classic',
+  depthMatrixSmoothing = false,
   liquidityBand = null,
   onManualPriceScale,
   onBarsLoad,
@@ -808,6 +852,8 @@ export function FinotaurChart({
   refreshToken,
   volumeProfile,
   sessionVolumeProfile,
+  volumeBubbles,
+  depthProfile,
   chartStyle,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1018,7 +1064,7 @@ export function FinotaurChart({
         // Also track size for WallHeatLayer (heatmap), DepthMatrixLayer (matrix),
         // FootprintLayer, VolumeProfileLayer, and SessionVolumeProfileLayer
         // (when their respective props are provided).
-        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile) {
+        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile || volumeBubbles) {
           setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
         }
       }
@@ -1027,19 +1073,19 @@ export function FinotaurChart({
 
     // Seed initial size synchronously — ResizeObserver only fires on *changes*,
     // so if bars load before the first resize the layer would get 0×0 forever.
-    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile) {
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile || sessionVolumeProfile || volumeBubbles) {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w > 0 && h > 0) setContainerSize({ w, h });
     }
 
     return () => ro.disconnect();
-    // footprint/volumeProfile/sessionVolumeProfile are object props (new
-    // identity every render from most callers); gating on truthiness only
-    // (via the `!!` cast) avoids re-running this effect (and re-observing the
-    // ResizeObserver) on every parent render.
+    // footprint/volumeProfile/sessionVolumeProfile/volumeBubbles are object
+    // props (new identity every render from most callers); gating on
+    // truthiness only (via the `!!` cast) avoids re-running this effect (and
+    // re-observing the ResizeObserver) on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallRenderMode, !!footprint, !!volumeProfile, !!sessionVolumeProfile]);
+  }, [wallRenderMode, !!footprint, !!volumeProfile, !!sessionVolumeProfile, !!volumeBubbles]);
 
   // ─── Overlay reposition: subscribe to pan/zoom + resize ────
   // Fires setOverlayTick (bumping counter) whenever the visible time range
@@ -1865,6 +1911,8 @@ export function FinotaurChart({
           sizeFilterPct={depthMatrixSizeFilterPct}
           floorUsd={depthMatrixFloorUsd}
           candleIntervalMs={depthMatrixCandleIntervalMs}
+          palette={depthMatrixPalette}
+          smoothing={depthMatrixSmoothing}
         />
       )}
 
@@ -1892,6 +1940,38 @@ export function FinotaurChart({
             setFootprintDetailStage(stage);
             footprint.onStageChange?.(stage);
           }}
+        />
+      )}
+
+      {/* Volume bubbles overlay (ATAS/Bookmap-style executed-aggression
+          markers) — only when the `volumeBubbles` prop is provided.
+          Undefined `volumeBubbles` = zero mount, zero cost. */}
+      {volumeBubbles &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <VolumeBubblesLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          store={volumeBubbles.store}
+          visible={volumeBubbles.visible}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+          thresholdSetting={volumeBubbles.thresholdSetting}
+        />
+      )}
+
+      {/* Right-edge "what's waiting" resting-book gutter — only when the
+          `depthProfile` prop is provided. Undefined = zero mount, zero cost. */}
+      {depthProfile &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <DepthProfileGutter
+          chart={chartRef.current}
+          series={seriesRef.current}
+          bids={depthProfile.bids}
+          asks={depthProfile.asks}
+          binSize={depthProfile.binSize}
+          visible={depthProfile.visible}
         />
       )}
 
