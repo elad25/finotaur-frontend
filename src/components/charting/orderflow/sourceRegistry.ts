@@ -14,16 +14,9 @@
 
 import { BinanceTradeSource } from './BinanceTradeSource';
 import { DatabentoTradeSource } from './DatabentoTradeSource';
+import { getCryptoTickSize } from './cryptoTickSizes';
 import { FUTURES_CONTRACTS, type FuturesRoot } from './futuresContracts';
 import type { TradeSource } from './types';
-
-/**
- * Fallback tick size for crypto — matches FootprintTab.tsx/ChartTab.tsx's own
- * historical constant (FlowBinStore's minimum-tick floor, so suggestRowSize
- * never divides by zero). Crypto has no per-symbol tick table today; every
- * crypto instrument uses this one flat value.
- */
-const CRYPTO_FALLBACK_TICK_SIZE = 0.01;
 
 export interface ResolvedTradeSource {
   source: TradeSource;
@@ -40,10 +33,12 @@ export interface ResolvedTradeSource {
  * `symbol` convention deliberately differs by asset class, matching what
  * each caller already holds locally (avoids a redundant resolution step
  * here):
- *  - 'crypto': the crypto ticker (e.g. 'BTCUSDT'). Not currently used for
- *    tickSize (crypto has one flat fallback — see CRYPTO_FALLBACK_TICK_SIZE)
- *    but accepted for signature symmetry and any future per-symbol crypto
- *    tick table.
+ *  - 'crypto': the crypto ticker (e.g. 'BTCUSDT'). Resolves a per-symbol
+ *    tick size via cryptoTickSizes.ts's hardcoded map (getCryptoTickSize) —
+ *    callers that want the exchange-verified value should also call
+ *    `refineCryptoTickSize(symbol)` (async, cached) and use its result once
+ *    it resolves; this synchronous lookup is only the immediate/default
+ *    value.
  *  - 'futures': the FuturesRoot (e.g. 'NQ'), NOT the front-month contract
  *    code. Front-month resolution (`frontMonthContract()` in
  *    futuresContracts.ts) stays the caller's responsibility — the resolved
@@ -57,7 +52,7 @@ export function resolveTradeSource(
   opts: { isAdmin: boolean },
 ): ResolvedTradeSource | null {
   if (assetClass === 'crypto') {
-    return { source: BinanceTradeSource, tickSize: CRYPTO_FALLBACK_TICK_SIZE };
+    return { source: BinanceTradeSource, tickSize: getCryptoTickSize(symbol) };
   }
 
   if (assetClass === 'futures') {

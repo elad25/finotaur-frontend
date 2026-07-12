@@ -196,6 +196,23 @@ export type FootprintCellMode = 'bidAsk' | 'delta' | 'volume' | 'trades' | 'volu
  */
 export type ImbalancePreset = 'standard' | 'strict' | 'stacked';
 
+/**
+ * Cell rendering layout (PR 2 — Unified Footprint Settings). 'numbers' is
+ * the only layout footprintRender.ts currently draws; 'histogram' is
+ * plumbed here for persistence/UI continuity ahead of PR 3's rendering
+ * dispatch — setting it today has no visual effect.
+ */
+export type FootprintLayout = 'numbers' | 'histogram';
+
+/**
+ * Cell color-coding scheme (PR 2 — Unified Footprint Settings). 'delta' is
+ * the only scheme footprintRender.ts currently draws (red/green by
+ * buy-sell sign, today's only behavior); 'volumeHeat'/'solid' are plumbed
+ * here for persistence/UI continuity ahead of PR 3's rendering dispatch —
+ * setting them today has no visual effect.
+ */
+export type FootprintColorScheme = 'delta' | 'volumeHeat' | 'solid';
+
 export interface FootprintConfig {
   cellMode: FootprintCellMode;
   /** Which opinionated imbalance preset is active — drives the fields below. */
@@ -253,6 +270,38 @@ export interface FootprintConfig {
    * other caller (ChartTab, FuturesChartTab, Backtest).
    */
   forceFullDetail?: boolean;
+  /**
+   * Cell rendering layout — see FootprintLayout's doc comment. Default
+   * 'numbers' (unchanged behavior). Dispatch for 'histogram' lands in PR 3.
+   */
+  layout: FootprintLayout;
+  /**
+   * Cell color scheme — see FootprintColorScheme's doc comment. Default
+   * 'delta' (unchanged behavior — footprintRender.ts's only implementation
+   * today). Dispatch for 'volumeHeat'/'solid' lands in PR 3.
+   */
+  colorScheme: FootprintColorScheme;
+  /**
+   * Render the Value Area band (VAH/VAL) on the volume-profile overlay.
+   * Default OFF. Dispatch lands in PR 3 — plumbed here for persistence
+   * continuity; setting it today has no visual effect.
+   */
+  showValueArea: boolean;
+  /**
+   * Per-row visibility within the 6-row Cluster Statistics strip (only
+   * relevant when `showStats` is true). Default ALL true (matches today's
+   * unconditional 6-row render). Row-level filtering dispatch lands in
+   * PR 3 — footprintRender.ts renders all 6 rows unconditionally today
+   * regardless of this field's values.
+   */
+  statsRows: {
+    volume: boolean;
+    delta: boolean;
+    deltaPct: boolean;
+    maxDelta: boolean;
+    minDelta: boolean;
+    sessionDelta: boolean;
+  };
 }
 
 /** Standard preset: ratio 1.5x (150%), 0.5% dust filter, singles highlighted. */
@@ -275,4 +324,15 @@ export const DEFAULT_FOOTPRINT_CONFIG: FootprintConfig = {
   showPoc: true,
   showStats: true,
   magnifierEnabled: true,
+  layout: 'numbers',
+  colorScheme: 'delta',
+  showValueArea: false,
+  statsRows: {
+    volume: true,
+    delta: true,
+    deltaPct: true,
+    maxDelta: true,
+    minDelta: true,
+    sessionDelta: true,
+  },
 };
