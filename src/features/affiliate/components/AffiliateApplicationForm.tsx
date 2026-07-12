@@ -115,7 +115,14 @@ export default function AffiliateApplicationForm({
   const { data: existingApplication, isLoading: checkingApplication } = useAffiliateApplication();
   const submitApplication = useSubmitAffiliateApplication();
 
-  // Check if coupon code is already taken
+  // Check if coupon code is already taken. Uses the `check_referral_code_
+  // availability` SECURITY DEFINER RPC rather than direct table queries —
+  // `affiliates` and `affiliate_applications` are both RLS-protected, so a
+  // direct `.from(...).select(...)` from the browser silently returns zero
+  // rows for codes owned by other users (not an error), which made every
+  // already-taken code look available. Only a SECURITY DEFINER RPC can see
+  // across all rows to answer this correctly. Also covers `anon` callers —
+  // this form can be filled out by a signed-out visitor.
   const checkCodeAvailability = useCallback(async (code: string) => {
     if (!code || code.length < 2) {
       setCodeStatus('idle');
@@ -123,24 +130,16 @@ export default function AffiliateApplicationForm({
     }
     setCodeStatus('checking');
     try {
-      const { data, error } = await supabase
-        .from('affiliates')
-        .select('id')
-        .or(`affiliate_code.ilike.${code},coupon_code.ilike.${code}`)
-        .limit(1);
+      const { data, error } = await supabase.rpc('check_referral_code_availability', {
+        p_code: code,
+      });
 
-      if (error) throw error;
+      if (error || !data) {
+        setCodeStatus('idle');
+        return;
+      }
 
-      // Also check pending applications
-      const { data: appData } = await supabase
-        .from('affiliate_applications')
-        .select('id')
-        .ilike('requested_code', code)
-        .in('status', ['pending', 'under_review', 'approved'])
-        .limit(1);
-
-      const isTaken = (data && data.length > 0) || (appData && appData.length > 0);
-      setCodeStatus(isTaken ? 'taken' : 'available');
+      setCodeStatus(data.available ? 'available' : 'taken');
     } catch {
       setCodeStatus('idle');
     }
