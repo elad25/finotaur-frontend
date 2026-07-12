@@ -33,14 +33,15 @@ import type { FootprintConfig, FlowCandleView } from './types';
 import type { Bar } from '@/components/charting/types';
 import {
   computeDetailLevel,
+  computeFootprintBandHeightPx,
   computeRowMergeFactor,
   drawCandleFootprint,
   drawTotalsRowAt,
   drawStatsBandAt,
   buildClusterStatsRow,
+  getEnabledStatsRowDefs,
   prepareCandleDraw,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
-  FOOTPRINT_STATS_BAND_HEIGHT,
   type ClusterStatsRow,
   type ClusterStatsRowMaxima,
   type StatsBarColumn,
@@ -170,6 +171,30 @@ export function FootprintLayer({
   // and gates onStageChange to fire only on actual transitions.
   const currentStageRef = useRef<FootprintDetailLevel>('hidden');
 
+  // OHLC-by-time lookup cache (see the draw loop's ohlcByTime build below) —
+  // rebuilt only when barsRef.current's IDENTITY changes (a new bars array
+  // reference — FinotaurChart replaces the whole array on each bar-load, it
+  // never mutates in place), not on every dirty/pan/zoom frame. Iterating
+  // ALL bars every frame scaled with total loaded history even though the
+  // footprint only ever looks up a handful of visible candle times per
+  // frame. ohlcByTimeBarsRef holds the exact `bars` reference the cached Map
+  // was built from, so a plain `!==` identity check is enough to detect
+  // "bars actually changed" without a deep comparison.
+  const ohlcByTimeCacheRef = useRef<Map<number, { open: number; high: number; low: number; close: number }>>(new Map());
+  const ohlcByTimeBarsRef = useRef<Bar[] | undefined>(undefined);
+
+  // F6 (stacked-zone first-revisit kill) — suffix hi/lo range structure over
+  // the FULL loaded `bars` array: for the candle at time T, `suffixLowByTimeRef
+  // .get(T)`/`suffixHighByTimeRef.get(T)` give the combined [low, high] range
+  // touched by ANY candle STRICTLY AFTER T. Built once per bars-identity
+  // change (data-dirty), same `!==` pattern as ohlcByTimeBarsRef above, but
+  // INDEPENDENT of detail stage — stacked zones render at both 'shaded' and
+  // 'full' (see drawCandleFootprint), unlike the OHLC skeleton which only
+  // draws at 'full'.
+  const suffixLowByTimeRef = useRef<Map<number, number>>(new Map());
+  const suffixHighByTimeRef = useRef<Map<number, number>>(new Map());
+  const suffixRangeBarsRef = useRef<Bar[] | undefined>(undefined);
+
   // ── Mark dirty when the store emits new data ─────────────────────────────
   useEffect(() => {
     const unsubscribe = store.onChange(() => {
@@ -183,23 +208,34 @@ export function FootprintLayer({
   }, [store]);
 
   // ── Mark dirty on config change ──────────────────────────────────────────
-  // cellMode/showTotals/showPoc/showStats are read fresh at draw time in
-  // footprintRender.ts (never baked into PreparedCandleDraw), so switching
-  // between them is render-only and does NOT require a cache rebuild — this
-  // is what lets Phase 3's mode-strip UI flip cellMode without any store or
-  // prep-cache cost. Only imbalanceRatio/imbalanceMinVolPct/stackedMin/
-  // imbalanceStackedOnly are baked into the prepared structure (they drive
-  // detectImbalances/detectStackedZones/applyStackedOnlyFilter at prep time)
-  // and require a rebuild when they change.
+  // cellMode/showTotals/showPoc/showStats/layout/colorScheme/statsRows are
+  // read fresh at draw time in footprintRender.ts (never baked into
+  // PreparedCandleDraw), so switching between them is render-only and does
+  // NOT require a cache rebuild — this is what lets Phase 3's mode-strip UI
+  // flip cellMode without any store or prep-cache cost; PR 3's layout/
+  // colorScheme/statsRows toggles are the same shape. Only
+  // imbalanceRatio/imbalanceMinVolPct/stackedMin/imbalanceStackedOnly and
+  // (PR 3) showValueArea are baked into the prepared structure (the former
+  // drive detectImbalances/detectStackedZones/applyStackedOnlyFilter,
+  // showValueArea drives the per-candle VAH/VAL computation) and require a
+  // rebuild when they change.
   useEffect(() => {
     dirtyRef.current = true;
-  }, [config.cellMode, config.showTotals, config.showPoc, config.showStats]);
+  }, [
+    config.cellMode,
+    config.showTotals,
+    config.showPoc,
+    config.showStats,
+    config.layout,
+    config.colorScheme,
+    config.statsRows,
+  ]);
 
   useEffect(() => {
     dirtyRef.current = true;
     preparedCacheRef.current.clear();
     mergeFactorCacheRef.current.clear();
-  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly]);
+  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly, config.showValueArea]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
   useEffect(() => {
@@ -472,7 +508,11 @@ export function FootprintLayer({
         // not a global CVD) — computed ONCE per dirty frame via
         // getCvdSeries(), never per-candle/per-frame-scan. Only needed when
         // the stats strip is actually going to render (showStats + 'full').
-        const needsStats = config.showStats && detail === 'full';
+        // F5: also gated on at least one enabled stats row — if all 6 are
+        // toggled off, the band renders nothing (see computeFootprintBandHeightPx),
+        // so computing CVD for it would be wasted work.
+        const enabledStatsRowCount = getEnabledStatsRowDefs(config.statsRows).length;
+        const needsStats = config.showStats && enabledStatsRowCount > 0 && detail === 'full';
         const cvdByTime = new Map<number, number>();
         if (needsStats && candles.length > 0) {
           const cvdSeries = activeStore.getCvdSeries(candles[0].time, candles[candles.length - 1].time);
@@ -482,14 +522,61 @@ export function FootprintLayer({
         // OHLC lookup for the candle skeleton strip (task: FootprintLayer has
         // no OHLC of its own — FlowBinStore only tracks buy/sell volume per
         // price bin — so this reads from the candlestick series' own bars,
-        // threaded in via the `bars` prop). Built once per dirty frame, same
-        // cost class as cvdByTime above, never per pan/zoom frame.
-        const ohlcByTime = new Map<number, { open: number; high: number; low: number; close: number }>();
-        if (detail === 'full' && barsRef.current) {
-          for (const bar of barsRef.current) {
-            ohlcByTime.set(bar.time as unknown as number, { open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+        // threaded in via the `bars` prop). Memoized against barsRef.current's
+        // IDENTITY (see ohlcByTimeCacheRef's doc comment above) — this used to
+        // rebuild by iterating ALL bars on every dirty frame, which scaled
+        // with total loaded history even though bars only change on an actual
+        // bar-load event, not on every pan/zoom/dirty redraw.
+        const currentBars = detail === 'full' ? barsRef.current : undefined;
+        if (currentBars !== ohlcByTimeBarsRef.current) {
+          const rebuilt = new Map<number, { open: number; high: number; low: number; close: number }>();
+          if (currentBars) {
+            for (const bar of currentBars) {
+              rebuilt.set(bar.time as unknown as number, { open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+            }
           }
+          ohlcByTimeCacheRef.current = rebuilt;
+          ohlcByTimeBarsRef.current = currentBars;
         }
+        const ohlcByTime = ohlcByTimeCacheRef.current;
+
+        // F6: suffix hi/lo range structure, rebuilt once per bars-identity
+        // change (data-dirty) — independent of `detail`, unlike ohlcByTime
+        // above, since stacked zones render at 'shaded' too.
+        const allBars = barsRef.current;
+        if (allBars !== suffixRangeBarsRef.current) {
+          const lowMap = new Map<number, number>();
+          const highMap = new Map<number, number>();
+          if (allBars && allBars.length > 0) {
+            let runningLow = Infinity;
+            let runningHigh = -Infinity;
+            for (let i = allBars.length - 1; i >= 0; i--) {
+              const t = allBars[i].time as unknown as number;
+              // Store the suffix EXCLUDING this bar — i.e. the range touched
+              // by candles strictly AFTER index i — before folding this bar's
+              // own low/high into the running accumulator for the next
+              // (earlier) iteration.
+              lowMap.set(t, runningLow);
+              highMap.set(t, runningHigh);
+              runningLow = Math.min(runningLow, allBars[i].low);
+              runningHigh = Math.max(runningHigh, allBars[i].high);
+            }
+          }
+          suffixLowByTimeRef.current = lowMap;
+          suffixHighByTimeRef.current = highMap;
+          suffixRangeBarsRef.current = allBars;
+        }
+        // Only attach `touchedRangeSince` when suffix data actually exists —
+        // callers/configurations without a `bars` prop must keep falling back
+        // to `latestCandleRange` inside drawStackedZones (see its extras.touchedRangeSince
+        // fallback), not silently get an always-null override.
+        const hasSuffixRangeData = allBars !== undefined && allBars.length > 0;
+        const touchedRangeSince = (formationTimeSec: number): { low: number; high: number } | null => {
+          const low = suffixLowByTimeRef.current.get(formationTimeSec);
+          const high = suffixHighByTimeRef.current.get(formationTimeSec);
+          if (low === undefined || high === undefined || !isFinite(low) || !isFinite(high)) return null;
+          return { low, high };
+        };
 
         // Bar columns collected for a single batched stats-band draw call
         // after the per-candle footprint loop (drawStatsBandAt computes
@@ -545,13 +632,14 @@ export function FootprintLayer({
               latestCandleRange: latestRange,
               clipRightX: paneW,
               ohlc: ohlcByTime.get(candle.time),
+              touchedRangeSince: hasSuffixRangeData ? touchedRangeSince : undefined,
             },
           );
 
           if (detail === 'full') {
             const barLeftX = Math.max(0, x - candleWidthPx / 2);
             const barRightX = Math.min(paneW, x + candleWidthPx / 2);
-            if (config.showStats) {
+            if (config.showStats && enabledStatsRowCount > 0) {
               let cached = statsCacheRef.current.get(candle.time);
               if (!cached) {
                 const built = buildClusterStatsRow(candle, 0);
@@ -588,10 +676,12 @@ export function FootprintLayer({
             rowMaxima.minDelta = Math.max(rowMaxima.minDelta, Math.abs(bar.stats.minDelta));
             rowMaxima.sessionDelta = Math.max(rowMaxima.sessionDelta, Math.abs(bar.stats.sessionDelta));
           }
+          const statsBandHeight = computeFootprintBandHeightPx(config, detail);
           drawStatsBandAt(ctx, statsBars, {
-            top: cssH - FOOTPRINT_STATS_BAND_HEIGHT,
+            top: cssH - statsBandHeight,
             labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
             rowMaxima,
+            statsRows: config.statsRows,
           });
         } else if (totalsBars.length > 0) {
           const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;

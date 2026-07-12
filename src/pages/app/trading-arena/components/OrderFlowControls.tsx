@@ -133,7 +133,7 @@ export function OrderFlowControls({
         className={pillClass(state.enabled, disabled)}
         aria-pressed={state.enabled}
       >
-        Order Flow
+        Footprint
       </button>
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />

@@ -60,6 +60,8 @@ function sleep(ms: number): Promise<void> {
 // ── Implementation ───────────────────────────────────────────────────────────
 
 class BinanceTradeSourceImpl implements TradeSource {
+  readonly venueId = 'binance';
+
   subscribe(
     symbol: string,
     onTrades: (trades: FlowTrade[]) => void,

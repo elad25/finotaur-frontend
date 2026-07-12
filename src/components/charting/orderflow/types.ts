@@ -22,6 +22,16 @@ export type TradeSourceStatus = 'connecting' | 'live' | 'reconnecting' | 'error'
 
 export interface TradeSource {
   /**
+   * Stable venue identifier (e.g. 'binance', 'databento') — used by
+   * flowStoreCache.ts to key its raw-trade LRU cache so two venues can
+   * never collide on the same symbol string. Optional/undefined degrades to
+   * 'unknown' at the call site (see useOrderFlow.ts) — every current
+   * implementation sets it, but this stays optional so a hand-rolled
+   * TradeSource in a test doesn't need to supply one.
+   */
+  venueId?: string;
+
+  /**
    * Live subscription. Returns an unsubscribe fn.
    * Implementations should batch + deliver trades on an interval (not per
    * tick) to keep consumers (React state, aggregation store) cheap.
@@ -53,6 +63,64 @@ export interface TradeSource {
     toMs: number,
     opts?: { maxRequests?: number; signal?: AbortSignal; onChunk?: (trades: FlowTrade[]) => void },
   ): Promise<{ trades: FlowTrade[]; coveredFromMs: number }>;
+}
+
+/** One price level's aggregate resting quantity — [price, qty]. qty === 0 means "level removed" in a delta message. */
+export type DepthLevel = [price: number, qty: number];
+
+/**
+ * Full L2 order-book snapshot — the initial payload a DepthSource delivers
+ * on subscribe(), before any deltas. `bids`/`asks` are NOT required to be
+ * pre-sorted by the source; consumers should sort if presentation order
+ * matters (bids descending, asks ascending, by convention).
+ */
+export interface DepthSnapshot {
+  /** Snapshot time, epoch ms. */
+  ts: number;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+}
+
+/**
+ * One incremental L2 update — same shape as a snapshot, but each level is a
+ * DELTA against the last known state for that side: qty > 0 means "resting
+ * quantity at this price is now qty" (replace, not add), qty === 0 means
+ * "this price level was removed". Levels not mentioned are unchanged.
+ */
+export interface DepthDelta {
+  ts: number;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+}
+
+/**
+ * Normalized live L2 (order-book depth) source contract — future seam for a
+ * NinjaTrader/Rithmic/Databento MBP-10-style feed to plug into the same
+ * DOM/heatmap/liquidity-wall renderers (DepthMatrixLayer, WallHeatLayer)
+ * without those layers knowing which vendor the levels came from. Mirrors
+ * TradeSource's shape deliberately (subscribe + status callback) so a future
+ * consumer can hold both a TradeSource and a DepthSource for the same
+ * instrument with a consistent mental model.
+ *
+ * Types only — NOT implemented yet. No concrete DepthSource exists in this
+ * codebase; this interface exists so the eventual NinjaTrader/Rithmic
+ * integration has a contract to implement against, and so renderer code that
+ * wants to be source-agnostic can type against it ahead of time.
+ */
+export interface DepthSource {
+  /**
+   * Live subscription. Delivers an initial full snapshot via `onSnapshot`,
+   * then incremental deltas via `onDelta` for as long as the subscription is
+   * held. Returns an unsubscribe fn (same convention as TradeSource.subscribe).
+   */
+  subscribe(
+    symbol: string,
+    handlers: {
+      onSnapshot: (snapshot: DepthSnapshot) => void;
+      onDelta: (delta: DepthDelta) => void;
+      onStatus?: (status: TradeSourceStatus) => void;
+    },
+  ): () => void;
 }
 
 // ─── Aggregation (flowBinStore) types ──────────────────────────────────────
@@ -138,6 +206,23 @@ export type FootprintCellMode = 'bidAsk' | 'delta' | 'volume' | 'trades' | 'volu
  */
 export type ImbalancePreset = 'standard' | 'strict' | 'stacked';
 
+/**
+ * Cell rendering layout (PR 2 — Unified Footprint Settings). 'numbers' is
+ * the only layout footprintRender.ts currently draws; 'histogram' is
+ * plumbed here for persistence/UI continuity ahead of PR 3's rendering
+ * dispatch — setting it today has no visual effect.
+ */
+export type FootprintLayout = 'numbers' | 'histogram';
+
+/**
+ * Cell color-coding scheme (PR 2 — Unified Footprint Settings). 'delta' is
+ * the only scheme footprintRender.ts currently draws (red/green by
+ * buy-sell sign, today's only behavior); 'volumeHeat'/'solid' are plumbed
+ * here for persistence/UI continuity ahead of PR 3's rendering dispatch —
+ * setting them today has no visual effect.
+ */
+export type FootprintColorScheme = 'delta' | 'volumeHeat' | 'solid';
+
 export interface FootprintConfig {
   cellMode: FootprintCellMode;
   /** Which opinionated imbalance preset is active — drives the fields below. */
@@ -195,6 +280,38 @@ export interface FootprintConfig {
    * other caller (ChartTab, FuturesChartTab, Backtest).
    */
   forceFullDetail?: boolean;
+  /**
+   * Cell rendering layout — see FootprintLayout's doc comment. Default
+   * 'numbers' (unchanged behavior). Dispatch for 'histogram' lands in PR 3.
+   */
+  layout: FootprintLayout;
+  /**
+   * Cell color scheme — see FootprintColorScheme's doc comment. Default
+   * 'delta' (unchanged behavior — footprintRender.ts's only implementation
+   * today). Dispatch for 'volumeHeat'/'solid' lands in PR 3.
+   */
+  colorScheme: FootprintColorScheme;
+  /**
+   * Render the Value Area band (VAH/VAL) on the volume-profile overlay.
+   * Default OFF. Dispatch lands in PR 3 — plumbed here for persistence
+   * continuity; setting it today has no visual effect.
+   */
+  showValueArea: boolean;
+  /**
+   * Per-row visibility within the 6-row Cluster Statistics strip (only
+   * relevant when `showStats` is true). Default ALL true (matches today's
+   * unconditional 6-row render). Row-level filtering dispatch lands in
+   * PR 3 — footprintRender.ts renders all 6 rows unconditionally today
+   * regardless of this field's values.
+   */
+  statsRows: {
+    volume: boolean;
+    delta: boolean;
+    deltaPct: boolean;
+    maxDelta: boolean;
+    minDelta: boolean;
+    sessionDelta: boolean;
+  };
 }
 
 /** Standard preset: ratio 1.5x (150%), 0.5% dust filter, singles highlighted. */
@@ -217,4 +334,15 @@ export const DEFAULT_FOOTPRINT_CONFIG: FootprintConfig = {
   showPoc: true,
   showStats: true,
   magnifierEnabled: true,
+  layout: 'numbers',
+  colorScheme: 'delta',
+  showValueArea: false,
+  statsRows: {
+    volume: true,
+    delta: true,
+    deltaPct: true,
+    maxDelta: true,
+    minDelta: true,
+    sessionDelta: true,
+  },
 };

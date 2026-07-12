@@ -26,6 +26,16 @@
  * no live trades feed exists for those instruments today.
  *
  * No PaperTradeRail on this tab — it's a pure order-flow reading surface.
+ *
+ * PR 2 — Unified Footprint Settings: this tab now owns its own settings
+ * system (see ../components/footprintSettings.ts +
+ * ../hooks/useFootprintPreferences.ts + ../components/FootprintSettingsMenu.tsx)
+ * instead of the shared OrderFlowControls pill strip (that component still
+ * backs FuturesChartTab.tsx's Chart-tab order-flow overlay unchanged — see
+ * OrderFlowControls.tsx). The old ×2/×4 row-density multiplier is retired
+ * here in favor of an explicit row-size mode (Auto / $ price / ticks); the
+ * auto row-merge logic INSIDE the renderer (footprintRender.ts) is
+ * unaffected.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,26 +49,24 @@ import {
   resolveIntervalPlan,
   type ArenaInterval,
 } from '../utils/intervals';
-import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTradeSource';
-import { DatabentoTradeSource } from '@/components/charting/orderflow/DatabentoTradeSource';
+import { resolveTradeSource } from '@/components/charting/orderflow/sourceRegistry';
+import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTickSizes';
 import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
-import { DEFAULT_FOOTPRINT_CONFIG, type TradeSourceStatus } from '@/components/charting/orderflow/types';
-import { resolveImbalancePreset } from '@/components/charting/orderflow/footprintRender';
+import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTradeSource';
+import type { TradeSourceStatus } from '@/components/charting/orderflow/types';
 import {
   FUTURES_CONTRACTS,
   FUTURES_ROOTS,
   frontMonthContract,
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
-import {
-  OrderFlowControls,
-  DEFAULT_ORDER_FLOW_CONTROLS,
-  type OrderFlowControlsState,
-  type RowDensity,
-} from '../components/OrderFlowControls';
+import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
+import { footprintSettingsToConfig, resolveEffectiveRowSize } from '../components/footprintSettings';
+import { FootprintSettingsMenu, type FootprintSettingsMenuProps } from '../components/FootprintSettingsMenu';
 import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
+import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { cn } from '@/lib/utils';
 
 interface FootprintTabProps {
@@ -69,17 +77,9 @@ interface FootprintTabProps {
   isAdmin: boolean;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
+  /** Wired to the Arena's symbol setter — powers the stocks/forex empty state's quick-switch chips. */
+  onSelectSymbol?: (symbol: string) => void;
 }
-
-function densityMultiplier(density: RowDensity): number {
-  if (density === 'x2') return 2;
-  if (density === 'x4') return 4;
-  return 1;
-}
-
-// Fallback tick size for crypto when no bars are loaded yet — matches
-// FlowBinStore's own minimum-tick floor so suggestRowSize never divides by zero.
-const FALLBACK_TICK_SIZE = 0.01;
 
 // Initial visible bar count — wide enough that candles clear the footprint's
 // own 'full'-detail candle-width threshold (50px, see footprintTheme.ts)
@@ -115,20 +115,20 @@ function statusLabel(status: TradeSourceStatus): string {
   }
 }
 
+function quickPillClass(active: boolean): string {
+  return cn(
+    'h-7 min-w-[32px] rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
+    active
+      ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+      : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+  );
+}
+
 // One module-level singleton per file — BinanceSource is stateless (same
 // pattern ChartTab.tsx and LiquidityTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
 
-export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators }: FootprintTabProps) {
-  // Footprint is the entire point of this tab — the master "Order Flow"
-  // on/off toggle from OrderFlowControls is locked ON by always forcing
-  // `enabled: true` back in on every change, rather than modifying the
-  // shared OrderFlowControls component just for this one caller.
-  const [controls, setControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
-  const handleControlsChange = useCallback((next: OrderFlowControlsState) => {
-    setControls({ ...next, enabled: true });
-  }, []);
-
+export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, onSelectSymbol }: FootprintTabProps) {
   const [futuresRoot, setFuturesRoot] = useState<FuturesRoot>('NQ');
 
   const isCrypto = assetClass === 'crypto';
@@ -139,8 +139,6 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
       <CryptoFootprintBody
         symbol={symbol}
         interval={interval}
-        controls={controls}
-        onControlsChange={handleControlsChange}
         indicators={indicators}
       />
     );
@@ -150,20 +148,85 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
     return (
       <FuturesFootprintBody
         interval={interval}
-        controls={controls}
-        onControlsChange={handleControlsChange}
         root={futuresRoot}
         onRootChange={setFuturesRoot}
         indicators={indicators}
+        isAdmin={isAdmin}
       />
     );
   }
 
+  return <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />;
+}
+
+// ─── Shared "Settings ▾ + quick toggles" strip ──────────────────────────────
+
+interface FootprintToolbarStripProps {
+  settingsMenuProps: FootprintSettingsMenuProps;
+  showVolumeProfile: boolean;
+  showCvd: boolean;
+  showDelta: boolean;
+  onToggleVolumeProfile: () => void;
+  onToggleCvd: () => void;
+  onToggleDelta: () => void;
+  statusNote?: string;
+  historyLimitedNote?: string;
+}
+
+function FootprintToolbarStrip({
+  settingsMenuProps,
+  showVolumeProfile,
+  showCvd,
+  showDelta,
+  onToggleVolumeProfile,
+  onToggleCvd,
+  onToggleDelta,
+  statusNote,
+  historyLimitedNote,
+}: FootprintToolbarStripProps) {
   return (
-    <div className="flex h-full w-full items-center justify-center px-6">
-      <p className="text-[13px] text-zinc-600 max-w-sm text-center">
-        Footprint requires a live trades feed — available for crypto and futures.
-      </p>
+    <div
+      className="flex items-center gap-2 flex-wrap px-3 py-1.5 border-b"
+      style={{ borderColor: 'rgba(201,166,70,0.10)' }}
+      title={historyLimitedNote}
+    >
+      <FootprintSettingsMenu {...settingsMenuProps} />
+
+      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+      <div className="flex items-center gap-1" role="group" aria-label="Volume profile and sub-pane quick toggles">
+        <button
+          type="button"
+          onClick={onToggleVolumeProfile}
+          aria-pressed={showVolumeProfile}
+          className={quickPillClass(showVolumeProfile)}
+          title="Volume Profile — visible-range volume-by-price with POC/Value Area"
+        >
+          VP
+        </button>
+        <button
+          type="button"
+          onClick={onToggleCvd}
+          aria-pressed={showCvd}
+          className={quickPillClass(showCvd)}
+        >
+          CVD
+        </button>
+        <button
+          type="button"
+          onClick={onToggleDelta}
+          aria-pressed={showDelta}
+          className={quickPillClass(showDelta)}
+        >
+          Delta
+        </button>
+      </div>
+
+      {statusNote && (
+        <span className="text-[10px] text-[#707070] ml-1" aria-live="polite">
+          {statusNote}
+        </span>
+      )}
     </div>
   );
 }
@@ -173,8 +236,6 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
 interface CryptoFootprintBodyProps {
   symbol: string;
   interval: ArenaInterval;
-  controls: OrderFlowControlsState;
-  onControlsChange: (next: OrderFlowControlsState) => void;
   indicators: Indicator[];
 }
 
@@ -183,7 +244,27 @@ interface CryptoFootprintBodyProps {
 // those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
 const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
-function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, indicators }: CryptoFootprintBodyProps) {
+function CryptoFootprintBody({ symbol, interval, indicators }: CryptoFootprintBodyProps) {
+  // resolveTradeSource('crypto', ...) never returns null (see its doc
+  // comment) — the isAdmin opt is only consulted on the 'futures' branch.
+  // tickSize here is the synchronous hardcoded-map value (cryptoTickSizes.ts);
+  // refined below against Binance's live exchangeInfo.
+  const { source: tradeSource, tickSize: staticTickSize } = resolveTradeSource('crypto', symbol, { isAdmin: false })!;
+
+  const [tickSize, setTickSize] = useState<number>(staticTickSize);
+  useEffect(() => {
+    setTickSize(staticTickSize); // reset to the sync value immediately on symbol change
+    let cancelled = false;
+    refineCryptoTickSize(symbol).then((refined) => {
+      if (!cancelled) setTickSize(refined);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, staticTickSize]);
+
+  const { settings, update: updateSettings } = useFootprintPreferences(symbol);
+
   const { from, to } = useMemo(nowWindowCrypto, [symbol, interval]);
 
   // Backfill-coverage snap — mirrors LiquidityTab.tsx's depthSnapFromSec /
@@ -232,30 +313,56 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
 
   // Row size: auto-suggested from the loaded window's average PER-BAR
   // high/low range — same approach as ChartTab.tsx (see its header comment
-  // for why avgBarRange, not the window-spanning high/low, feeds suggestRowSize).
-  const [suggestedRowSize, setSuggestedRowSize] = useState<number>(FALLBACK_TICK_SIZE);
+  // for why avgBarRange, not the window-spanning high/low, feeds
+  // suggestRowSize). One-shot per (symbol, interval) via hasSuggestedRef —
+  // mirrors FuturesFootprintBody's guard below (and FuturesChartTab.tsx)
+  // exactly: without it, EVERY bars load (including ones that don't change
+  // the effective range) re-suggests and re-bins the store, churning it on
+  // every load instead of settling once per dataset. Only feeds the
+  // rendered rowSize while settings.rowSizeMode === 'auto' — see
+  // resolveEffectiveRowSize's doc comment: a manual price/ticks row size
+  // must never be overridden by a fresh auto-suggestion.
+  const [suggestedRowSize, setSuggestedRowSize] = useState<number>(tickSize);
+  const hasSuggestedRef = useRef(false);
+  useEffect(() => {
+    setSuggestedRowSize(tickSize);
+    hasSuggestedRef.current = false;
+  }, [symbol, interval, tickSize]);
+
   const handleBarsLoad = useCallback(
     (range: { high: number; low: number; avgBarRange: number } | null) => {
       if (!range) return;
+      if (hasSuggestedRef.current) return;
       const next = FlowBinStore.suggestRowSize(
         [{ high: range.avgBarRange, low: 0 }],
-        FALLBACK_TICK_SIZE,
+        tickSize,
       );
-      setSuggestedRowSize(next);
+      hasSuggestedRef.current = true;
+      setSuggestedRowSize((prev) => (next === prev ? prev : next));
     },
-    [],
+    [tickSize],
   );
 
-  const rowSize = Math.max(suggestedRowSize, FALLBACK_TICK_SIZE) * densityMultiplier(controls.rowDensity);
+  const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
   const intervalSec = intervalToSeconds(interval);
 
   const { store, status, backfillCoveredFromSec, backfillInFlight } = useOrderFlow({
     symbol,
     intervalSec,
     rowSize,
-    source: BinanceTradeSource,
+    source: tradeSource,
     backfillBars: 40,
   });
+
+  // Row-size clamp signal — cheapest correct hook point: useOrderFlow's own
+  // effect (declared earlier in this component, via the `useOrderFlow` call
+  // above) synchronously calls store.setConfig({ rowSize, ... }) whenever
+  // `rowSize` changes; effects within one component commit in hook-call
+  // order, so this effect always observes the POST-setConfig clamp state.
+  const [rowSizeClamped, setRowSizeClamped] = useState(false);
+  useEffect(() => {
+    setRowSizeClamped(store.wasRowSizeClamped());
+  }, [store, rowSize]);
 
   // Snap the visible window to the backfill's actual coverage once it's
   // known — see the header comment above `backfillSnapFromSec`. Fires at
@@ -292,17 +399,20 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
     }
   }
 
-  const showSubPanes = klineDeltaInterval !== null && (controls.showCvd || controls.showDelta);
+  const showSubPanes = klineDeltaInterval !== null && (settings.showCvd || settings.showDelta);
 
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
-      <OrderFlowControls
-        state={controls}
-        onChange={onControlsChange}
-        disabled={false}
+      <FootprintToolbarStrip
+        settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+        showVolumeProfile={settings.showVolumeProfile}
+        showCvd={settings.showCvd}
+        showDelta={settings.showDelta}
+        onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
+        onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
+        onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
         statusNote={statusNote}
         historyLimitedNote={historyLimitedNote}
-        hideHeatmapToggle
       />
 
       <div className="relative flex-1 min-h-0">
@@ -321,26 +431,21 @@ function CryptoFootprintBody({ symbol, interval, controls, onControlsChange, ind
           footprint={{
             store,
             config: {
-              ...DEFAULT_FOOTPRINT_CONFIG,
-              cellMode: controls.cellMode,
-              imbalancePreset: controls.imbalancePreset,
-              ...resolveImbalancePreset(controls.imbalancePreset),
-              showStats: controls.showStats,
-              magnifierEnabled: controls.magnifierEnabled,
+              ...footprintSettingsToConfig(settings),
               forceFullDetail: true,
             },
             visible: true,
           }}
-          volumeProfile={{ store, visible: controls.showVolumeProfile }}
+          volumeProfile={{ store, visible: settings.showVolumeProfile }}
         />
       </div>
 
       {showSubPanes && klineDeltaInterval && (
         <div className="flex-shrink-0 flex flex-col">
-          {controls.showCvd && (
-            <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!controls.showDelta} />
+          {settings.showCvd && (
+            <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!settings.showDelta} />
           )}
-          {controls.showDelta && (
+          {settings.showDelta && (
             <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
           )}
         </div>
@@ -359,16 +464,34 @@ const DATABENTO_INTERVAL_PLACEHOLDER: Interval = '1m';
 
 interface FuturesFootprintBodyProps {
   interval: ArenaInterval;
-  controls: OrderFlowControlsState;
-  onControlsChange: (next: OrderFlowControlsState) => void;
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
   indicators: Indicator[];
+  /** Gates the Databento futures source — this body only ever mounts when true (see FootprintTab's isFutures check), but resolveTradeSource still requires it explicitly. */
+  isAdmin: boolean;
 }
 
-function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRootChange, indicators }: FuturesFootprintBodyProps) {
+function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin }: FuturesFootprintBodyProps) {
+  // Server-side cache warm-up (H5, admin-only — this body only ever mounts
+  // when isFutures = assetClass==='futures' && isAdmin, per FootprintTab's
+  // own gate above). Fire-and-forget: pre-populates the server's durable
+  // orderflow trade-window repo for this root so the tab's own backfill is
+  // more likely to hit a warm cache instead of a cold Databento call.
+  useEffect(() => {
+    warmOrderflowCache(root);
+  }, [root]);
+
   const contractSymbol = useMemo(() => frontMonthContract(root), [root]);
-  const spec = FUTURES_CONTRACTS[root];
+  // resolveTradeSource('futures', root, ...) only returns null when !isAdmin
+  // or `root` isn't a known FuturesRoot — neither can happen here (this body
+  // only mounts when isFutures = assetClass==='futures' && isAdmin, and
+  // `root` is always a FUTURES_ROOTS member from FootprintTab's own state).
+  const { source: tradeSource, tickSize } = resolveTradeSource('futures', root, { isAdmin })!;
+
+  // Persistence key is the CONTRACT ROOT ('NQ'), not the rotating front-month
+  // contract code — settings (and any future per-root rowSize override)
+  // survive a quarterly rollover instead of resetting every 3 months.
+  const { settings, update: updateSettings } = useFootprintPreferences(root);
 
   const { from, to } = useMemo(nowWindowFutures, [contractSymbol]);
   const focusRange = useMemo(
@@ -379,12 +502,13 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
   // Row size: same auto-suggest + one-shot-per-root guard as FuturesChartTab.tsx
   // (see that file's header comment for why the guard exists — prevents a
   // render loop between bars loading, row-size suggestion, and store re-bin).
-  const [suggestedRowSize, setSuggestedRowSize] = useState<number>(spec.tickSize);
+  // Only feeds the rendered rowSize while settings.rowSizeMode === 'auto'.
+  const [suggestedRowSize, setSuggestedRowSize] = useState<number>(tickSize);
   const hasSuggestedRef = useRef(false);
   useEffect(() => {
-    setSuggestedRowSize(spec.tickSize);
+    setSuggestedRowSize(tickSize);
     hasSuggestedRef.current = false;
-  }, [spec.tickSize]);
+  }, [tickSize]);
 
   const handleBarsLoad = useCallback(
     (range: { high: number; low: number; avgBarRange: number } | null) => {
@@ -392,25 +516,30 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
       if (hasSuggestedRef.current) return;
       const next = FlowBinStore.suggestRowSize(
         [{ high: range.avgBarRange, low: 0 }],
-        spec.tickSize,
+        tickSize,
       );
       hasSuggestedRef.current = true;
       setSuggestedRowSize((prev) => (next === prev ? prev : next));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [spec.tickSize],
+    [tickSize],
   );
 
-  const rowSize = Math.max(suggestedRowSize, spec.tickSize) * densityMultiplier(controls.rowDensity);
+  const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
   const intervalSec = intervalToSeconds(interval);
 
   const { store, status, backfillCoveredFromSec } = useOrderFlow({
     symbol: contractSymbol,
     intervalSec,
     rowSize,
-    source: DatabentoTradeSource,
+    source: tradeSource,
     backfillBars: 40,
   });
+
+  // Row-size clamp signal — same hook-ordering rationale as CryptoFootprintBody above.
+  const [rowSizeClamped, setRowSizeClamped] = useState(false);
+  useEffect(() => {
+    setRowSizeClamped(store.wasRowSizeClamped());
+  }, [store, rowSize]);
 
   // Bars source reads raw trades straight off the SAME store the footprint
   // uses — mirrors FuturesChartTab.tsx (see that file's DatabentoBarsSource.ts
@@ -532,13 +661,16 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
         </span>
       </div>
 
-      <OrderFlowControls
-        state={controls}
-        onChange={onControlsChange}
-        disabled={false}
+      <FootprintToolbarStrip
+        settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+        showVolumeProfile={settings.showVolumeProfile}
+        showCvd={settings.showCvd}
+        showDelta={settings.showDelta}
+        onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
+        onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
+        onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
         statusNote={statusNote}
         historyLimitedNote={historyLimitedNote}
-        hideHeatmapToggle
       />
 
       <div className="relative flex-1 min-h-0">
@@ -565,12 +697,7 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
             footprint={{
               store,
               config: {
-                ...DEFAULT_FOOTPRINT_CONFIG,
-                cellMode: controls.cellMode,
-                imbalancePreset: controls.imbalancePreset,
-                ...resolveImbalancePreset(controls.imbalancePreset),
-                showStats: controls.showStats,
-                magnifierEnabled: controls.magnifierEnabled,
+                ...footprintSettingsToConfig(settings),
                 forceFullDetail: true,
               },
               visible: true,
@@ -580,7 +707,10 @@ function FuturesFootprintBody({ interval, controls, onControlsChange, root, onRo
       </div>
 
       {/* CVD/Delta sub-panes: SKIPPED for futures, same as FuturesChartTab.tsx —
-          useKlineDelta is Binance-klines-only; TODO(futures-v2): Databento-native. */}
+          useKlineDelta is Binance-klines-only; TODO(futures-v2): Databento-native.
+          The CVD/Delta quick pills above remain visible for parity with the
+          crypto body (same as the pre-PR-2 OrderFlowControls strip, which
+          rendered the same toggles here even though they were inert). */}
     </div>
   );
 }

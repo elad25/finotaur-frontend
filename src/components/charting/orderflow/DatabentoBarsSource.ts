@@ -42,6 +42,20 @@ const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
 };
 
 export class DatabentoBarsSource implements ChartDataSource {
+  // Memoized derivation key + result — getBars() is invoked on every
+  // barsRefreshToken bump (FuturesChartTab throttles that to ≥2s, but each
+  // bump still triggers a fresh call), and until this cache, every call did
+  // store.getRawTrades() (a full drainRawInOrder() copy of up to 250k raw
+  // trades) + a full re-bin via tradesToBars() even when NOTHING changed
+  // since the previous call. Keyed on the four inputs that actually affect
+  // the result: the requested window, the resolved interval (intervalSec,
+  // already folding in intervalSecOverride), and the store's
+  // getTradesIngested() counter (bumped only by genuinely NEW trades, never
+  // by setConfig()'s internal re-bin replay — see flowBinStore.ts's field
+  // doc comment — so this key is stable across replay-only store churn).
+  private lastKey: string | null = null;
+  private lastBars: Bar[] = [];
+
   constructor(
     private readonly store: FlowBinStore,
     /**
@@ -64,30 +78,41 @@ export class DatabentoBarsSource implements ChartDataSource {
     to: UTCTimestamp,
   ): Promise<Bar[]> {
     const intervalSec = this.intervalSecOverride ?? (INTERVAL_SECONDS[interval] ?? 60);
-    const trades = this.store.getRawTrades();
-
     const fromMs = Number(from) * 1000;
     const toMs = Number(to) * 1000;
-    const windowed = trades.filter((t) => t.time >= fromMs && t.time <= toMs);
 
-    if (windowed.length > 0 || trades.length === 0) {
-      return tradesToBars(windowed, intervalSec);
+    const key = `${fromMs}|${toMs}|${intervalSec}|${this.store.getTradesIngested()}`;
+    if (key === this.lastKey) {
+      return this.lastBars;
     }
 
-    // Anchored-window fallback (deliberate, dev/trial surface only): the caller
-    // (FuturesChartTab) anchors [from, to] to wall-clock "now", but on a closed
-    // market (weekend/holiday) the only trades available are from the last
-    // session, which can be hours or days older than `from`. Rather than show
-    // an empty chart while the store actually has data, fall back to the most
-    // recent bars covering the SAME window width, taken from wherever the
-    // store's data actually lives. This is "show the last available session"
-    // behavior — acceptable here because this tab is explicitly labeled
-    // "Delayed data — development preview" and is never customer-facing.
-    const windowSec = Math.max(toMs - fromMs, intervalSec * 1000) / 1000;
-    const barsNeeded = Math.max(Math.ceil(windowSec / intervalSec), 1);
-    const newestTradeTime = trades[trades.length - 1].time;
-    const fallbackFromMs = newestTradeTime - barsNeeded * intervalSec * 1000;
-    const fallback = trades.filter((t) => t.time >= fallbackFromMs && t.time <= newestTradeTime);
-    return tradesToBars(fallback, intervalSec);
+    const trades = this.store.getRawTrades();
+
+    const windowed = trades.filter((t) => t.time >= fromMs && t.time <= toMs);
+
+    let bars: Bar[];
+    if (windowed.length > 0 || trades.length === 0) {
+      bars = tradesToBars(windowed, intervalSec);
+    } else {
+      // Anchored-window fallback (deliberate, dev/trial surface only): the caller
+      // (FuturesChartTab) anchors [from, to] to wall-clock "now", but on a closed
+      // market (weekend/holiday) the only trades available are from the last
+      // session, which can be hours or days older than `from`. Rather than show
+      // an empty chart while the store actually has data, fall back to the most
+      // recent bars covering the SAME window width, taken from wherever the
+      // store's data actually lives. This is "show the last available session"
+      // behavior — acceptable here because this tab is explicitly labeled
+      // "Delayed data — development preview" and is never customer-facing.
+      const windowSec = Math.max(toMs - fromMs, intervalSec * 1000) / 1000;
+      const barsNeeded = Math.max(Math.ceil(windowSec / intervalSec), 1);
+      const newestTradeTime = trades[trades.length - 1].time;
+      const fallbackFromMs = newestTradeTime - barsNeeded * intervalSec * 1000;
+      const fallback = trades.filter((t) => t.time >= fallbackFromMs && t.time <= newestTradeTime);
+      bars = tradesToBars(fallback, intervalSec);
+    }
+
+    this.lastKey = key;
+    this.lastBars = bars;
+    return bars;
   }
 }

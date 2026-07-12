@@ -46,6 +46,7 @@ import { ArenaToolbar } from './components/ArenaToolbar';
 import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { AccountSelector } from './components/AccountSelector';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
+import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { INDICATOR_PERIODS, type Indicator } from '@/components/charting/types';
 
@@ -110,6 +111,12 @@ export default function TradingArena() {
     if (indicatorSettings.atr) list.push({ type: 'ATR', period: INDICATOR_PERIODS.atr });
     return list;
   }, [indicatorSettings, interval]);
+
+  // Order-flow raw-trade cache warm-up (PR 3, H4) — mounts a fire-and-forget
+  // phase-1-sized backfill into flowStoreCache regardless of which tab is
+  // active, so opening the Order Flow tab later paints instantly. Crypto
+  // only — see the hook's own header comment.
+  useArenaOrderflowPrefetch(symbol, assetClass);
 
   const handleSymbolSelect = useCallback((picked: string) => {
     const detected = detectAssetClass(picked);
@@ -239,6 +246,7 @@ export default function TradingArena() {
             assetClass={assetClass}
             isAdmin={isAdmin}
             indicators={indicators}
+            onSelectSymbol={handleSymbolSelect}
           />
         )}
         {activeTab === 'liquidity' && (
@@ -246,6 +254,7 @@ export default function TradingArena() {
             symbol={symbol}
             interval={interval}
             assetClass={assetClass}
+            onSelectSymbol={handleSymbolSelect}
           />
         )}
       </main>
