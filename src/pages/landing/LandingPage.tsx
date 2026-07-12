@@ -127,12 +127,12 @@ const LandingPage = () => {
       <Navbar />
       <Hero />
       <SocialProof />
+      <Testimonials />
       <TraderSection />
       <FinoSection />
       <PartnershipRow />
       <InvestorSection />
       <FinotaurPlanSection />
-      <Testimonials />
       <Pricing />
       <RiskReversal />
       <FAQ />
