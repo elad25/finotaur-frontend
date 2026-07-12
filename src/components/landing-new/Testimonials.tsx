@@ -244,8 +244,31 @@ const Testimonials = () => {
 
   return (
     <SectionShell id="testimonials" atmosphere="subtle" beam={false}>
+      {/* ========== GOLD ATMOSPHERE — warm glow behind the member quotes ========== */}
+      <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
+        {/* Top-anchored ambient gold wash */}
+        <div
+          className="absolute inset-x-0 top-0 h-2/3"
+          style={{
+            background:
+              'radial-gradient(ellipse 60% 100% at 50% 0%, rgba(201,166,70,0.14) 0%, rgba(201,166,70,0.06) 35%, transparent 70%)',
+            filter: 'blur(30px)',
+          }}
+        />
+        {/* Soft gold pool behind the card row */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-1/2"
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 90% at 50% 100%, rgba(230,195,100,0.10) 0%, rgba(201,166,70,0.04) 40%, transparent 75%)',
+            mixBlendMode: 'screen',
+            filter: 'blur(40px)',
+          }}
+        />
+      </div>
+
       {/* ========== HEADER ========== */}
-      <div className="text-center mb-14">
+      <div className="relative z-10 text-center mb-14">
         <SectionEyebrow>From Our Members</SectionEyebrow>
         <SectionTitle gradient="split">
           What Our Members Say
