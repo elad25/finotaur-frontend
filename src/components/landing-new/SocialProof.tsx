@@ -148,27 +148,27 @@ function StatCell({ stat, index, active }: StatCellProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
       transition={{ duration: 0.5, delay: index * 0.12, ease: "easeOut" }}
-      className="flex flex-col items-center gap-2 px-6 py-4 md:py-0 flex-1 min-w-0"
+      className="flex flex-col items-center gap-3 px-6 py-4 md:py-0 flex-1 min-w-0"
     >
-      {/* Tiny gold icon */}
+      {/* Tiny gold icon — subtle, doesn't compete with the number */}
       <Icon
-        className="w-4 h-4 text-gold-eyebrow"
+        className="w-3.5 h-3.5 text-gold-eyebrow opacity-60"
         aria-hidden="true"
         strokeWidth={1.5}
       />
 
-      {/* Big animated number — lit-from-above gold gradient */}
+      {/* Hero-sized animated number — lit-from-above gold gradient, monospace */}
       <span
         className={cn(
-          "font-wordmark font-medium tabular-nums tracking-[-0.02em]",
-          "text-5xl md:text-6xl lg:text-7xl",
+          "font-mono font-medium tabular-nums tracking-[-0.02em]",
+          "text-5xl lg:text-6xl",
           "bg-gradient-gold-vertical bg-clip-text text-transparent",
           "leading-none",
         )}
         aria-label={`${display}${stat.suffix}`}
       >
         {display}
-        <span className="text-3xl md:text-4xl lg:text-5xl">{stat.suffix}</span>
+        <span className="text-3xl lg:text-4xl">{stat.suffix}</span>
       </span>
 
       {/* Micro hairline under number */}
@@ -179,7 +179,7 @@ function StatCell({ stat, index, active }: StatCellProps) {
 
       {/* Uppercase label */}
       <span
-        className="font-sans text-[10px] tracking-[0.32em] uppercase text-ink-tertiary"
+        className="font-sans text-[11px] tracking-[0.2em] uppercase text-ink-secondary"
       >
         {stat.label}
       </span>
@@ -200,6 +200,42 @@ function AnimatedHairline({ active }: { active: boolean }) {
       style={{ transformOrigin: "center" }}
       aria-hidden="true"
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// IntegrationsStrip — static "SYNCS WITH" trust band, renders regardless of
+// the stats fetch outcome (fetch failure / zeros must not hide this).
+// ---------------------------------------------------------------------------
+function IntegrationsStrip() {
+  return (
+    <div className="py-6 md:py-8">
+      <p className="text-center text-xs tracking-[0.3em] text-gold-primary/80 uppercase mb-6">
+        Syncs With
+      </p>
+
+      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 md:gap-x-14">
+        <img
+          src="/brokers/ninjatrader-official.svg"
+          alt="NinjaTrader"
+          className="h-6 w-auto opacity-60 hover:opacity-100 transition-opacity"
+        />
+        <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
+          Tradovate
+        </span>
+        <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
+          Interactive Brokers
+        </span>
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-lg font-semibold tracking-tight text-white/60 hover:text-white transition-colors">
+            Apex
+          </span>
+          <span className="text-[9px] tracking-[0.2em] uppercase text-white/40">
+            Trader Funding
+          </span>
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -241,8 +277,7 @@ const SocialProof = () => {
     }
   }, [stats]);
 
-  // Hide the entire band until we have data, and hide if no cards qualify
-  if (stats === null || stats.length === 0) return null;
+  const hasStats = stats !== null && stats.length > 0;
 
   return (
     <SectionShell
@@ -265,37 +300,44 @@ const SocialProof = () => {
         {/* TOP hairline rule */}
         <AnimatedHairline active={active} />
 
-        {/* Eyebrow */}
-        <div className="py-4 md:py-6">
-          <SectionEyebrow className="mb-0">
-            Trusted by the Community
-          </SectionEyebrow>
-        </div>
-
-        {/* ── STAT ROW ── */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center">
-          {stats.map((stat, index) => (
-            <div key={stat.label} className="contents">
-              {/* Horizontal separator between cells — mobile only */}
-              {index > 0 && (
-                <div
-                  className="md:hidden w-full h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent opacity-30"
-                  aria-hidden="true"
-                />
-              )}
-
-              <StatCell stat={stat} index={index} active={active} />
-
-              {/* Vertical separator between cells — desktop only */}
-              {index < stats.length - 1 && (
-                <div
-                  className="hidden md:block w-px self-stretch bg-gradient-to-b from-transparent via-gold-eyebrow-hairline to-transparent opacity-50"
-                  aria-hidden="true"
-                />
-              )}
+        {/* The stat cards depend on the fetch resolving with qualifying
+            data; the SYNCS WITH strip below is static and always renders. */}
+        {hasStats && (
+          <>
+            {/* Eyebrow */}
+            <div className="py-4 md:py-6">
+              <SectionEyebrow className="mb-0">
+                Trusted by the Community
+              </SectionEyebrow>
             </div>
-          ))}
-        </div>
+
+            {/* ── STAT ROW — 2x2 grid on mobile, single row on desktop ── */}
+            <div className="grid grid-cols-2 gap-y-8 gap-x-6 md:flex md:flex-row md:gap-ds-7 items-stretch md:items-center justify-center">
+              {stats!.map((stat, index) => (
+                <div key={stat.label} className="contents">
+                  <StatCell stat={stat} index={index} active={active} />
+
+                  {/* Vertical separator between cells — desktop only */}
+                  {index < stats!.length - 1 && (
+                    <div
+                      className="hidden md:block w-px self-stretch bg-gradient-to-b from-transparent via-gold-eyebrow-hairline to-transparent opacity-50"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Divider between stats and the integrations strip */}
+        <div
+          className="h-px bg-gradient-to-r from-transparent via-gold-primary/20 to-transparent"
+          aria-hidden="true"
+        />
+
+        {/* ── SYNCS WITH ── static trust band, renders even if stats fetch fails */}
+        <IntegrationsStrip />
 
         {/* BOTTOM hairline rule */}
         <AnimatedHairline active={active} />
