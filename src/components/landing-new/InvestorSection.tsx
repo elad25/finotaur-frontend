@@ -1,98 +1,41 @@
 // src/components/landing-new/InvestorSection.tsx
 // ================================================
 // THE INVESTOR — research desk zone.
-// Daily briefing (flagship) → Weekly/Monthly research → Stock Analyzer (real
-// screenshot) → Research Hub row (Insider Flow / 13F / ETF X-Ray / WAR ZONE).
-//
-// ClassifiedPanel is a placeholder for screenshots that are "coming later"
-// (Top Secret, Weekly Report, Deep Dive, WAR ZONE). Swap for a real <img>
-// later by passing the `image` prop — no structural change needed.
+// Publishing-cadence block (single cover + release-schedule ledger) →
+// Stock Analyzer (real screenshot).
 // ================================================
 
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { TrendingUp, Users, FileBarChart, Layers, Radio } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Button } from "@/components/ds/Button";
 import { SectionShell, SectionEyebrow, SectionTitle } from "./_shared";
 import stockAnalyzerSearch from "@/assets/landing/stock-analyzer-search.webp";
 import reportTopsecret from "@/assets/landing/report-topsecret.webp";
-import reportWeekly from "@/assets/landing/report-weekly.webp";
-import reportDeepdive from "@/assets/landing/report-deepdive.webp";
 
 // ---------------------------------------------------------------------------
-// ClassifiedPanel — intelligence-dossier placeholder for screenshots
-// arriving later. Pass `image` to swap in a real screenshot (one-line change).
+// Release schedule ledger data
 // ---------------------------------------------------------------------------
-interface ClassifiedPanelProps {
-  label: string;
-  image?: string;
-  alt?: string;
-  className?: string;
-}
-
-function ClassifiedPanel({ label, image, alt, className }: ClassifiedPanelProps) {
-  if (image) {
-    return (
-      <img
-        src={image}
-        alt={alt ?? label}
-        loading="lazy"
-        decoding="async"
-        className={`w-full rounded-[12px] border border-border-ds-subtle ${className ?? ""}`}
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`relative rounded-[12px] border border-gold-border bg-section-card-rest p-5 overflow-hidden ${className ?? ""}`}
-    >
-      {/* Corner brackets */}
-      <span className="absolute top-2 left-2 w-3 h-3 border-t border-l border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-      <span className="absolute top-2 right-2 w-3 h-3 border-t border-r border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-      <span className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-      <span className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] uppercase tracking-[0.3em] text-gold-eyebrow font-medium">
-            {label}
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm border border-gold-muted bg-gold-border text-gold-primary text-[9px] font-semibold uppercase tracking-[0.2em]">
-            Classified
-          </span>
-        </div>
-
-        {/* Skeleton text bars — blurred-looking gradient bars, no lorem ipsum */}
-        <div className="space-y-2.5">
-          <div className="h-3 w-[92%] rounded-sm bg-gradient-to-r from-ink-primary/15 via-ink-primary/8 to-transparent blur-[1px]" />
-          <div className="h-3 w-[78%] rounded-sm bg-gradient-to-r from-ink-primary/15 via-ink-primary/8 to-transparent blur-[1px]" />
-          <div className="h-3 w-[85%] rounded-sm bg-gradient-to-r from-ink-primary/15 via-ink-primary/8 to-transparent blur-[1px]" />
-          <div className="h-3 w-[60%] rounded-sm bg-gradient-to-r from-ink-primary/15 via-ink-primary/8 to-transparent blur-[1px]" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Research Hub row data
-// ---------------------------------------------------------------------------
-const researchHubCards = [
+const releaseSchedule = [
   {
-    icon: Users,
-    title: "Insider Flow",
-    description: "Who's buying their own stock",
+    chip: "DAILY",
+    name: "TOP SECRET — Morning Intelligence Briefing",
+    detail: "Every trading day, before the bell",
   },
   {
-    icon: FileBarChart,
-    title: "13F Tracker",
-    description: "Follow the funds' real positions",
+    chip: "SUNDAYS",
+    name: "The Weekly Tactical Review",
+    detail: "Latest: July 6 — macro signal, sector drifts, trade implications",
   },
   {
-    icon: Layers,
-    title: "ETF X-Ray",
-    description: "Compare holdings, overlap and cost",
+    chip: "MONTHLY",
+    name: "Company Intelligence — Deep Dive",
+    detail: "Latest: Johnson & Johnson (JNJ), July 10",
+  },
+  {
+    chip: "EVENT",
+    name: "Macro Event Reports",
+    detail: "Latest: ISM Manufacturing, July 2",
   },
 ];
 
@@ -116,64 +59,56 @@ const InvestorSection = () => {
           </p>
         </div>
 
-        {/* Block 1 — flagship: TOP SECRET */}
+        {/* Block 1+2 — publishing cadence: single cover + release-schedule ledger */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="grid md:grid-cols-2 gap-8 items-center mb-16"
+          className="grid md:grid-cols-5 gap-8 items-start mb-16"
         >
-          <ClassifiedPanel
-            label="Top Secret — Daily Briefing"
-            image={reportTopsecret}
-            alt="FINOTAUR Top Secret market analysis report cover"
-            className="min-h-[220px]"
-          />
-          <div>
-            <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary mb-3">
-              Wake up knowing exactly what matters.
-            </h3>
-            <p className="text-ink-muted text-sm md:text-base leading-relaxed">
-              Every morning before the bell: the overnight moves that matter, the flow
-              worth watching, and the one thing not to miss. Five minutes, zero noise.
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Hairline divider */}
-        <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-16" aria-hidden="true" />
-
-        {/* Block 2 — two-up: Weekly Report + Monthly Deep Dive */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="mb-16"
-        >
-          <div className="text-center mb-6">
-            <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary mb-3">
-              Research with a spine.
-            </h3>
-            <p className="text-ink-muted text-sm md:text-base leading-relaxed max-w-xl mx-auto">
-              A Sunday plan for the week ahead. A monthly institutional-grade thesis on
-              one name — entry logic, risks, and a price framework.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <ClassifiedPanel
-              label="The Weekly Report — Sundays"
-              image={reportWeekly}
-              alt="FINOTAUR Weekly Tactical Review report cover"
-              className="min-h-[180px] max-h-[420px] object-contain"
+          <div className="md:col-span-2">
+            <img
+              src={reportTopsecret}
+              alt="FINOTAUR Top Secret market intelligence report cover"
+              loading="lazy"
+              decoding="async"
+              className="w-full max-h-[440px] object-contain rounded-[12px] border border-border-ds-subtle shadow-glow-gold-resting"
             />
-            <ClassifiedPanel
-              label="Deep Dive — Monthly"
-              image={reportDeepdive}
-              alt="FINOTAUR Company Intelligence deep-dive report cover"
-              className="min-h-[180px] max-h-[420px] object-contain"
-            />
+          </div>
+
+          <div className="md:col-span-3">
+            <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary mb-3">
+              Research that ships on schedule.
+            </h3>
+            <p className="text-ink-muted text-sm md:text-base leading-relaxed mb-6">
+              Not a newsletter when we feel like it. A publishing desk with a calendar —
+              a daily briefing before the bell, a Sunday plan for the week ahead, and a
+              monthly institutional-grade thesis on one name.
+            </p>
+
+            <div className="relative pl-4">
+              <div
+                className="absolute left-0 top-1 bottom-1 w-px bg-gradient-to-b from-gold-primary/40 via-gold-primary/15 to-transparent"
+                aria-hidden="true"
+              />
+              {releaseSchedule.map((row, index) => (
+                <div
+                  key={row.chip}
+                  className={`flex items-start gap-3 py-3 ${
+                    index < releaseSchedule.length - 1 ? "border-b border-border-ds-subtle" : ""
+                  }`}
+                >
+                  <span className="mt-0.5 shrink-0 inline-flex items-center justify-center w-[72px] text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-sm border border-gold-primary/40 text-gold-primary bg-gold-primary/5">
+                    {row.chip}
+                  </span>
+                  <div>
+                    <p className="text-ink-primary font-medium text-sm md:text-base">{row.name}</p>
+                    <p className="text-ink-secondary text-sm">{row.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </motion.div>
 
@@ -208,58 +143,6 @@ const InvestorSection = () => {
 
         {/* Hairline divider */}
         <div className="w-32 h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent mx-auto mb-16" aria-hidden="true" />
-
-        {/* Block 4 — Research Hub row */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="mb-12"
-        >
-          <div className="text-center mb-6">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-gold-eyebrow font-medium">
-              Research Hub
-            </span>
-          </div>
-          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {researchHubCards.map((card, index) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={index}
-                  className="rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5"
-                >
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gold-border border border-gold-muted mb-3">
-                    <Icon className="h-4 w-4 text-gold-primary" />
-                  </div>
-                  <h4 className="font-semibold text-ink-primary text-sm mb-1">{card.title}</h4>
-                  <p className="text-ink-muted text-xs leading-relaxed">{card.description}</p>
-                </div>
-              );
-            })}
-
-            {/* WAR ZONE — mini ClassifiedPanel styling */}
-            <div className="relative rounded-[12px] border border-gold-border bg-section-card-rest p-ds-5 overflow-hidden">
-              <span className="absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-              <span className="absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-              <span className="absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-gold-primary/50 pointer-events-none" aria-hidden="true" />
-              <div className="relative z-10">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gold-border border border-gold-muted mb-3">
-                  <Radio className="h-4 w-4 text-gold-primary" />
-                </div>
-                <h4 className="font-semibold text-ink-primary text-sm mb-1 flex items-center gap-1.5">
-                  WAR ZONE
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm border border-gold-muted bg-gold-border text-gold-primary text-[8px] font-semibold uppercase tracking-[0.2em]">
-                    Classified
-                  </span>
-                </h4>
-                <p className="text-ink-muted text-xs leading-relaxed">Live macro situation room</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
 
         {/* CTA */}
         <div className="text-center">

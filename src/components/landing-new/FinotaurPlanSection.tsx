@@ -8,33 +8,33 @@
 
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Activity, Radar, Search, Bot, Check, Sparkles } from "lucide-react";
+import { Database, FileText, SlidersHorizontal, Brain, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ds/Button";
 import { SectionShell, SectionEyebrow, SectionTitle } from "./_shared";
 
 // ---------------------------------------------------------------------------
-// Engine cards — adapted from AISection.tsx card idiom
+// Engine cards — 4 core value pillars (card idiom adapted from AISection.tsx)
 // ---------------------------------------------------------------------------
 const engineCards = [
   {
-    icon: Activity,
-    title: "Options Intelligence",
-    description: "Smart-money options flow and dark pool prints.",
+    icon: Database,
+    title: "All Your Data, One Place",
+    description: "Accounts, trades, markets and research — one terminal instead of ten tabs.",
   },
   {
-    icon: Radar,
-    title: "Market Scanner",
-    description: "Real-time walls and liquidity, across the whole tape.",
+    icon: FileText,
+    title: "Institutional Research",
+    description: "Daily briefings, weekly strategy and monthly deep dives, shipped on schedule.",
   },
   {
-    icon: Search,
-    title: "AI Scanner",
-    description: "The daily Top 5, surfaced without searching.",
+    icon: SlidersHorizontal,
+    title: "Trading & Investing Tools",
+    description: "Copier, risk manager, screeners, scanners and backtesting — built in.",
   },
   {
-    icon: Bot,
-    title: "FINO Unlimited",
-    description: "Your AI analyst on every page, no caps.",
+    icon: Brain,
+    title: "Advanced AI",
+    description: "FINO unlimited, the Leak Detector, options intelligence and 30-second stock verdicts.",
   },
 ];
 
