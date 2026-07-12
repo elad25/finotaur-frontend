@@ -117,6 +117,33 @@ describe('sanitizeDomPreferences', () => {
   });
 });
 
+describe('sanitizeDomPreferences — rowSize', () => {
+  it("accepts 'auto'", () => {
+    expect(sanitizeDomPreferences({ rowSize: 'auto' }).rowSize).toBe('auto');
+  });
+
+  it('accepts every valid tick-multiple option, falls back to default for out-of-range values', () => {
+    for (const valid of [1, 2, 5, 10] as const) {
+      expect(sanitizeDomPreferences({ rowSize: valid }).rowSize).toBe(valid);
+    }
+    expect(sanitizeDomPreferences({ rowSize: 3 }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+    expect(sanitizeDomPreferences({ rowSize: -1 }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+    expect(sanitizeDomPreferences({ rowSize: 0 }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+  });
+
+  it('rejects non-auto strings and other garbage, falls back to default', () => {
+    expect(sanitizeDomPreferences({ rowSize: 'nope' }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+    expect(sanitizeDomPreferences({ rowSize: '10' }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+    expect(sanitizeDomPreferences({ rowSize: null }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+    expect(sanitizeDomPreferences({ rowSize: undefined }).rowSize).toBe(DEFAULT_DOM_PREFERENCES.rowSize);
+  });
+
+  it("defaults to 'auto' when absent", () => {
+    expect(sanitizeDomPreferences({}).rowSize).toBe('auto');
+    expect(DEFAULT_DOM_PREFERENCES.rowSize).toBe('auto');
+  });
+});
+
 describe('readDomPreferencesForSymbol — round-trip + corrupt JSON', () => {
   it('returns DEFAULT_DOM_PREFERENCES when nothing is stored', () => {
     expect(readDomPreferencesForSymbol('BTCUSDT')).toEqual(DEFAULT_DOM_PREFERENCES);
