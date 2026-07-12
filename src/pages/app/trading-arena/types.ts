@@ -3,7 +3,7 @@
  */
 
 /** Active tab identifiers for the Trading Arena. */
-export type TabId = 'chart' | 'order-flow' | 'liquidity';
+export type TabId = 'chart' | 'order-flow' | 'liquidity' | 'dom';
 
 export interface TradingArenaTab {
   id: TabId;
@@ -15,6 +15,7 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
   { id: 'chart',      label: 'Chart',      locked: false },
   { id: 'order-flow', label: 'Footprint Chart', locked: false },
   { id: 'liquidity',  label: 'Liquidity',  locked: false },
+  { id: 'dom',        label: 'DOM',        locked: false },
 ];
 
 /**
@@ -29,7 +30,7 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
  *     tab bar) → 'chart', the safe default.
  */
 export function toTabId(raw: string | undefined): TabId {
-  const valid: TabId[] = ['chart', 'order-flow', 'liquidity'];
+  const valid: TabId[] = ['chart', 'order-flow', 'liquidity', 'dom'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
   if (raw === 'orderflow' || raw === 'footprint' || raw === 'footprint-chart') return 'order-flow';
   return 'chart';
