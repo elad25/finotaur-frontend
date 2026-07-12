@@ -440,7 +440,7 @@ const TraderSection = () => {
       `}</style>
 
       {/* ===== HEADER ===== */}
-      <div className="text-center mb-16">
+      <div className="text-center mb-10">
         <SectionEyebrow>The Trader</SectionEyebrow>
         <SectionTitle gradient="split" size="default" className="mb-4">
           Your trading, finally{' '}
@@ -529,7 +529,7 @@ const TraderSection = () => {
             <div
               role="tablist"
               aria-label={`${activePillar.label} — features`}
-              className="flex items-center justify-center gap-1.5 mb-10"
+              className="flex items-center justify-center gap-1.5 mb-6"
             >
               {activePillar.subKeys.map((key) => {
                 const tab = tabs.find((t) => t.key === key)!;
@@ -595,7 +595,7 @@ const TraderSection = () => {
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          <div className="grid min-h-[440px] lg:min-h-[540px] items-center">
+          <div className="grid min-h-[380px] lg:min-h-[440px] items-center">
             <AnimatePresence initial={false} custom={direction}>
               <motion.div
                 key={activeTab.key}
@@ -625,7 +625,7 @@ const TraderSection = () => {
       </div>
 
       {/* ===== FINAL CTA ===== */}
-      <div className="text-center mt-10">
+      <div className="text-center mt-6">
         <Link to="/register">
           <Button variant="gold" size="xl">
             Start 14-day free trial

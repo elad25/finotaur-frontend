@@ -51,7 +51,7 @@ export function SectionShell({
   return (
     <section
       id={id}
-      className={cn('relative overflow-hidden py-14 md:py-20', className)}
+      className={cn('relative overflow-hidden py-8 md:py-12', className)}
     >
       {/* ========== ATMOSPHERE LAYER ========== */}
       {atmosphere !== 'none' && (

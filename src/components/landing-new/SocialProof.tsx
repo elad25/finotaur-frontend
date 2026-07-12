@@ -199,8 +199,8 @@ function AnimatedHairline({ active }: { active: boolean }) {
 // ---------------------------------------------------------------------------
 function IntegrationsStrip() {
   return (
-    <div className="py-3 md:py-4">
-      <p className="text-center text-xs tracking-[0.3em] text-gold-primary/80 uppercase mb-6">
+    <div className="py-2 md:py-2.5">
+      <p className="text-center text-xs tracking-[0.3em] text-gold-primary/80 uppercase mb-4">
         Syncs With
       </p>
 
@@ -284,7 +284,7 @@ const SocialProof = () => {
     <SectionShell
       atmosphere="none"
       beam={false}
-      className="py-7 md:py-10"
+      className="py-4 md:py-6"
     >
       <div ref={containerRef} className="max-w-6xl mx-auto px-6 relative">
         {/* Subtle ambient gold beam — behind content */}
