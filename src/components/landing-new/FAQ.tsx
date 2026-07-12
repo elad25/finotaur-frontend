@@ -53,7 +53,7 @@ const faqs: FAQItem[] = [
   {
     question: "What if I need help?",
     answer:
-      "Core users get priority email support. Finotaur users get priority support with a 24-hour response guarantee. Enterprise clients receive a dedicated account manager. We also have a Discord community where traders share insights and help each other. You're never trading alone.",
+      "Core users get priority email support. Finotaur users get priority support with a 24-hour response commitment. Enterprise clients receive a dedicated account manager. We also have a Discord community where traders share insights and help each other. You're never trading alone.",
   },
 ];
 

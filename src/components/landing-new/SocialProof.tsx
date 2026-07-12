@@ -245,16 +245,6 @@ function IntegrationsStrip() {
             Interactive Brokers
           </span>
         </div>
-        <div className="flex flex-col items-center gap-2">
-          <div className="h-9 flex items-center">
-            <span className="text-xl font-bold tracking-tight text-white/70">
-              APEX
-            </span>
-          </div>
-          <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary">
-            Trader Funding
-          </span>
-        </div>
       </div>
     </div>
   );
