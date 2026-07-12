@@ -55,6 +55,64 @@ export interface TradeSource {
   ): Promise<{ trades: FlowTrade[]; coveredFromMs: number }>;
 }
 
+/** One price level's aggregate resting quantity — [price, qty]. qty === 0 means "level removed" in a delta message. */
+export type DepthLevel = [price: number, qty: number];
+
+/**
+ * Full L2 order-book snapshot — the initial payload a DepthSource delivers
+ * on subscribe(), before any deltas. `bids`/`asks` are NOT required to be
+ * pre-sorted by the source; consumers should sort if presentation order
+ * matters (bids descending, asks ascending, by convention).
+ */
+export interface DepthSnapshot {
+  /** Snapshot time, epoch ms. */
+  ts: number;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+}
+
+/**
+ * One incremental L2 update — same shape as a snapshot, but each level is a
+ * DELTA against the last known state for that side: qty > 0 means "resting
+ * quantity at this price is now qty" (replace, not add), qty === 0 means
+ * "this price level was removed". Levels not mentioned are unchanged.
+ */
+export interface DepthDelta {
+  ts: number;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+}
+
+/**
+ * Normalized live L2 (order-book depth) source contract — future seam for a
+ * NinjaTrader/Rithmic/Databento MBP-10-style feed to plug into the same
+ * DOM/heatmap/liquidity-wall renderers (DepthMatrixLayer, WallHeatLayer)
+ * without those layers knowing which vendor the levels came from. Mirrors
+ * TradeSource's shape deliberately (subscribe + status callback) so a future
+ * consumer can hold both a TradeSource and a DepthSource for the same
+ * instrument with a consistent mental model.
+ *
+ * Types only — NOT implemented yet. No concrete DepthSource exists in this
+ * codebase; this interface exists so the eventual NinjaTrader/Rithmic
+ * integration has a contract to implement against, and so renderer code that
+ * wants to be source-agnostic can type against it ahead of time.
+ */
+export interface DepthSource {
+  /**
+   * Live subscription. Delivers an initial full snapshot via `onSnapshot`,
+   * then incremental deltas via `onDelta` for as long as the subscription is
+   * held. Returns an unsubscribe fn (same convention as TradeSource.subscribe).
+   */
+  subscribe(
+    symbol: string,
+    handlers: {
+      onSnapshot: (snapshot: DepthSnapshot) => void;
+      onDelta: (delta: DepthDelta) => void;
+      onStatus?: (status: TradeSourceStatus) => void;
+    },
+  ): () => void;
+}
+
 // ─── Aggregation (flowBinStore) types ──────────────────────────────────────
 
 export interface FlowBinStoreConfig {

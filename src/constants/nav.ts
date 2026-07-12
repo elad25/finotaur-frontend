@@ -289,7 +289,7 @@ export const domains: Record<string, Domain> = {
     ],
     sidebar: [
       { label: 'Chart',      path: '/app/trading-arena/chart',      icon: Crosshair, beta: true },
-      { label: 'Order Flow', path: '/app/trading-arena/order-flow', icon: Grid3x3,   beta: true },
+      { label: 'Footprint Chart', path: '/app/trading-arena/order-flow', icon: Grid3x3,   beta: true },
       { label: 'Liquidity',  path: '/app/trading-arena/liquidity',  icon: Droplet,   beta: true },
     ],
   },

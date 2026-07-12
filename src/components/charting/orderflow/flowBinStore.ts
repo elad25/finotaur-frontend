@@ -16,6 +16,13 @@ import type {
 // (interval/rowSize change) without a network refetch.
 const RAW_TRADE_RING_CAP = 250_000;
 
+// Safety cap on price bins per candle — a too-small rowSize (e.g. a stray
+// manual entry or a suggestRowSize edge case on a wide-range symbol) would
+// otherwise explode the per-candle bins Map, tanking render + memory. Chosen
+// generously above any legitimate footprint density (visible clusters rarely
+// exceed a few hundred rows even on 'full' detail).
+const MAX_PRICE_BINS = 2000;
+
 type ChangeListener = () => void;
 
 /**
@@ -26,6 +33,13 @@ type ChangeListener = () => void;
 export class FlowBinStore {
   private config: FlowBinStoreConfig;
   private candles = new Map<number, FlowCandle>();
+  // Ascending-sorted candle times, incrementally maintained (binary-insert on
+  // first-seen candle time in applySingleTrade; reset alongside `candles` on
+  // clear()/setConfig() re-bin). Lets getRange() binary-search a window
+  // instead of doing `Array.from(candles.keys()).filter().sort()` on every
+  // call — that was O(all candles) per call and getRange() feeds every
+  // footprint render frame, so it scaled with total loaded history.
+  private sortedTimes: number[] = [];
   // Raw trades kept for re-binning. Fixed-capacity ring: oldest dropped first.
   private rawRing: FlowTrade[] = [];
   private rawRingHead = 0; // write cursor when the ring is full
@@ -44,6 +58,16 @@ export class FlowBinStore {
   // Set for the duration of setConfig()'s replay so applySingleTrade's
   // caller (applyTrades) knows not to bump tradesIngested for replayed trades.
   private isReplaying = false;
+  // Incrementally-tracked raw trade price extent (NOT bin-snapped) — cheap
+  // O(1)-per-trade bookkeeping that lets setConfig() validate a candidate
+  // rowSize against the bin-count cap without draining the raw ring. Reset
+  // alongside candles on clear()/setConfig() re-bin (the replay in setConfig
+  // re-populates it via applySingleTrade, so it stays accurate post-rebin).
+  private minPrice = Infinity;
+  private maxPrice = -Infinity;
+  // Whether the last setConfig() call clamped the requested rowSize upward
+  // to satisfy MAX_PRICE_BINS — see setConfig()'s doc comment.
+  private rowSizeWasClamped = false;
 
   constructor(config: FlowBinStoreConfig) {
     this.config = config;
@@ -55,10 +79,31 @@ export class FlowBinStore {
     return this.config;
   }
 
+  /**
+   * True if the most recent setConfig() call clamped the requested rowSize
+   * upward to stay within MAX_PRICE_BINS. Lets a future UI surface a note
+   * ("row size adjusted — too small for this range") without the store
+   * needing any DOM/React dependency itself.
+   */
+  wasRowSizeClamped(): boolean {
+    return this.rowSizeWasClamped;
+  }
+
   setConfig(config: FlowBinStoreConfig): void {
+    // Bin-count safety cap: a too-small rowSize against the currently-loaded
+    // price span would explode bin counts per candle. Validated against the
+    // incrementally-tracked raw price extent (minPrice/maxPrice) — if no
+    // candles are loaded yet, the extent is still Infinity/-Infinity and the
+    // check is a no-op (skipped); the NEXT setConfig() call after data exists
+    // (e.g. the first re-bin) validates normally.
+    const clampResult = clampRowSizeForBinCap(config.rowSize, this.minPrice, this.maxPrice);
+    this.rowSizeWasClamped = clampResult.clamped;
+    const normalizedConfig: FlowBinStoreConfig = { ...config, rowSize: clampResult.rowSize };
+
     const changed =
-      config.intervalSec !== this.config.intervalSec || config.rowSize !== this.config.rowSize;
-    this.config = config;
+      normalizedConfig.intervalSec !== this.config.intervalSec ||
+      normalizedConfig.rowSize !== this.config.rowSize;
+    this.config = normalizedConfig;
     if (!changed) return;
 
     // Re-bin from the raw ring buffer with the new config. isReplaying guards
@@ -66,10 +111,13 @@ export class FlowBinStore {
     // once on their original ingestion — see the field doc comment above.
     const raw = this.drainRawInOrder();
     this.candles.clear();
+    this.sortedTimes = [];
     this.sortedViewCache.clear();
     this.dirtyCandles.clear();
     this.rawRing = [];
     this.rawRingHead = 0;
+    this.minPrice = Infinity;
+    this.maxPrice = -Infinity;
     this.isReplaying = true;
     try {
       this.applyTrades(raw, /* recordRaw */ true);
@@ -80,10 +128,13 @@ export class FlowBinStore {
 
   clear(): void {
     this.candles.clear();
+    this.sortedTimes = [];
     this.sortedViewCache.clear();
     this.dirtyCandles.clear();
     this.rawRing = [];
     this.rawRingHead = 0;
+    this.minPrice = Infinity;
+    this.maxPrice = -Infinity;
     this.notify();
   }
 
@@ -117,13 +168,16 @@ export class FlowBinStore {
 
   getRange(fromSec: number, toSec: number): FlowCandleView[] {
     const out: FlowCandleView[] = [];
-    // Candle count in a window is small (chart viewport), so a full scan of
-    // this.candles (also bounded — one entry per visible interval bucket)
-    // is cheap; avoids maintaining a separate sorted-time index.
-    const times = Array.from(this.candles.keys())
-      .filter((t) => t >= fromSec && t <= toSec)
-      .sort((a, b) => a - b);
-    for (const t of times) {
+    // sortedTimes is ascending and incrementally maintained (binary-insert in
+    // applySingleTrade — see the field doc comment), so the window
+    // [fromSec, toSec] is two binary searches + a linear walk over just the
+    // matching slice, instead of a filter+sort over ALL candle times on every
+    // call (this used to be O(all candles) and getRange() feeds every
+    // footprint render frame, so cost scaled with total loaded history).
+    const startIdx = lowerBound(this.sortedTimes, fromSec);
+    for (let i = startIdx; i < this.sortedTimes.length; i++) {
+      const t = this.sortedTimes[i];
+      if (t > toSec) break;
       const candle = this.candles.get(t);
       if (candle) out.push(this.toView(candle));
     }
@@ -195,6 +249,11 @@ export class FlowBinStore {
     const candleTime = Math.floor(trade.time / 1000 / intervalSec) * intervalSec;
     const binPrice = Math.floor(trade.price / rowSize) * rowSize;
 
+    // Raw (NOT bin-snapped) price extent, tracked incrementally for the
+    // MAX_PRICE_BINS cap check in setConfig() — see clampRowSizeForBinCap().
+    this.minPrice = Math.min(this.minPrice, trade.price);
+    this.maxPrice = Math.max(this.maxPrice, trade.price);
+
     let candle = this.candles.get(candleTime);
     if (!candle) {
       candle = {
@@ -207,6 +266,11 @@ export class FlowBinStore {
         poc: null,
       };
       this.candles.set(candleTime, candle);
+      // Binary-insert into the ascending sortedTimes index — trades can
+      // arrive out of time order (backfill pages, late live ticks), so this
+      // is NOT always a push-to-end; lowerBound finds the correct insertion
+      // point regardless of arrival order.
+      insertSorted(this.sortedTimes, candleTime);
     }
 
     let bin = candle.bins.get(binPrice);
@@ -259,6 +323,85 @@ export class FlowBinStore {
   private notify(): void {
     for (const cb of this.listeners) cb();
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sorted-index helpers (module-level, no `this` — trivial to unit test in
+// isolation). Used by FlowBinStore.getRange()/applySingleTrade() to maintain
+// `sortedTimes` incrementally instead of re-sorting all candle times per call.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Index of the first element >= target (standard binary lower-bound). Returns arr.length if none qualify. */
+function lowerBound(arr: number[], target: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid] < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/** Insert `value` into an ascending-sorted array at its correct position. Assumes `value` is not already present (caller only inserts on first-seen candle times). */
+function insertSorted(arr: number[], value: number): void {
+  const idx = lowerBound(arr, value);
+  arr.splice(idx, 0, value);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bin-count cap helper (module-level, pure — trivial to unit test in
+// isolation). Used by FlowBinStore.setConfig() to keep a candidate rowSize
+// from exploding per-candle bin counts against the currently-loaded raw
+// price extent. See MAX_PRICE_BINS's doc comment for why the cap exists.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface RowSizeClampResult {
+  rowSize: number;
+  clamped: boolean;
+}
+
+/** Same inclusive bin-count formula applySingleTrade's binning implies: floor(price/rowSize) buckets, min through max inclusive. */
+function computeBinCount(rowSize: number, minPrice: number, maxPrice: number): number {
+  return Math.floor(maxPrice / rowSize) - Math.floor(minPrice / rowSize) + 1;
+}
+
+/**
+ * Validates `rowSize` against [minPrice, maxPrice] (the raw, un-snapped
+ * trade price extent) and clamps it UP to the smallest value that keeps the
+ * resulting bin count within MAX_PRICE_BINS. No-op (never clamps) when:
+ *  - rowSize is non-positive (caller's problem, not this guard's)
+ *  - minPrice/maxPrice aren't finite yet (no candles loaded — "skip the
+ *    check and validate on first re-bin", per the task spec)
+ *  - the span collapses to 0 (all trades at exactly one price)
+ *  - the requested rowSize already satisfies the cap
+ */
+function clampRowSizeForBinCap(rowSize: number, minPrice: number, maxPrice: number): RowSizeClampResult {
+  if (rowSize <= 0 || !Number.isFinite(minPrice) || !Number.isFinite(maxPrice)) {
+    return { rowSize, clamped: false };
+  }
+  const span = maxPrice - minPrice;
+  if (span <= 0) return { rowSize, clamped: false };
+
+  if (computeBinCount(rowSize, minPrice, maxPrice) <= MAX_PRICE_BINS) {
+    return { rowSize, clamped: false };
+  }
+
+  // Smallest rowSize that satisfies span / rowSize <= MAX_PRICE_BINS - 1
+  // (the "-1" accounts for the +1 inclusive-bucket term in computeBinCount).
+  let candidate = span / (MAX_PRICE_BINS - 1);
+  // Floor-boundary safety: floor() bucketing can occasionally land the
+  // "exact" minimal rowSize one bin over the cap (e.g. when minPrice/rowSize
+  // sits just above an integer boundary) — nudge upward in tiny steps until
+  // the ACTUAL bin count satisfies the cap, rather than trusting the formula
+  // alone. Bounded so this can never loop indefinitely.
+  for (let guard = 0; guard < 10 && computeBinCount(candidate, minPrice, maxPrice) > MAX_PRICE_BINS; guard++) {
+    candidate *= 1.001;
+  }
+  return { rowSize: candidate > rowSize ? candidate : rowSize, clamped: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

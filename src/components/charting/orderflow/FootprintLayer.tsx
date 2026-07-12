@@ -170,6 +170,18 @@ export function FootprintLayer({
   // and gates onStageChange to fire only on actual transitions.
   const currentStageRef = useRef<FootprintDetailLevel>('hidden');
 
+  // OHLC-by-time lookup cache (see the draw loop's ohlcByTime build below) —
+  // rebuilt only when barsRef.current's IDENTITY changes (a new bars array
+  // reference — FinotaurChart replaces the whole array on each bar-load, it
+  // never mutates in place), not on every dirty/pan/zoom frame. Iterating
+  // ALL bars every frame scaled with total loaded history even though the
+  // footprint only ever looks up a handful of visible candle times per
+  // frame. ohlcByTimeBarsRef holds the exact `bars` reference the cached Map
+  // was built from, so a plain `!==` identity check is enough to detect
+  // "bars actually changed" without a deep comparison.
+  const ohlcByTimeCacheRef = useRef<Map<number, { open: number; high: number; low: number; close: number }>>(new Map());
+  const ohlcByTimeBarsRef = useRef<Bar[] | undefined>(undefined);
+
   // ── Mark dirty when the store emits new data ─────────────────────────────
   useEffect(() => {
     const unsubscribe = store.onChange(() => {
@@ -482,14 +494,23 @@ export function FootprintLayer({
         // OHLC lookup for the candle skeleton strip (task: FootprintLayer has
         // no OHLC of its own — FlowBinStore only tracks buy/sell volume per
         // price bin — so this reads from the candlestick series' own bars,
-        // threaded in via the `bars` prop). Built once per dirty frame, same
-        // cost class as cvdByTime above, never per pan/zoom frame.
-        const ohlcByTime = new Map<number, { open: number; high: number; low: number; close: number }>();
-        if (detail === 'full' && barsRef.current) {
-          for (const bar of barsRef.current) {
-            ohlcByTime.set(bar.time as unknown as number, { open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+        // threaded in via the `bars` prop). Memoized against barsRef.current's
+        // IDENTITY (see ohlcByTimeCacheRef's doc comment above) — this used to
+        // rebuild by iterating ALL bars on every dirty frame, which scaled
+        // with total loaded history even though bars only change on an actual
+        // bar-load event, not on every pan/zoom/dirty redraw.
+        const currentBars = detail === 'full' ? barsRef.current : undefined;
+        if (currentBars !== ohlcByTimeBarsRef.current) {
+          const rebuilt = new Map<number, { open: number; high: number; low: number; close: number }>();
+          if (currentBars) {
+            for (const bar of currentBars) {
+              rebuilt.set(bar.time as unknown as number, { open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+            }
           }
+          ohlcByTimeCacheRef.current = rebuilt;
+          ohlcByTimeBarsRef.current = currentBars;
         }
+        const ohlcByTime = ohlcByTimeCacheRef.current;
 
         // Bar columns collected for a single batched stats-band draw call
         // after the per-candle footprint loop (drawStatsBandAt computes

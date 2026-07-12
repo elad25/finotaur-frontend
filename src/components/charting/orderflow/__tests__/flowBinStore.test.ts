@@ -229,6 +229,190 @@ describe('FlowBinStore — suggestRowSize uses PER-BAR range, not window-spannin
   });
 });
 
+describe('FlowBinStore — getRange() incrementally-maintained sorted index', () => {
+  // Regression tests for the perf fix (2026-07-12): getRange() used to do
+  // Array.from(this.candles.keys()).filter().sort() on EVERY call — O(all
+  // candles) per call, and getRange() feeds every footprint render frame, so
+  // cost scaled with total loaded history. Replaced with a binary-searched
+  // `sortedTimes` index, incrementally maintained by binary-insert in
+  // applySingleTrade(). These tests assert output is IDENTICAL to the old
+  // filter+sort behavior — same candles, ascending by time — under every
+  // shape that matters: full window, partial window, empty window, single
+  // candle, out-of-order insertion, and setConfig() re-bin.
+
+  it('full window: returns every loaded candle, ascending by time', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(10, 0, 60_000)); // 10 candles, one per minute
+    const range = store.getRange(0, 10_000);
+    expect(range.length).toBe(10);
+    for (let i = 1; i < range.length; i++) {
+      expect(range[i].time).toBeGreaterThan(range[i - 1].time);
+    }
+    expect(range[0].time).toBe(0);
+    expect(range[range.length - 1].time).toBe(540);
+  });
+
+  it('partial window: returns only candles within [fromSec, toSec], still ascending', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(10, 0, 60_000)); // candle times: 0, 60, 120, ..., 540
+    const range = store.getRange(120, 300);
+    // Expect candles at 120, 180, 240, 300 — 4 candles.
+    expect(range.length).toBe(4);
+    expect(range.map((c) => c.time)).toEqual([120, 180, 240, 300]);
+  });
+
+  it('empty window: returns [] when no candle time falls in [fromSec, toSec]', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(5, 0, 60_000)); // candle times: 0, 60, 120, 180, 240
+    expect(store.getRange(1000, 2000)).toEqual([]);
+    // Also verify a window strictly BEFORE all data returns [].
+    expect(store.getRange(-1000, -500)).toEqual([]);
+  });
+
+  it('single candle: a window matching exactly one candle time returns that one candle', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades([{ time: 0, price: 100, qty: 1, buyerAggressor: true }]);
+    const range = store.getRange(0, 0);
+    expect(range.length).toBe(1);
+    expect(range[0].time).toBe(0);
+  });
+
+  it('trades applied OUT OF TIME ORDER (later candle inserted before earlier) still return ascending order', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    // Apply candle times in a deliberately scrambled order: 300, 0, 480, 120,
+    // 60, 240, 180, 360, 420 — none of these arrive sorted, so a naive
+    // push-to-end sortedTimes index (instead of binary-insert) would return
+    // them out of order.
+    const scrambledCandleTimesSec = [300, 0, 480, 120, 60, 240, 180, 360, 420];
+    for (const t of scrambledCandleTimesSec) {
+      store.applyTrades([{ time: t * 1000, price: 100 + t * 0.01, qty: 1, buyerAggressor: true }]);
+    }
+
+    const range = store.getRange(0, 480);
+    expect(range.length).toBe(scrambledCandleTimesSec.length);
+    // Must be strictly ascending regardless of insertion order.
+    for (let i = 1; i < range.length; i++) {
+      expect(range[i].time).toBeGreaterThan(range[i - 1].time);
+    }
+    expect(range.map((c) => c.time)).toEqual([0, 60, 120, 180, 240, 300, 360, 420, 480]);
+  });
+
+  it('multiple trades landing in the SAME already-seen candle time do not duplicate the index entry', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    // 5 trades all within the same 60s candle bucket (times 0, 10s, 20s, 30s, 40s).
+    store.applyTrades([
+      { time: 0, price: 100, qty: 1, buyerAggressor: true },
+      { time: 10_000, price: 100.5, qty: 1, buyerAggressor: true },
+      { time: 20_000, price: 101, qty: 1, buyerAggressor: false },
+      { time: 30_000, price: 100.2, qty: 1, buyerAggressor: true },
+      { time: 40_000, price: 99.8, qty: 1, buyerAggressor: false },
+    ]);
+    const range = store.getRange(0, 60);
+    expect(range.length).toBe(1); // still exactly one candle at t=0, not 5 duplicate entries
+    expect(range[0].time).toBe(0);
+    expect(range[0].bins.reduce((sum, b) => sum + b.trades, 0)).toBe(5);
+  });
+
+  it('setConfig() re-bin rebuilds the sortedTimes index correctly — getRange still works post-rebin', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    // Scrambled insertion order again, pre-rebin.
+    const scrambledCandleTimesSec = [180, 0, 300, 60, 240, 120];
+    for (const t of scrambledCandleTimesSec) {
+      store.applyTrades([{ time: t * 1000, price: 100, qty: 1, buyerAggressor: true }]);
+    }
+
+    // Widen rowSize — triggers the raw-ring replay + full index reset/rebuild.
+    store.setConfig({ intervalSec: 60, rowSize: 5 });
+
+    const range = store.getRange(0, 300);
+    expect(range.length).toBe(scrambledCandleTimesSec.length);
+    expect(range.map((c) => c.time)).toEqual([0, 60, 120, 180, 240, 300]);
+    for (let i = 1; i < range.length; i++) {
+      expect(range[i].time).toBeGreaterThan(range[i - 1].time);
+    }
+
+    // A second re-bin (interval change this time) must also leave the index
+    // in a correct, queryable state.
+    store.setConfig({ intervalSec: 120, rowSize: 5 });
+    const rebinnedRange = store.getRange(0, 300);
+    for (let i = 1; i < rebinnedRange.length; i++) {
+      expect(rebinnedRange[i].time).toBeGreaterThan(rebinnedRange[i - 1].time);
+    }
+    // With a 120s interval: floor(t/120)*120 buckets 0→0, 60→0, 120→120,
+    // 180→120, 240→240, 300→240 — 3 distinct buckets: [0, 120, 240].
+    expect(rebinnedRange.map((c) => c.time)).toEqual([0, 120, 240]);
+  });
+
+  it('clear() resets the index — getRange returns [] until new trades are applied', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(5, 0, 60_000));
+    expect(store.getRange(0, 300).length).toBe(5);
+
+    store.clear();
+    expect(store.getRange(0, 300)).toEqual([]);
+
+    store.applyTrades([{ time: 0, price: 100, qty: 1, buyerAggressor: true }]);
+    expect(store.getRange(0, 0).length).toBe(1);
+  });
+});
+
+describe('FlowBinStore — setConfig() bin-count safety cap', () => {
+  // Regression tests for the MAX_PRICE_BINS guard added 2026-07-12: a
+  // too-small rowSize against the loaded price span would otherwise explode
+  // per-candle bin counts. setConfig() clamps rowSize UP to the smallest
+  // value that keeps the bin count within the cap, and exposes that via
+  // wasRowSizeClamped() so a future UI can surface a note.
+
+  it('does not clamp when no candles are loaded yet — validates on first re-bin instead', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 0.0001 });
+    expect(store.wasRowSizeClamped()).toBe(false);
+    expect(store.getConfig().rowSize).toBe(0.0001);
+  });
+
+  it('does not clamp a rowSize that already satisfies the cap', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    // Price span of 100 (19450..19550) at rowSize=1 → ~101 bins, well under 2000.
+    store.applyTrades(buildTrades(50, 0, 60_000));
+    store.setConfig({ intervalSec: 60, rowSize: 1 });
+    expect(store.wasRowSizeClamped()).toBe(false);
+    expect(store.getConfig().rowSize).toBe(1);
+  });
+
+  it('clamps a rowSize that would exceed MAX_PRICE_BINS, and getConfig() reflects the clamped value', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    // Trades spanning price 0..10000 — a rowSize of 0.01 would need ~1,000,000 bins.
+    store.applyTrades([
+      { time: 0, price: 0, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 10_000, qty: 1, buyerAggressor: true },
+    ]);
+
+    store.setConfig({ intervalSec: 60, rowSize: 0.01 });
+
+    expect(store.wasRowSizeClamped()).toBe(true);
+    const clampedRowSize = store.getConfig().rowSize;
+    expect(clampedRowSize).toBeGreaterThan(0.01);
+
+    // The clamped rowSize must actually satisfy the cap: bin count <= 2000.
+    const binCount = Math.floor(10_000 / clampedRowSize) - Math.floor(0 / clampedRowSize) + 1;
+    expect(binCount).toBeLessThanOrEqual(2000);
+  });
+
+  it('a subsequent setConfig() call that no longer needs clamping resets wasRowSizeClamped() to false', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades([
+      { time: 0, price: 0, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 10_000, qty: 1, buyerAggressor: true },
+    ]);
+
+    store.setConfig({ intervalSec: 60, rowSize: 0.01 });
+    expect(store.wasRowSizeClamped()).toBe(true);
+
+    store.setConfig({ intervalSec: 60, rowSize: 50 });
+    expect(store.wasRowSizeClamped()).toBe(false);
+    expect(store.getConfig().rowSize).toBe(50);
+  });
+});
+
 describe('FlowBinStore — render-loop fixed-point simulation', () => {
   // Simulates the exact cycle described in the incident: getBars (reads raw
   // trades) → suggestRowSize → setConfig → (would-be) notify → getBars again.

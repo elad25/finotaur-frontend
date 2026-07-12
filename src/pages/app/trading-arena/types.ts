@@ -13,7 +13,7 @@ export interface TradingArenaTab {
 
 export const TRADING_ARENA_TABS: TradingArenaTab[] = [
   { id: 'chart',      label: 'Chart',      locked: false },
-  { id: 'order-flow', label: 'Order Flow', locked: false },
+  { id: 'order-flow', label: 'Footprint Chart', locked: false },
   { id: 'liquidity',  label: 'Liquidity',  locked: false },
 ];
 
@@ -22,14 +22,16 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
  *
  * Legacy/removed section slugs are redirected rather than 404ing:
  *   - 'orderflow' (no dash) / 'footprint' (the tab's former slug, before the
- *     2026-07 rename) → 'order-flow', the dedicated footprint chart tab.
+ *     2026-07 rename) / 'footprint-chart' (the tab's current display-label
+ *     slugified — accepted forward-compat in case a caller ever links by it)
+ *     → 'order-flow', the dedicated footprint chart tab.
  *   - 'tape' / 'cvd' / 'options' / 'futures' / 'forex' (all removed from the
  *     tab bar) → 'chart', the safe default.
  */
 export function toTabId(raw: string | undefined): TabId {
   const valid: TabId[] = ['chart', 'order-flow', 'liquidity'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
-  if (raw === 'orderflow' || raw === 'footprint') return 'order-flow';
+  if (raw === 'orderflow' || raw === 'footprint' || raw === 'footprint-chart') return 'order-flow';
   return 'chart';
 }
 
