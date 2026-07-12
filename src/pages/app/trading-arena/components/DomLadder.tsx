@@ -23,6 +23,23 @@
  * thinner sample never widens an already-inferred finer tick), so the
  * ladder's row grid never jitters between ticks.
  *
+ * Rows are NOT one-tick-each — each row spans `rowSize` (preferences.rowSize:
+ * 'auto' or a tick multiple; see domLadderMath.ts computeAutoRowSize / the
+ * useDomPreferences.ts field doc). Book levels, session volume, and rolling
+ * trades are all bucketed into rowSize-wide buckets by integer index
+ * (priceToRowIndex/rowIndexToPrice), which is also what keeps row prices
+ * float-drift-free (no more `64178.15996638`-style garbage).
+ *
+ * The number of RENDERED rows is decoupled from `preferences.depthCount`:
+ * a ResizeObserver measures the ladder body and fills it (clamped to a sane
+ * max), while `depthCount` only bounds the price WINDOW of raw book levels
+ * that get aggregated per side — rows outside that window simply render
+ * empty, same as a real DOM when resting liquidity doesn't reach that deep.
+ *
+ * Auto-center is paused while the pointer is over the ladder (and for a
+ * short grace period after it leaves) so a click never lands on a
+ * just-recentered row — see `isHoveredRef`/`hoverPauseUntilRef` below.
+ *
  * All other preferences (depthCount, autoCenter, etc.) are read through refs
  * mirrored on every render rather than as interval deps, so tweaking a
  * setting takes effect on the NEXT tick without tearing down the
@@ -35,6 +52,14 @@ import type { WheelEvent as ReactWheelEvent } from 'react';
 import type { Trade, BookStatus } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import type { PendingOrder } from '@/hooks/useBacktestSession';
 import type { DomPreferences } from '../hooks/useDomPreferences';
+import {
+  inferTickSize,
+  decimalsForStep,
+  priceToRowIndex,
+  rowIndexToPrice,
+  resolveRowSizeDollars,
+  formatLadderPrice,
+} from './domLadderMath';
 
 export interface DomLadderProps {
   getBook: () => { bids: Map<number, number>; asks: Map<number, number> };
@@ -61,9 +86,14 @@ const GOLD = '#C9A646';
 
 const RECENT_TRADE_WINDOW_MS = 5_000;
 const MANUAL_SCROLL_PAUSE_MS = 5_000;
-const TICK_SAMPLE_DEPTH = 50;
+/** Grace period after the pointer leaves the ladder before auto-center may resume (fix: click-to-order race). */
+const HOVER_RECENTER_PAUSE_MS = 3_000;
 const ROW_GRID_COLUMNS_WITH_VOL = '56px 1fr 76px 64px 1fr';
 const ROW_GRID_COLUMNS_NO_VOL = '0px 1fr 76px 64px 1fr';
+/** Must match DomRowView's fixed row height below. */
+const ROW_HEIGHT_PX = 19;
+const MIN_RENDERED_ROWS = 11;
+const MAX_RENDERED_ROWS = 120;
 
 interface DomRowModel {
   idx: number;
@@ -81,52 +111,8 @@ interface DomRowModel {
 const EMPTY_ORDERS: PendingOrder[] = [];
 
 // ─── Pure helpers ────────────────────────────────────────────────────────
-
-/**
- * Minimum positive gap between adjacent sampled price levels (top ~50/side).
- * Falls back to a price-relative epsilon when the book is too thin to
- * sample (fresh connection, one-sided book, etc.).
- */
-function inferTickSize(
-  bids: Map<number, number>,
-  asks: Map<number, number>,
-  lastPrice: number | null,
-): number {
-  const prices: number[] = [];
-  let i = 0;
-  for (const p of bids.keys()) {
-    prices.push(p);
-    if (++i >= TICK_SAMPLE_DEPTH) break;
-  }
-  i = 0;
-  for (const p of asks.keys()) {
-    prices.push(p);
-    if (++i >= TICK_SAMPLE_DEPTH) break;
-  }
-
-  const fallback = lastPrice != null && lastPrice > 0 ? lastPrice * 1e-6 : 0.01;
-  if (prices.length < 2) return fallback;
-
-  const sorted = Array.from(new Set(prices)).sort((a, b) => a - b);
-  let minGap = Infinity;
-  for (let idx = 1; idx < sorted.length; idx++) {
-    const gap = sorted[idx] - sorted[idx - 1];
-    if (gap > 0 && gap < minGap) minGap = gap;
-  }
-
-  return Number.isFinite(minGap) && minGap > 0 ? minGap : fallback;
-}
-
-function inferPricePrecisionFromTick(tick: number): number {
-  if (!Number.isFinite(tick) || tick <= 0) return 2;
-  const str = tick.toString();
-  if (str.includes('e-')) {
-    const exp = str.split('e-')[1];
-    return Math.min(8, parseInt(exp, 10) || 2);
-  }
-  const dot = str.indexOf('.');
-  return dot === -1 ? 0 : Math.min(8, str.length - dot - 1);
-}
+// Tick inference / row-size math lives in domLadderMath.ts (independently
+// unit-tested) — imported above. Only display-only formatting stays local.
 
 /** K/M-minimized size formatting, 1 decimal — blank for zero/empty rows. */
 function formatQty(n: number): string {
@@ -184,7 +170,7 @@ const DomRowView = memo(function DomRowView({
   const bidPct = maxSideQty > 0 ? Math.min(100, (bidQty / maxSideQty) * 100) : 0;
   const askPct = maxSideQty > 0 ? Math.min(100, (askQty / maxSideQty) * 100) : 0;
   const volPct = maxSessionQty > 0 ? Math.min(100, (sessionQty / maxSessionQty) * 100) : 0;
-  const priceLabel = price.toFixed(pricePrecision);
+  const priceLabel = formatLadderPrice(price, pricePrecision);
 
   // Multiple working orders can land on the same row (rare — usually one).
   // Aggregate into ONE badge (sum of sizes); clicking cancels the oldest one
@@ -333,10 +319,30 @@ export function DomLadder({
   pricePrecision,
 }: DomLadderProps) {
   const tickSizeRef = useRef<number | null>(null);
+  // rowSize (price units) — mirrors the state that drives the interval, kept
+  // in a ref so the wheel handler / Recenter button (both outside the
+  // interval) can read the LATEST value synchronously.
+  const rowSizeRef = useRef<number>(0.01);
+  // The previous tick's resolved 'auto' rowSize — feeds computeAutoRowSize's
+  // hysteresis so auto doesn't flap between adjacent nice values every tick.
+  const autoRowSizeRef = useRef<number | null>(null);
+  // Session volume is keyed by ROW index (not tick index) so it survives
+  // recenters at the current rowSize — see the rowSize-change migration in
+  // the interval below for what happens when rowSize itself changes.
   const sessionVolRef = useRef<Map<number, number>>(new Map());
-  const recentTradesRef = useRef<{ idx: number; time: number; qty: number; isBuyerMaker: boolean }[]>([]);
+  // Recent trades keep the RAW price (not a precomputed idx) so a rowSize
+  // change never leaves stale buckets in this 5s rolling window — idx is
+  // derived fresh every tick from the current rowSize instead.
+  const recentTradesRef = useRef<{ price: number; time: number; qty: number; isBuyerMaker: boolean }[]>([]);
   const lastAutoCenterAtRef = useRef<number>(0);
   const lastManualScrollAtRef = useRef<number>(0);
+  // Pointer-over-ladder state — pauses auto-center so a click never lands on
+  // a row that just moved out from under the cursor (fix: click-to-order
+  // race). `hoverPauseUntilRef` extends the pause for a grace period after
+  // the pointer actually leaves.
+  const isHoveredRef = useRef<boolean>(false);
+  const hoverPauseUntilRef = useRef<number>(0);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   // Latest-value refs — read inside the interval closure so only
   // preferences.updateMs needs to restart the timer (see file header).
@@ -352,7 +358,30 @@ export function DomLadder({
   centerIdxRef.current = centerIdx;
 
   const [rows, setRows] = useState<DomRowModel[]>([]);
-  const [tick, setTick] = useState<number | null>(null);
+  const [rowDecimals, setRowDecimals] = useState<number | null>(null);
+  const [recenterAvailable, setRecenterAvailable] = useState(false);
+
+  // Fill-height (fix: only ~21 fixed rows leaving the panel half-empty) —
+  // measure the ladder body and render enough rows to cover it, clamped to
+  // a sane max. `depthCount` no longer controls this; see file header.
+  const [renderRowCount, setRenderRowCount] = useState<number>(MIN_RENDERED_ROWS);
+  const renderRowCountRef = useRef(renderRowCount);
+  renderRowCountRef.current = renderRowCount;
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const applyHeight = (heightPx: number) => {
+      const rowsFit = Math.floor(heightPx / ROW_HEIGHT_PX);
+      setRenderRowCount(Math.min(MAX_RENDERED_ROWS, Math.max(MIN_RENDERED_ROWS, rowsFit)));
+    };
+    applyHeight(el.clientHeight);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) applyHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -367,13 +396,37 @@ export function DomLadder({
       if (!currentTick || currentTick <= 0) return;
 
       const now = Date.now();
+      const prefs = prefsRef.current;
+
+      // Resolve this tick's row size (price units) — 'auto' recomputes with
+      // hysteresis (domLadderMath.ts computeAutoRowSize); a numeric
+      // preference is a tick multiple (see useDomPreferences.ts doc).
+      const rowSize = resolveRowSizeDollars(prefs.rowSize, currentTick, lastPriceRef.current, autoRowSizeRef.current);
+      if (prefs.rowSize === 'auto') autoRowSizeRef.current = rowSize;
+      const rowDecimalsNow = decimalsForStep(rowSize);
+
+      // If rowSize changed since the last tick, migrate the session-volume
+      // accumulator's buckets to the new grid instead of losing/misplacing
+      // history (rowSize rarely changes — hysteresis — so this is cheap).
+      const prevRowSize = rowSizeRef.current;
+      if (prevRowSize > 0 && Math.abs(rowSize - prevRowSize) > 1e-12 && sessionVolRef.current.size > 0) {
+        const migrated = new Map<number, number>();
+        for (const [oldIdx, qty] of sessionVolRef.current) {
+          const price = oldIdx * prevRowSize;
+          const newIdx = priceToRowIndex(price, rowSize);
+          migrated.set(newIdx, (migrated.get(newIdx) ?? 0) + qty);
+        }
+        sessionVolRef.current = migrated;
+      }
+      rowSizeRef.current = rowSize;
 
       // Session volume histogram — accumulates EVERY drained trade since
-      // mount, keyed by tick index (survives recenters).
+      // mount, keyed by row index (survives recenters; see migration above
+      // for what happens when rowSize itself changes).
       for (const t of drained) {
-        const idx = Math.round(t.price / currentTick);
+        const idx = priceToRowIndex(t.price, rowSize);
         sessionVolRef.current.set(idx, (sessionVolRef.current.get(idx) ?? 0) + t.qty);
-        recentTradesRef.current.push({ idx, time: t.time, qty: t.qty, isBuyerMaker: t.isBuyerMaker });
+        recentTradesRef.current.push({ price: t.price, time: t.time, qty: t.qty, isBuyerMaker: t.isBuyerMaker });
       }
       // Prune the rolling 5s trades window.
       const cutoff = now - RECENT_TRADE_WINDOW_MS;
@@ -381,61 +434,82 @@ export function DomLadder({
         recentTradesRef.current = recentTradesRef.current.filter((t) => t.time >= cutoff);
       }
 
-      const prefs = prefsRef.current;
       let effectiveCenterIdx = centerIdxRef.current;
+
+      // Auto-center is paused while the pointer is over the ladder (and for
+      // a grace period after it leaves) — a click must never land on a row
+      // that just moved out from under the cursor.
+      const pausedByHover = isHoveredRef.current || now < hoverPauseUntilRef.current;
 
       if (effectiveCenterIdx === null) {
         // First-available-price init.
         if (lastPriceRef.current != null && lastPriceRef.current > 0) {
-          effectiveCenterIdx = Math.round(lastPriceRef.current / currentTick);
+          effectiveCenterIdx = priceToRowIndex(lastPriceRef.current, rowSize);
           lastAutoCenterAtRef.current = now;
         }
       } else if (prefs.autoCenter && lastPriceRef.current != null) {
         const pausedByManualScroll = now - lastManualScrollAtRef.current < MANUAL_SCROLL_PAUSE_MS;
-        if (!pausedByManualScroll) {
-          const centerPriceNow = effectiveCenterIdx * currentTick;
+        if (!pausedByManualScroll && !pausedByHover) {
+          const centerPriceNow = effectiveCenterIdx * rowSize;
           const drift = Math.abs(lastPriceRef.current - centerPriceNow);
           const dueToInterval = now - lastAutoCenterAtRef.current >= prefs.autoCenterSec * 1000;
           const dueToDrift = drift >= prefs.recenterTicks * currentTick;
           if (dueToInterval || dueToDrift) {
-            effectiveCenterIdx = Math.round(lastPriceRef.current / currentTick);
+            effectiveCenterIdx = priceToRowIndex(lastPriceRef.current, rowSize);
             lastAutoCenterAtRef.current = now;
           }
         }
       }
 
-      setTick(currentTick);
+      setRowDecimals(rowDecimalsNow);
 
       if (effectiveCenterIdx === null) return; // still waiting on a first price
 
       const depthCount = prefs.depthCount;
       const centerTradeIdx = lastPriceRef.current != null
-        ? Math.round(lastPriceRef.current / currentTick)
+        ? priceToRowIndex(lastPriceRef.current, rowSize)
         : effectiveCenterIdx;
+
+      // Recenter button — only surfaces while auto-center is paused by hover
+      // AND the last-traded price has drifted entirely outside the
+      // currently rendered window, so the user is never silently lost.
+      const renderHalf = Math.floor(renderRowCountRef.current / 2);
+      setRecenterAvailable(pausedByHover && Math.abs(centerTradeIdx - effectiveCenterIdx) > renderHalf);
 
       const buyMap = new Map<number, number>();
       const sellMap = new Map<number, number>();
       for (const t of recentTradesRef.current) {
         // isBuyerMaker=true → the SELLER was the aggressor.
+        const idx = priceToRowIndex(t.price, rowSize);
         const map = t.isBuyerMaker ? sellMap : buyMap;
-        map.set(t.idx, (map.get(t.idx) ?? 0) + t.qty);
+        map.set(idx, (map.get(idx) ?? 0) + t.qty);
       }
+
+      // depthCount bounds the raw-book price WINDOW aggregated per side
+      // (± depthCount rows' worth of rowSize around center) — independent
+      // of how many rows are actually rendered (see file header). Rows
+      // further out than this window naturally render empty.
+      const depthWindow = depthCount * rowSize;
+      const windowMin = effectiveCenterIdx * rowSize - depthWindow;
+      const windowMax = effectiveCenterIdx * rowSize + depthWindow;
 
       const bidByIdx = new Map<number, number>();
       for (const [price, qty] of bids) {
-        const idx = Math.round(price / currentTick);
+        if (price < windowMin || price > windowMax) continue;
+        const idx = priceToRowIndex(price, rowSize);
         bidByIdx.set(idx, (bidByIdx.get(idx) ?? 0) + qty);
       }
       const askByIdx = new Map<number, number>();
       for (const [price, qty] of asks) {
-        const idx = Math.round(price / currentTick);
+        if (price < windowMin || price > windowMax) continue;
+        const idx = priceToRowIndex(price, rowSize);
         askByIdx.set(idx, (askByIdx.get(idx) ?? 0) + qty);
       }
 
       const bidOrdersByIdx = new Map<number, PendingOrder[]>();
       const askOrdersByIdx = new Map<number, PendingOrder[]>();
       for (const order of pendingOrdersRef.current) {
-        const idx = Math.round(order.triggerPrice / currentTick);
+        const idx = priceToRowIndex(order.triggerPrice, rowSize);
         const bucket = order.side === 'LONG' ? bidOrdersByIdx : askOrdersByIdx;
         const arr = bucket.get(idx);
         if (arr) arr.push(order);
@@ -443,11 +517,11 @@ export function DomLadder({
       }
 
       const nextRows: DomRowModel[] = [];
-      for (let i = depthCount; i >= -depthCount; i--) {
+      for (let i = renderHalf; i >= -renderHalf; i--) {
         const idx = effectiveCenterIdx + i;
         nextRows.push({
           idx,
-          price: idx * currentTick,
+          price: rowIndexToPrice(idx, rowSize, rowDecimalsNow),
           isCenter: idx === centerTradeIdx,
           bidQty: bidByIdx.get(idx) ?? 0,
           askQty: askByIdx.get(idx) ?? 0,
@@ -475,10 +549,31 @@ export function DomLadder({
     setCenterIdx((prev) => (prev === null ? prev : prev + direction));
   }, []);
 
+  const handlePointerEnter = useCallback(() => {
+    isHoveredRef.current = true;
+  }, []);
+  const handlePointerLeave = useCallback(() => {
+    isHoveredRef.current = false;
+    hoverPauseUntilRef.current = Date.now() + HOVER_RECENTER_PAUSE_MS;
+  }, []);
+
+  // Manual recenter (the floating "Recenter" button) — jumps straight to
+  // the current price's row, bypassing the hover pause the way the wheel
+  // handler already bypasses auto-center's own gating.
+  const handleRecenterClick = useCallback(() => {
+    hoverPauseUntilRef.current = 0;
+    const price = lastPriceRef.current;
+    const rowSize = rowSizeRef.current;
+    if (price == null || price <= 0 || !rowSize || rowSize <= 0) return;
+    lastAutoCenterAtRef.current = Date.now();
+    setCenterIdx(priceToRowIndex(price, rowSize));
+    setRecenterAvailable(false);
+  }, []);
+
   const handlePlaceBid = useCallback((price: number) => onPlaceLimit('LONG', price), [onPlaceLimit]);
   const handlePlaceAsk = useCallback((price: number) => onPlaceLimit('SHORT', price), [onPlaceLimit]);
 
-  const precision = pricePrecision ?? inferPricePrecisionFromTick(tick ?? 0.01);
+  const precision = pricePrecision ?? rowDecimals ?? 2;
 
   const maxSideQty = useMemo(
     () => Math.max(1e-9, ...rows.map((r) => Math.max(r.bidQty, r.askQty))),
@@ -507,7 +602,13 @@ export function DomLadder({
       </div>
 
       {/* Ladder body */}
-      <div className="relative flex-1 min-h-0 overflow-y-auto" onWheel={handleWheel}>
+      <div
+        ref={bodyRef}
+        className="relative flex-1 min-h-0 overflow-y-auto"
+        onWheel={handleWheel}
+        onMouseEnter={handlePointerEnter}
+        onMouseLeave={handlePointerLeave}
+      >
         {rows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[11px] text-[#707070]">
             {status === 'error' ? 'Feed error' : 'Connecting…'}
@@ -546,6 +647,24 @@ export function DomLadder({
               {status === 'error' ? 'Feed error' : 'Connecting…'}
             </span>
           </div>
+        )}
+
+        {/* Recenter — surfaces only while auto-center is paused by hover AND
+            price has drifted entirely outside the visible window, so the
+            user is never lost after parking the pointer on the ladder. */}
+        {isLive && recenterAvailable && (
+          <button
+            type="button"
+            onClick={handleRecenterClick}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border px-3 py-1 text-[11px] font-semibold shadow-lg backdrop-blur-sm transition-opacity duration-150"
+            style={{
+              borderColor: 'rgba(201,166,70,0.6)',
+              background: 'rgba(13,13,15,0.9)',
+              color: GOLD,
+            }}
+          >
+            Recenter
+          </button>
         )}
       </div>
     </div>
