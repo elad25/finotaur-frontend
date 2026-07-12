@@ -625,7 +625,7 @@ const TraderSection = () => {
       </div>
 
       {/* ===== FINAL CTA ===== */}
-      <div className="text-center mt-16">
+      <div className="text-center mt-10">
         <Link to="/register">
           <Button variant="gold" size="xl">
             Start 14-day free trial
