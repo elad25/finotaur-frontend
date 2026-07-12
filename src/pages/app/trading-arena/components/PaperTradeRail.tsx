@@ -1,9 +1,22 @@
 /**
  * PaperTradeRail — right-rail paper-trading panel for Trading Arena.
  *
- * Self-contained: owns a useBacktestSession scoped to `arena-paper`.
- * Receives the live tick price from the parent (ChartTab via useBinanceOrderBook).
+ * Self-contained by default: owns a useBacktestSession scoped to
+ * `arena-paper`. Receives the live tick price from the parent (ChartTab via
+ * useBinanceOrderBook).
  * No balance display, no P&L totals, no save-to-journal.
+ *
+ * Optional `session` prop (added for the DOM tab — tabs/DomTab.tsx): when a
+ * caller has ALREADY lifted its own `useBacktestSession('arena-paper')`
+ * instance (so it can also feed the same working orders into a click-to-
+ * trade surface like DomLadder.tsx), pass it here and this component uses
+ * it INSTEAD of its own. The internal hook is still called unconditionally
+ * (rules of hooks) but its state/dispatches are simply unused in that case —
+ * harmless (one extra idle reducer + localStorage read under the same key,
+ * no double-write since nothing ever dispatches into it). When `session` is
+ * omitted (ChartTab's call site — untouched), behavior is 100% unchanged.
+ * Either way there is exactly ONE live-tick fill engine running against
+ * whichever session is active (`activeSession` below).
  *
  * Live-tick engine (useEffect on livePrice):
  *   - Fills pending LIMIT/STOP orders when the tick crosses their trigger.
@@ -15,7 +28,7 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { useBacktestSession } from '@/hooks/useBacktestSession';
+import { useBacktestSession, type UseBacktestSessionReturn } from '@/hooks/useBacktestSession';
 import { cn } from '@/lib/utils';
 import { CleanSelect, type CleanSelectOption } from './CleanSelect';
 
@@ -37,9 +50,16 @@ export interface PaperTradeRailProps {
   ask: number | null;
   /** When false (non-crypto), the panel shows a disabled notice instead of the order form. */
   enabled: boolean;
+  /** Optional pre-lifted session (DOM tab) — see the file header comment. Defaults to an internal instance when omitted. */
+  session?: UseBacktestSessionReturn;
 }
 
-export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled }: PaperTradeRailProps) {
+export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled, session }: PaperTradeRailProps) {
+  // Called unconditionally (rules of hooks) even when a `session` prop is
+  // supplied — see the file header comment for why this is safe.
+  const internalSession = useBacktestSession(PAPER_BALANCE, 'arena-paper');
+  const activeSession = session ?? internalSession;
+
   const {
     state,
     openPosition,
@@ -51,7 +71,7 @@ export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled }: PaperTr
     moveToBreakeven,
     flatten,
     reverse,
-  } = useBacktestSession(PAPER_BALANCE, 'arena-paper');
+  } = activeSession;
 
   const activePos = state.activePosition;
 

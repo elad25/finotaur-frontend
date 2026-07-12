@@ -1,8 +1,8 @@
 /**
  * Trading Arena — full-screen trading workstation (admin + beta only).
  *
- * Tab restructure (2026-07): the tab bar is exactly 3 tabs — Chart,
- * Order Flow, Liquidity. The former Tape / CVD / Options / Futures / Forex
+ * Tab restructure (2026-07): the tab bar is 4 tabs — Chart, Order Flow,
+ * Liquidity, DOM. The former Tape / CVD / Options / Futures / Forex
  * tabs were removed from navigation (files kept on disk, just unrouted —
  * see tabs/TapeTab.tsx, tabs/CvdTab.tsx, tabs/LockedTab.tsx,
  * tabs/FuturesChartTab.tsx). Chart is a PLAIN candlestick chart — no order
@@ -12,6 +12,9 @@
  * 'footprint' / 'orderflow' deep links still resolve there — see
  * types.ts's toTabId. Futures capability (admin-only Databento preview)
  * lives INSIDE the Order Flow tab, switched by detected asset class.
+ * DOM (slug 'dom', component tabs/DomTab.tsx — "Arena WOW Week" S3) is a
+ * clickable price ladder with a lifted paper-trading session shared with its
+ * own PaperTradeRail instance.
  *
  * Phase 0 scaffold (still applies):
  *   - Full viewport, no app chrome (added to HIDE_CHROME_ROUTES via
@@ -22,6 +25,7 @@
  *       Chart       → FinotaurChart + BinanceSource, plain candlesticks
  *       Order Flow  → dedicated full-detail order-flow footprint (crypto + futures)
  *       Liquidity   → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
+ *       DOM         → clickable price ladder (crypto + futures via NT8 bridge)
  *
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
@@ -42,6 +46,7 @@ import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
 import { ChartTab }      from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
+import { DomTab }        from './tabs/DomTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
 import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { AccountSelector } from './components/AccountSelector';
@@ -272,6 +277,14 @@ export default function TradingArena() {
           )}
           {activeTab === 'liquidity' && (
             <LiquidityTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
+              onSelectSymbol={handleSymbolSelect}
+            />
+          )}
+          {activeTab === 'dom' && (
+            <DomTab
               symbol={symbol}
               interval={interval}
               assetClass={assetClass}
