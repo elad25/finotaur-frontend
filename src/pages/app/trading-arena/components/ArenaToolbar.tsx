@@ -14,6 +14,15 @@
  *                    lives in TradingArena.tsx (single source of truth,
  *                    shared across tabs) and persists via
  *                    useArenaIndicatorPreferences.
+ *   - Chart ▾      — always shown (all 3 tabs). TradingView-style Chart
+ *                    Settings (see ChartSettingsMenu.tsx): candle colors,
+ *                    canvas/grid/crosshair/watermark, price axis + last
+ *                    price line, timezone, price precision. Applies LIVE,
+ *                    persists globally via useChartStylePreferences, and
+ *                    reaches all 3 tabs' FinotaurChart instances through
+ *                    ChartStyleContext (provided in TradingArena.tsx) rather
+ *                    than per-tab prop threading — see chartStyleSettings.ts's
+ *                    header comment for why.
  *
  * The Chart tab is a plain candlestick chart (2026-07 restructure) — no
  * order-flow controls apply to it anymore. The full OrderFlowControls
@@ -24,7 +33,10 @@
  * Dropdown behavior (Indicators ▾) is a tiny local implementation — a
  * single `openMenu` state here plus one shared document mousedown/Escape
  * listener. No new dependency (no Radix Popover etc. — that's an intentional
- * scope choice for this stub-quality toolbar).
+ * scope choice for this stub-quality toolbar). Chart ▾ (ChartSettingsMenu)
+ * manages its own open/close state internally instead — same pattern
+ * FootprintSettingsMenu already uses — so it doesn't need to plug into this
+ * shared `openMenu` state machine.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -34,8 +46,10 @@ import type { TabId } from '../types';
 import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
 import { TimeframeMenu } from './TimeframeMenu';
 import { ToolbarTrigger } from './ToolbarTrigger';
+import { ChartSettingsMenu } from './ChartSettingsMenu';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { INDICATOR_PERIODS, type IndicatorSettings } from '@/components/charting/types';
+import type { ChartStyleSettings } from './chartStyleSettings';
 
 type MenuId = 'indicators';
 
@@ -61,6 +75,10 @@ interface ArenaToolbarProps {
   /** Current indicator on/off state — single source of truth lives in TradingArena.tsx. */
   indicatorSettings: IndicatorSettings;
   onIndicatorSettingsChange: (next: IndicatorSettings) => void;
+  /** Current chart style settings (Chart ▾ menu) — single source of truth lives in TradingArena.tsx. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
 }
 
 export function ArenaToolbar({
@@ -70,6 +88,9 @@ export function ArenaToolbar({
   activeTab,
   indicatorSettings,
   onIndicatorSettingsChange,
+  chartStyle,
+  onChartStyleChange,
+  onChartStyleReset,
 }: ArenaToolbarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,6 +141,21 @@ export function ArenaToolbar({
         value={interval}
         onChange={onIntervalChange}
         capability={intervalCapability}
+      />
+
+      <span
+        className="w-px h-5 flex-shrink-0"
+        style={{ background: 'rgba(201,166,70,0.12)' }}
+        aria-hidden="true"
+      />
+
+      {/* Chart ▾ — TradingView-style Chart Settings. Always shown (all 3
+          tabs respect the style via ChartStyleContext), unlike Indicators ▾
+          which is chart-tab only. */}
+      <ChartSettingsMenu
+        settings={chartStyle}
+        onChange={onChartStyleChange}
+        onReset={onChartStyleReset}
       />
 
       {showChartOnlyMenus && (

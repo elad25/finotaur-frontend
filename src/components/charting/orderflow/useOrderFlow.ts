@@ -19,10 +19,24 @@
 //    first paint; phase 2 continues the deeper historical walk in the
 //    background through the same progressive onChunk path phase 1 uses, so
 //    the UI never blocks on the full walk finishing.
+//  - In-flight de-dup: landing directly on the Footprint tab mounts this
+//    hook's effect AND useArenaOrderflowPrefetch.ts's Arena-mount warm-up in
+//    the same render pass, before either one's cache write lands. Before
+//    starting its own two-phase walk on a cache miss, this hook checks
+//    flowStoreCache.ts's shared in-flight-promise registry; if the prefetch
+//    already claimed this key, it awaits that walk and reuses whatever
+//    landed in the cache instead of racing a near-duplicate REST walk.
 
 import { useEffect, useRef, useState } from 'react';
 import { FlowBinStore } from './flowBinStore';
-import { buildCacheKey, getCachedTrades, putCachedTrades, evictStale } from './flowStoreCache';
+import {
+  buildCacheKey,
+  getCachedTrades,
+  putCachedTrades,
+  evictStale,
+  getInFlightBackfill,
+  registerInFlightBackfill,
+} from './flowStoreCache';
 import type { FlowBinStoreConfig, FlowTrade, TradeSource, TradeSourceStatus } from './types';
 
 const DEFAULT_BACKFILL_BARS = 40;
@@ -181,6 +195,36 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
             return;
           }
 
+          // Cache miss — before starting our own REST walk, check whether
+          // useArenaOrderflowPrefetch.ts is already backfilling this exact
+          // venue+symbol key (both effects can mount in the same render
+          // pass when the user lands directly on the Footprint tab). If so,
+          // await that walk and reuse whatever it wrote to the cache
+          // instead of racing a near-duplicate BinanceTradeSource.backfill()
+          // call.
+          const inFlight = getInFlightBackfill(cacheKey);
+          if (inFlight) {
+            await inFlight;
+            if (controller.signal.aborted) return;
+            const nowCached = getCachedTrades(cacheKey);
+            if (nowCached && nowCached.trades.length > 0) {
+              store.applyTrades(nowCached.trades);
+              trackNewest(nowCached.trades);
+              let earliestMs = nowCached.trades[0].time;
+              for (const t of nowCached.trades) {
+                if (t.time < earliestMs) earliestMs = t.time;
+              }
+              setBackfillCoveredFromSec((prev) => {
+                const candidate = Math.floor(earliestMs / 1000);
+                return prev === null ? candidate : Math.min(prev, candidate);
+              });
+              return; // covered by the prefetch's walk — no duplicate REST calls
+            }
+            // The in-flight walk finished without producing anything usable
+            // (aborted, empty, or the tab unmounted before it landed) —
+            // fall through and run our own walk below.
+          }
+
           // Cache miss — two-phase walk. Phase 1: small request budget for
           // a fast first paint. Phase 2: continue deeper with the
           // remaining budget, delivered progressively via the same onChunk
@@ -188,26 +232,30 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
           // instead of blocking on the whole walk finishing.
           const fromMs = firstLiveTime - backfillBars * intervalSec * 1000;
 
-          const phase1 = await runBackfill(fromMs, firstLiveTime, PHASE1_MAX_REQUESTS);
-          if (controller.signal.aborted) return;
-          setBackfillCoveredFromSec(Math.floor(phase1.coveredFromMs / 1000));
+          const ownWalk = (async () => {
+            const phase1 = await runBackfill(fromMs, firstLiveTime, PHASE1_MAX_REQUESTS);
+            if (controller.signal.aborted) return;
+            setBackfillCoveredFromSec(Math.floor(phase1.coveredFromMs / 1000));
 
-          // Phase 2 only makes sense if phase 1 didn't already reach the
-          // requested window's floor (i.e. there's more history left to
-          // fetch) and there's budget left for it.
-          if (phase1.coveredFromMs > fromMs && PHASE2_MAX_REQUESTS > 0) {
-            const phase2ToMs = phase1.coveredFromMs - 1;
-            if (phase2ToMs > fromMs) {
-              const phase2 = await runBackfill(fromMs, phase2ToMs, PHASE2_MAX_REQUESTS);
-              if (controller.signal.aborted) return;
-              // Coverage only ever extends further BACK in phase 2 (never
-              // forward) — take the earlier of the two reported values.
-              setBackfillCoveredFromSec((prev) => {
-                const candidate = Math.floor(phase2.coveredFromMs / 1000);
-                return prev === null ? candidate : Math.min(prev, candidate);
-              });
+            // Phase 2 only makes sense if phase 1 didn't already reach the
+            // requested window's floor (i.e. there's more history left to
+            // fetch) and there's budget left for it.
+            if (phase1.coveredFromMs > fromMs && PHASE2_MAX_REQUESTS > 0) {
+              const phase2ToMs = phase1.coveredFromMs - 1;
+              if (phase2ToMs > fromMs) {
+                const phase2 = await runBackfill(fromMs, phase2ToMs, PHASE2_MAX_REQUESTS);
+                if (controller.signal.aborted) return;
+                // Coverage only ever extends further BACK in phase 2 (never
+                // forward) — take the earlier of the two reported values.
+                setBackfillCoveredFromSec((prev) => {
+                  const candidate = Math.floor(phase2.coveredFromMs / 1000);
+                  return prev === null ? candidate : Math.min(prev, candidate);
+                });
+              }
             }
-          }
+          })();
+          registerInFlightBackfill(cacheKey, ownWalk);
+          await ownWalk;
         };
 
         walk()

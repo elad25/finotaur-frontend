@@ -111,6 +111,18 @@ export interface AutomationAgentDevice {
   agent_version: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * NT8 market-data bridge fields (see nt8Bridge.ts / fetchBridgeConfig.ts).
+   * `bridge_port` — the local WS port the desktop agent's bridge is
+   * listening on (heartbeat-reported, may drift 24888-24892 on port
+   * conflict). `bridge_secret` — a distinct credential from
+   * `device_token_hash` above: it authenticates the BROWSER to the agent's
+   * local WebSocket server, never the agent to Supabase. Both null until
+   * the agent has completed at least one config/heartbeat round-trip after
+   * pairing.
+   */
+  bridge_port: number | null;
+  bridge_secret: string | null;
   /** Derived client-side: status==='online' AND last_heartbeat_at within 90s. */
   isOnline?: boolean;
 }

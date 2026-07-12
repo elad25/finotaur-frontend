@@ -22,22 +22,53 @@ function deriveIsOnline(device: AutomationAgentDevice): boolean {
 
 const queryKey = (userId: string) => ['automation', 'agent_devices', userId] as const;
 
+const BASE_COLUMNS =
+  'id,user_id,device_name,platform,pairing_code,pairing_code_expires_at,device_token_hash,status,last_heartbeat_at,agent_version,created_at,updated_at';
+// bridge_port/bridge_secret (NT8 market-data bridge — see fetchBridgeConfig.ts)
+// are additive columns from a migration that may not be applied yet in a
+// given environment. Selected separately with a fallback below so this
+// hook (and the existing DeviceList UI it backs) keeps working even before
+// that migration lands — see the automation-bridge-fields migration file.
+const BRIDGE_COLUMNS = 'bridge_port,bridge_secret';
+
 async function fetchDevices(userId: string): Promise<AutomationAgentDevice[]> {
-  const { data, error } = await supabase
+  const firstAttempt = await supabase
     .from('automation_agent_devices')
-    .select(
-      'id,user_id,device_name,platform,pairing_code,pairing_code_expires_at,device_token_hash,status,last_heartbeat_at,agent_version,created_at,updated_at',
-    )
+    .select(`${BASE_COLUMNS},${BRIDGE_COLUMNS}`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
+
+  // Both branches are cast to a loosely-typed row shape here rather than
+  // relying on supabase-js's per-call inferred type (which differs between
+  // the two `.select()` strings below) — normalized into
+  // AutomationAgentDevice explicitly in the map() below instead.
+  let data: Partial<AutomationAgentDevice>[] | null = firstAttempt.data as Partial<AutomationAgentDevice>[] | null;
+  let error = firstAttempt.error;
+
+  if (error?.code === '42703') {
+    // Undefined column — bridge_port/bridge_secret migration not applied
+    // yet in this environment. Retry without them so the rest of the
+    // device list (pairing, status, unpair) still works.
+    const fallbackAttempt = await supabase
+      .from('automation_agent_devices')
+      .select(BASE_COLUMNS)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    data = fallbackAttempt.data as Partial<AutomationAgentDevice>[] | null;
+    error = fallbackAttempt.error;
+  }
 
   if (error?.code === '42P01') return []; // table not yet migrated — defensive
   if (error) throw error;
 
-  return ((data ?? []) as AutomationAgentDevice[]).map((d) => ({
-    ...d,
-    isOnline: deriveIsOnline(d),
-  }));
+  return (data ?? []).map((d) => {
+    const device: AutomationAgentDevice = {
+      ...(d as AutomationAgentDevice),
+      bridge_port: d.bridge_port ?? null,
+      bridge_secret: d.bridge_secret ?? null,
+    };
+    return { ...device, isOnline: deriveIsOnline(device) };
+  });
 }
 
 export function useAgentDevices() {

@@ -55,11 +55,14 @@ import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBa
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTradeSource';
+import { refineNt8TickSize } from '@/components/charting/orderflow/Nt8TradeSource';
+import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
 import type { TradeSourceStatus } from '@/components/charting/orderflow/types';
 import {
   FUTURES_CONTRACTS,
   FUTURES_ROOTS,
   frontMonthContract,
+  toNt8Symbol,
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
 import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
@@ -67,7 +70,11 @@ import { footprintSettingsToConfig, resolveEffectiveRowSize } from '../component
 import { FootprintSettingsMenu, type FootprintSettingsMenuProps } from '../components/FootprintSettingsMenu';
 import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
+import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { cn } from '@/lib/utils';
+
+/** Which futures source is active — 'nt8' is the default for ALL users; 'databento' is an admin-only delayed dev preview (see FuturesFootprintBody's compliance note). */
+export type FuturesSourceMode = 'nt8' | 'databento';
 
 interface FootprintTabProps {
   symbol: string;
@@ -130,9 +137,14 @@ const binanceSource = new BinanceSource();
 
 export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, onSelectSymbol }: FootprintTabProps) {
   const [futuresRoot, setFuturesRoot] = useState<FuturesRoot>('NQ');
+  // Futures now defaults to the NT8 bridge path for ALL users (not
+  // admin-gated) — the Databento delayed preview becomes an admin-only
+  // toggle rather than the only option. See sourceRegistry.ts's
+  // `nt8Connected` opt and Nt8TradeSource.ts.
+  const [futuresSourceMode, setFuturesSourceMode] = useState<FuturesSourceMode>('nt8');
 
   const isCrypto = assetClass === 'crypto';
-  const isFutures = assetClass === 'futures' && isAdmin;
+  const isFutures = assetClass === 'futures';
 
   if (isCrypto) {
     return (
@@ -145,18 +157,73 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
   }
 
   if (isFutures) {
+    const sourceToggle = isAdmin ? { mode: futuresSourceMode, onChange: setFuturesSourceMode } : undefined;
+
+    if (isAdmin && futuresSourceMode === 'databento') {
+      return (
+        <FuturesFootprintBody
+          interval={interval}
+          root={futuresRoot}
+          onRootChange={setFuturesRoot}
+          indicators={indicators}
+          isAdmin={isAdmin}
+          sourceToggle={sourceToggle}
+        />
+      );
+    }
+
     return (
-      <FuturesFootprintBody
+      <FuturesNt8FootprintBody
         interval={interval}
         root={futuresRoot}
         onRootChange={setFuturesRoot}
         indicators={indicators}
-        isAdmin={isAdmin}
+        sourceToggle={sourceToggle}
       />
     );
   }
 
   return <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />;
+}
+
+// ─── Shared futures source toggle (admin-only) ──────────────────────────────
+
+interface FuturesSourceToggleProps {
+  mode: FuturesSourceMode;
+  onChange: (mode: FuturesSourceMode) => void;
+}
+
+function FuturesSourceToggle({ mode, onChange }: FuturesSourceToggleProps) {
+  return (
+    <div className="flex items-center gap-0.5" role="group" aria-label="Select futures data source (admin only)">
+      <button
+        type="button"
+        onClick={() => onChange('nt8')}
+        className={cn(
+          'h-6 rounded px-2 text-[10px] font-semibold transition-all duration-150 border',
+          mode === 'nt8'
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+        title="Live data streamed from your own NinjaTrader via the FINOTAUR desktop agent"
+      >
+        NinjaTrader (live)
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('databento')}
+        className={cn(
+          'h-6 rounded px-2 text-[10px] font-semibold transition-all duration-150 border',
+          mode === 'databento'
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+        title="Admin-only delayed dev preview — polls historical Databento data every 15s"
+      >
+        Databento (delayed)
+      </button>
+    </div>
+  );
 }
 
 // ─── Shared "Settings ▾ + quick toggles" strip ──────────────────────────────
@@ -469,9 +536,11 @@ interface FuturesFootprintBodyProps {
   indicators: Indicator[];
   /** Gates the Databento futures source — this body only ever mounts when true (see FootprintTab's isFutures check), but resolveTradeSource still requires it explicitly. */
   isAdmin: boolean;
+  /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
+  sourceToggle?: FuturesSourceToggleProps;
 }
 
-function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin }: FuturesFootprintBodyProps) {
+function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, sourceToggle }: FuturesFootprintBodyProps) {
   // Server-side cache warm-up (H5, admin-only — this body only ever mounts
   // when isFutures = assetClass==='futures' && isAdmin, per FootprintTab's
   // own gate above). Fire-and-forget: pre-populates the server's durable
@@ -639,6 +708,8 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
           Delayed data — development preview
         </span>
 
+        {sourceToggle && <FuturesSourceToggle {...sourceToggle} />}
+
         <span
           className={cn(
             'flex items-center gap-1 text-[10px] font-medium ml-auto',
@@ -711,6 +782,236 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
           The CVD/Delta quick pills above remain visible for parity with the
           crypto body (same as the pre-PR-2 OrderFlowControls strip, which
           rendered the same toggles here even though they were inert). */}
+    </div>
+  );
+}
+
+// ─── Futures mode (NT8 desktop-agent bridge, ALL users) ─────────────────────
+
+interface FuturesNt8FootprintBodyProps {
+  interval: ArenaInterval;
+  root: FuturesRoot;
+  onRootChange: (root: FuturesRoot) => void;
+  indicators: Indicator[];
+  /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
+  sourceToggle?: FuturesSourceToggleProps;
+}
+
+/**
+ * NT8 bridge (nt8Bridge.ts) equivalent of FuturesFootprintBody, available to
+ * ALL users (no isAdmin gate). While the bridge isn't 'live' the chart body
+ * is replaced by Nt8ConnectPanel — the trade-source subscription (via
+ * useOrderFlow → Nt8TradeSource) stays mounted regardless, so it activates
+ * automatically the moment the bridge connects/reconnects (see
+ * nt8Bridge.ts's resubscribe-on-welcome design) without remounting hooks.
+ */
+function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sourceToggle }: FuturesNt8FootprintBodyProps) {
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
+  useEffect(() => onNt8BridgeStatus(setBridgeStatus), []);
+  const isLive = bridgeStatus === 'live';
+
+  const nt8Symbol = useMemo(() => toNt8Symbol(root), [root]);
+
+  // resolveTradeSource('futures', root, { nt8Connected: true }) never
+  // returns null for a known FUTURES_ROOTS member (see its doc comment).
+  const { source: tradeSource, tickSize: staticTickSize } = resolveTradeSource('futures', root, {
+    isAdmin: false,
+    nt8Connected: true,
+  })!;
+
+  // Same async-refine pattern as CryptoFootprintBody's refineCryptoTickSize:
+  // start from the known static default (FUTURES_CONTRACTS[root].tickSize —
+  // already correct for the 4 supported roots), upgrade to the
+  // agent-confirmed `sub_ok` tickSize if/when it arrives.
+  const [tickSize, setTickSize] = useState<number>(staticTickSize);
+  useEffect(() => {
+    setTickSize(staticTickSize);
+    let cancelled = false;
+    refineNt8TickSize(nt8Symbol, staticTickSize).then((refined) => {
+      if (!cancelled) setTickSize(refined);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [nt8Symbol, staticTickSize]);
+
+  // Persistence key is the CONTRACT ROOT — same convention as FuturesFootprintBody.
+  const { settings, update: updateSettings } = useFootprintPreferences(root);
+
+  const { from, to } = useMemo(nowWindowFutures, [nt8Symbol]);
+  const focusRange = useMemo(
+    () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
+    [to, interval],
+  );
+
+  const [suggestedRowSize, setSuggestedRowSize] = useState<number>(tickSize);
+  const hasSuggestedRef = useRef(false);
+  useEffect(() => {
+    setSuggestedRowSize(tickSize);
+    hasSuggestedRef.current = false;
+  }, [tickSize]);
+
+  const handleBarsLoad = useCallback(
+    (range: { high: number; low: number; avgBarRange: number } | null) => {
+      if (!range) return;
+      if (hasSuggestedRef.current) return;
+      const next = FlowBinStore.suggestRowSize(
+        [{ high: range.avgBarRange, low: 0 }],
+        tickSize,
+      );
+      hasSuggestedRef.current = true;
+      setSuggestedRowSize((prev) => (next === prev ? prev : next));
+    },
+    [tickSize],
+  );
+
+  const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
+  const intervalSec = intervalToSeconds(interval);
+
+  const { store, status, backfillCoveredFromSec } = useOrderFlow({
+    symbol: nt8Symbol,
+    intervalSec,
+    rowSize,
+    source: tradeSource,
+    backfillBars: 40,
+  });
+
+  const [rowSizeClamped, setRowSizeClamped] = useState(false);
+  useEffect(() => {
+    setRowSizeClamped(store.wasRowSizeClamped());
+  }, [store, rowSize]);
+
+  // Bars are derived straight from the store's raw trades — same mechanism
+  // FuturesFootprintBody uses (DatabentoBarsSource is venue-agnostic despite
+  // the name: it only reads off FlowBinStore, never Databento directly —
+  // reused as-is rather than duplicated).
+  const barsSource = useMemo(
+    () => new DatabentoBarsSource(store, intervalToSeconds(interval)),
+    [store, interval],
+  );
+
+  const [barsRefreshToken, setBarsRefreshToken] = useState(0);
+  useEffect(() => {
+    let lastBump = 0;
+    let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+    let lastTradesIngested = store.getTradesIngested();
+    const bump = () => {
+      lastBump = Date.now();
+      lastTradesIngested = store.getTradesIngested();
+      setBarsRefreshToken((n) => n + 1);
+    };
+    const unsubscribe = store.onChange(() => {
+      if (store.getTradesIngested() <= lastTradesIngested) return;
+      const elapsed = Date.now() - lastBump;
+      if (elapsed >= 2000) {
+        bump();
+      } else if (!pendingTimeout) {
+        pendingTimeout = setTimeout(() => {
+          pendingTimeout = null;
+          bump();
+        }, 2000 - elapsed);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (pendingTimeout) clearTimeout(pendingTimeout);
+    };
+  }, [store]);
+
+  let statusNote: string | undefined;
+  let historyLimitedNote: string | undefined;
+  if (!isLive) {
+    statusNote = undefined; // Nt8ConnectPanel owns the "not connected" messaging below
+  } else if (status === 'connecting' || status === 'reconnecting') {
+    statusNote = statusLabel(status);
+  }
+  if (backfillCoveredFromSec !== null) {
+    const requestedFromSec = Math.floor(Date.now() / 1000) - 40 * intervalSec;
+    if (backfillCoveredFromSec > requestedFromSec + intervalSec) {
+      historyLimitedNote = 'Order flow history limited to the most recent data';
+    }
+  }
+
+  return (
+    <div className="flex flex-1 min-h-0 w-full flex-col">
+      <div
+        className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b"
+        style={{ borderColor: 'rgba(201,166,70,0.10)' }}
+      >
+        <div className="flex items-center gap-1" role="group" aria-label="Select futures contract">
+          {FUTURES_ROOTS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onRootChange(r)}
+              className={cn(
+                'h-7 min-w-[48px] rounded px-2.5 text-[11px] font-semibold transition-all duration-150 border',
+                root === r
+                  ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+                  : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+              )}
+              title={FUTURES_CONTRACTS[r].displayName}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+        <span className="text-[11px] text-[#707070] font-mono">{nt8Symbol}</span>
+
+        {sourceToggle && <FuturesSourceToggle {...sourceToggle} />}
+
+        <span
+          className={cn('flex items-center gap-1 text-[10px] font-medium ml-auto', isLive ? 'text-emerald-400' : 'text-[#707070]')}
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', isLive ? 'bg-emerald-400' : 'bg-[#707070]')} />
+          {isLive ? 'NinjaTrader — live' : 'Not connected'}
+        </span>
+      </div>
+
+      {isLive && (
+        <FootprintToolbarStrip
+          settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+          showVolumeProfile={settings.showVolumeProfile}
+          showCvd={settings.showCvd}
+          showDelta={settings.showDelta}
+          onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
+          onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
+          onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
+          statusNote={statusNote}
+          historyLimitedNote={historyLimitedNote}
+        />
+      )}
+
+      <div className="relative flex-1 min-h-0">
+        {isLive ? (
+          <FinotaurChart
+            symbol={nt8Symbol}
+            interval={DATABENTO_INTERVAL_PLACEHOLDER}
+            from={from}
+            to={to}
+            dataSource={barsSource}
+            indicators={indicators}
+            theme="dark"
+            height="100%"
+            focusRange={focusRange}
+            refreshToken={barsRefreshToken}
+            onBarsLoad={handleBarsLoad}
+            footprint={{
+              store,
+              config: {
+                ...footprintSettingsToConfig(settings),
+                forceFullDetail: true,
+              },
+              visible: true,
+            }}
+          />
+        ) : (
+          <Nt8ConnectPanel variant="footprint" />
+        )}
+      </div>
     </div>
   );
 }

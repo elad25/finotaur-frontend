@@ -15,6 +15,18 @@
 //   'heartbeat'      — update last_heartbeat_at + status
 //   'event'          — ingest an agent-emitted event into automation_events
 //   'command_result' — report execution outcome for a claimed command
+//
+// NT8 market-data bridge (additive, 2026-07-12): 'config' responses now
+// echo the device's stored `bridge_secret` (raw — the agent needs it
+// locally to verify inbound browser `hello` handshakes on its WS bridge;
+// see automation-pair/index.ts's header comment for why this credential is
+// stored raw, not hashed, unlike the device token itself). Both 'config'
+// and 'heartbeat' accept an optional `bridge_port` field and persist it on
+// the device row. Fully backward compatible: an agent that never sends
+// `bridge_port` (v1.10.0 and earlier) simply never updates it, and a
+// device whose `bridge_secret` is still null (pre-bridge pairing, or the
+// bridge-fields migration not yet applied) gets `bridge_secret: null` back
+// — the frontend's Nt8ConnectPanel treats that as "not bridge-capable yet".
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -52,6 +64,8 @@ interface Device {
   id: string;
   user_id: string;
   status: string;
+  /** Raw NT8 bridge secret — see this file's header comment. Null until the bridge-fields migration is applied AND the device has completed a pairing that set it. */
+  bridge_secret: string | null;
 }
 
 /**
@@ -85,11 +99,23 @@ async function authenticateDevice(
 
   const hash = await sha256Hex(token);
 
-  const { data: device, error } = await supabaseAdmin
+  let { data: device, error } = await supabaseAdmin
     .from('automation_agent_devices')
-    .select('id, user_id, status')
+    .select('id, user_id, status, bridge_secret')
     .eq('device_token_hash', hash)
     .maybeSingle();
+
+  if (error?.code === '42703') {
+    // bridge_secret column not migrated yet in this environment — retry
+    // without it so existing (pre-bridge) agent traffic keeps working.
+    const fallback = await supabaseAdmin
+      .from('automation_agent_devices')
+      .select('id, user_id, status')
+      .eq('device_token_hash', hash)
+      .maybeSingle();
+    device = fallback.data ? { ...fallback.data, bridge_secret: null } : null;
+    error = fallback.error;
+  }
 
   if (error || !device) {
     return {
@@ -101,6 +127,35 @@ async function authenticateDevice(
   }
 
   return { device: device as Device };
+}
+
+/**
+ * Extracts a valid `bridge_port` (positive integer) from a request body, or
+ * undefined if absent/invalid. Shared by 'config' and 'heartbeat' — either
+ * action may carry it (the agent reports it whenever its bridge server
+ * starts/restarts, not on a fixed cadence).
+ */
+function extractBridgePort(body: Record<string, unknown>): number | undefined {
+  const raw = body.bridge_port;
+  return typeof raw === 'number' && Number.isInteger(raw) && raw > 0 ? raw : undefined;
+}
+
+/**
+ * Applies a device-row update, defensively retrying WITHOUT `bridge_port`
+ * if that column isn't migrated yet in this environment (42703) — so
+ * 'config'/'heartbeat' presence updates keep working for ALL agents
+ * (bridge-capable or not) regardless of migration state.
+ */
+async function updateDeviceRow(
+  deviceId: string,
+  update: Record<string, unknown>,
+): Promise<{ error: { code?: string; message: string } | null }> {
+  const { error } = await supabaseAdmin.from('automation_agent_devices').update(update).eq('id', deviceId);
+  if (error?.code === '42703' && 'bridge_port' in update) {
+    const { bridge_port: _omit, ...withoutBridgePort } = update;
+    return supabaseAdmin.from('automation_agent_devices').update(withoutBridgePort).eq('id', deviceId);
+  }
+  return { error };
 }
 
 // ─── Main handler ─────────────────────────────────────────────
@@ -150,11 +205,12 @@ Deno.serve(async (req: Request) => {
     if (body.agent_version !== undefined && typeof body.agent_version === 'string') {
       presenceUpdate.agent_version = body.agent_version;
     }
+    const configBridgePort = extractBridgePort(body);
+    if (configBridgePort !== undefined) {
+      presenceUpdate.bridge_port = configBridgePort;
+    }
 
-    await supabaseAdmin
-      .from('automation_agent_devices')
-      .update(presenceUpdate)
-      .eq('id', device.id);
+    await updateDeviceRow(device.id, presenceUpdate);
 
     // Pull config — the RPC returns a jsonb object. With versioning, the agent
     // sends its last-seen config_version; if nothing changed the RPC returns a
@@ -182,7 +238,13 @@ Deno.serve(async (req: Request) => {
     const { data: claimed } = await supabaseAdmin.rpc('automation_claim_commands', {
       p_device_id: device.id,
     });
-    const payload = { ...(config as Record<string, unknown>), pending_commands: claimed ?? [] };
+    const payload = {
+      ...(config as Record<string, unknown>),
+      pending_commands: claimed ?? [],
+      // NT8 bridge secret — see this file's header comment. null when the
+      // bridge-fields migration isn't applied yet or pairing predates it.
+      bridge_secret: device.bridge_secret,
+    };
 
     return new Response(
       JSON.stringify(payload),
@@ -207,11 +269,12 @@ Deno.serve(async (req: Request) => {
     if (body.agent_version !== undefined && typeof body.agent_version === 'string') {
       heartbeatUpdate.agent_version = body.agent_version;
     }
+    const heartbeatBridgePort = extractBridgePort(body);
+    if (heartbeatBridgePort !== undefined) {
+      heartbeatUpdate.bridge_port = heartbeatBridgePort;
+    }
 
-    const { error: hbError } = await supabaseAdmin
-      .from('automation_agent_devices')
-      .update(heartbeatUpdate)
-      .eq('id', device.id);
+    const { error: hbError } = await updateDeviceRow(device.id, heartbeatUpdate);
 
     if (hbError) {
       return new Response(

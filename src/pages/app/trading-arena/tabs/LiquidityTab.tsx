@@ -36,10 +36,24 @@ import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
+import type { Interval } from '@/components/charting/types';
 import { cn } from '@/lib/utils';
 import { intervalToSeconds, resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
 import { useLiquidityPreferences } from '../hooks/useLiquidityPreferences';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
+import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
+import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
+import { useLiveDepthColumns } from '../hooks/useLiveDepthColumns';
+import { resolveTradeSource } from '@/components/charting/orderflow/sourceRegistry';
+import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
+import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
+import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
+import {
+  FUTURES_CONTRACTS,
+  FUTURES_ROOTS,
+  toNt8Symbol,
+  type FuturesRoot,
+} from '@/components/charting/orderflow/futuresContracts';
 
 interface LiquidityTabProps {
   symbol: string;
@@ -131,14 +145,189 @@ const MAX_DEPTH_WINDOW_SEC = 48 * 60 * 60; // 48h
 const SLIDE_INTERVAL_MS = 30_000;
 
 export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: LiquidityTabProps) {
-  if (assetClass !== 'crypto') {
-    return <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />;
+  if (assetClass === 'crypto') {
+    // Keyed by symbol — forces a clean remount (and therefore a clean WS
+    // reconnect + wall-history refetch) on symbol change, same technique
+    // MarketScanner.tsx uses for its own WorkstationInner.
+    return <LiquidityBody key={symbol} symbol={symbol} interval={interval} />;
   }
 
-  // Keyed by symbol — forces a clean remount (and therefore a clean WS
-  // reconnect + wall-history refetch) on symbol change, same technique
-  // MarketScanner.tsx uses for its own WorkstationInner.
-  return <LiquidityBody key={symbol} symbol={symbol} interval={interval} />;
+  if (assetClass === 'futures') {
+    // NT8 bridge path, available to ALL users — mirrors FootprintTab.tsx's
+    // futures rewire. No admin gate (Databento never had a depth/L2 feed;
+    // this is exclusively an NT8-bridge surface).
+    return <FuturesLiquidityBody interval={interval} />;
+  }
+
+  return <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />;
+}
+
+// ─── Futures mode (NT8 desktop-agent bridge) ────────────────────────────────
+
+// Placeholder Interval passed to FinotaurChart — the actual bucket size
+// comes from DatabentoBarsSource's intervalSecOverride (below), same
+// convention as FootprintTab.tsx's DATABENTO_INTERVAL_PLACEHOLDER.
+const NT8_INTERVAL_PLACEHOLDER: Interval = '1m';
+
+// NT8 futures resting size has no natural USD notional (it's in contracts,
+// not base-asset units) — approximate one via the contract's point value so
+// the existing DepthMatrixLayer floor/color pipeline (which decodes q as
+// USD via qToUsd) still produces a sane heatmap. See
+// useLiveDepthColumns.ts's header comment for the full tradeoff writeup.
+const FUTURES_LOOKBACK_BARS = 600;
+const FUTURES_VISIBLE_BARS = 120;
+
+function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
+  const [root, setRoot] = useState<FuturesRoot>('NQ');
+
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
+  useEffect(() => onNt8BridgeStatus(setBridgeStatus), []);
+  const isLive = bridgeStatus === 'live';
+
+  const nt8Symbol = useMemo(() => toNt8Symbol(root), [root]);
+  const intervalSec = intervalToSeconds(interval);
+
+  // resolveTradeSource('futures', root, { nt8Connected: true }) never
+  // returns null for a known FUTURES_ROOTS member (see its doc comment).
+  const { source: tradeSource, tickSize } = resolveTradeSource('futures', root, {
+    isAdmin: false,
+    nt8Connected: true,
+  })!;
+
+  // Candles are derived from the SAME trade store the (separate) NT8
+  // footprint tab uses, purely to feed FinotaurChart's candlestick series
+  // under the depth heatmap — no footprint overlay is rendered here.
+  const { store } = useOrderFlow({
+    symbol: nt8Symbol,
+    intervalSec,
+    rowSize: tickSize,
+    source: tradeSource,
+    backfillBars: FUTURES_LOOKBACK_BARS,
+  });
+
+  const barsSource = useMemo(() => new DatabentoBarsSource(store, intervalSec), [store, intervalSec]);
+
+  const [barsRefreshToken, setBarsRefreshToken] = useState(0);
+  useEffect(() => {
+    let lastBump = 0;
+    let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+    let lastTradesIngested = store.getTradesIngested();
+    const bump = () => {
+      lastBump = Date.now();
+      lastTradesIngested = store.getTradesIngested();
+      setBarsRefreshToken((n) => n + 1);
+    };
+    const unsubscribe = store.onChange(() => {
+      if (store.getTradesIngested() <= lastTradesIngested) return;
+      const elapsed = Date.now() - lastBump;
+      if (elapsed >= 2000) {
+        bump();
+      } else if (!pendingTimeout) {
+        pendingTimeout = setTimeout(() => {
+          pendingTimeout = null;
+          bump();
+        }, 2000 - elapsed);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (pendingTimeout) clearTimeout(pendingTimeout);
+    };
+  }, [store]);
+
+  const book = useNt8OrderBook(nt8Symbol);
+  const pointValue = FUTURES_CONTRACTS[root].pointValue;
+  const depth = useLiveDepthColumns({
+    getBook: book.getBook,
+    isLive: book.status === 'live',
+    notionalMultiplier: pointValue,
+  });
+
+  const [timeTick, setTimeTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTimeTick((t) => t + 1), SLIDE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const { from, to } = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return { from: now - FUTURES_LOOKBACK_BARS * intervalSec, to: now };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- timeTick intentionally drives recompute
+  }, [intervalSec, timeTick]);
+
+  const focusRange = useMemo(() => ({ from: to - FUTURES_VISIBLE_BARS * intervalSec, to }), [to, intervalSec]);
+
+  const [timeFitToken, setTimeFitToken] = useState(0);
+  useEffect(() => {
+    setTimeFitToken((t) => t + 1);
+  }, [root, interval]);
+
+  const recordingLabel = depth.recordingSinceMs
+    ? new Date(depth.recordingSinceMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <div className="flex flex-1 min-h-0 w-full flex-col">
+      <div className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b flex-shrink-0" style={{ borderColor: 'rgba(201,166,70,0.10)' }}>
+        <div className="flex items-center gap-1" role="group" aria-label="Select futures contract">
+          {FUTURES_ROOTS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRoot(r)}
+              className={cn(
+                'h-7 min-w-[48px] rounded px-2.5 text-[11px] font-semibold transition-all duration-150 border',
+                root === r
+                  ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+                  : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+              )}
+              title={FUTURES_CONTRACTS[r].displayName}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        {isLive && recordingLabel && (
+          <span className="text-[10px] text-[#707070]" aria-live="polite">
+            Recording depth since {recordingLabel} — depth history starts at connection
+          </span>
+        )}
+
+        <span
+          className={cn('flex items-center gap-1 text-[10px] font-medium ml-auto', isLive ? 'text-emerald-400' : 'text-[#707070]')}
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', isLive ? 'bg-emerald-400' : 'bg-[#707070]')} />
+          {isLive ? 'NinjaTrader — live' : 'Not connected'}
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0">
+        {isLive ? (
+          <FinotaurChart
+            symbol={nt8Symbol}
+            interval={NT8_INTERVAL_PLACEHOLDER}
+            from={from}
+            to={to}
+            dataSource={barsSource}
+            theme="dark"
+            height="100%"
+            focusRange={focusRange}
+            timeFitToken={timeFitToken}
+            refreshToken={barsRefreshToken}
+            wallRenderMode="matrix"
+            depthMatrixColumns={depth.columns}
+            depthMatrixBinSize={depth.binSize}
+            depthMatrixSizeFilterPct={5}
+            depthMatrixFloorUsd={0}
+            depthMatrixCandleIntervalMs={intervalSec * 1000}
+          />
+        ) : (
+          <Nt8ConnectPanel variant="depth" />
+        )}
+      </div>
+    </div>
+  );
 }
 
 interface LiquidityBodyProps {
