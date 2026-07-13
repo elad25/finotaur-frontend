@@ -3,6 +3,8 @@
 // Email Templates for Affiliate Program
 // ============================================
 
+import { COMMISSION_RATE_PCT } from '../affiliateTerms';
+
 interface ApprovalEmailData {
   fullName: string;
   affiliateCode: string;
@@ -401,7 +403,7 @@ export function generateApprovalEmail(data: ApprovalEmailData): { html: string; 
                       <tr>
                         <td style="padding: 8px 0;">
                           <span style="color: #D4AF37; font-size: 16px;">✓</span>
-                          <span style="color: #cccccc; font-size: 15px; margin-left: 10px;">10% commission on every successful referral for 12 months</span>
+                          <span style="color: #cccccc; font-size: 15px; margin-left: 10px;">${COMMISSION_RATE_PCT}% commission on every successful referral for 12 months</span>
                         </td>
                       </tr>
                       <tr>
@@ -483,7 +485,7 @@ YOUR AFFILIATE CODE: ${affiliateCode}
 Your referrals get ${discountPercent}% off their subscription (valid on all plans).
 
 As a Finotaur Affiliate, you'll enjoy:
-• 10% commission on every successful referral for 12 months
+• ${COMMISSION_RATE_PCT}% commission on every successful referral for 12 months
 • Your referrals get ${discountPercent}% off their subscription
 • Real-time tracking dashboard
 • Monthly payouts via Whop with detailed reports

@@ -18,6 +18,7 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { COMMISSION_RATE_PCT } from '../affiliateTerms';
 
 // ===============================================
 // TYPES - Matching Database Schema v2.6.0
@@ -249,13 +250,9 @@ export const affiliateKeys = {
 // HELPER FUNCTIONS
 // ===============================================
 
-function getCommissionRate(tier: string): number {
-  switch (tier) {
-    case 'tier_3': return 0.20;
-    case 'tier_2': return 0.15;
-    case 'tier_1':
-    default: return 0.10;
-  }
+// flat 20% per affiliate_config; see affiliateTerms
+function getCommissionRate(_tier: string): number {
+  return COMMISSION_RATE_PCT / 100;
 }
 
 function getClientsToNextTier(tier: string, currentClients: number): number {

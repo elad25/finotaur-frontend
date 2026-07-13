@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { toast } from 'sonner';
+import { COMMISSION_RATE_PCT } from '../affiliateTerms';
 import type {
   Affiliate,
   AffiliateApplication,
@@ -585,13 +586,9 @@ export async function trackReferralSignup(params: {
 // HELPER FUNCTIONS
 // ============================================
 
-function getCommissionRate(tier: string): number {
-  switch (tier) {
-    case 'tier_3': return 0.20;
-    case 'tier_2': return 0.15;
-    case 'tier_1':
-    default: return 0.10;
-  }
+// flat 20% per affiliate_config; see affiliateTerms
+function getCommissionRate(_tier: string): number {
+  return COMMISSION_RATE_PCT / 100;
 }
 
 function getClientsToNextTier(tier: string, currentClients: number): number {
