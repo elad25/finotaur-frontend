@@ -46,6 +46,10 @@ export default function AuthLandingGate() {
     return () => clearTimeout(timer);
   }, []);
 
+  // TEMP DIAGNOSTIC (remove before final merge): trace the gate decision live.
+  // eslint-disable-next-line no-console
+  console.log('[AuthLandingGate]', { user: !!user, isLoading, graceElapsed, path: typeof window !== 'undefined' ? window.location.pathname : '' });
+
   // Session delivered → continue to the proven onboarding screen (→ /app/home).
   if (user) {
     return <Navigate to="/welcome" replace />;
