@@ -48,6 +48,7 @@ const CONTENT_VALUES: FootprintSettings['content'][] = ['bidAsk', 'delta', 'volu
 const LAYOUT_VALUES: FootprintSettings['layout'][] = ['numbers', 'histogram'];
 const COLOR_SCHEME_VALUES: FootprintSettings['colorScheme'][] = ['delta', 'volumeHeat', 'solid'];
 const ROW_SIZE_MODE_VALUES: FootprintSettings['rowSizeMode'][] = ['auto', 'price', 'ticks'];
+const VALUES_DIVIDER_VALUES: FootprintSettings['valuesDivider'][] = [1, 1000];
 
 function asBool(v: unknown, fallback: boolean): boolean {
   return typeof v === 'boolean' ? v : fallback;
@@ -64,6 +65,10 @@ function asNullableNumber(v: unknown, fallback: number | null): number | null {
 
 function asOneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+}
+
+function asOneOfNumber<T extends number>(v: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof v === 'number' && (allowed as readonly number[]).includes(v) ? (v as T) : fallback;
 }
 
 /**
@@ -100,6 +105,12 @@ export function sanitizeFootprintSettings(raw: unknown, fallback: FootprintSetti
       minDelta: asBool(p.statsRows?.minDelta, fallback.statsRows.minDelta),
       sessionDelta: asBool(p.statsRows?.sessionDelta, fallback.statsRows.sessionDelta),
     },
+    valuesDivider: asOneOfNumber(p.valuesDivider, VALUES_DIVIDER_VALUES, fallback.valuesDivider),
+    minCellPxForText: asNumber(p.minCellPxForText, fallback.minCellPxForText),
+    imbalanceMinDiff: asNumber(p.imbalanceMinDiff, fallback.imbalanceMinDiff),
+    imbalanceIgnoreZeros: asBool(p.imbalanceIgnoreZeros, fallback.imbalanceIgnoreZeros),
+    imbalanceBold: asBool(p.imbalanceBold, fallback.imbalanceBold),
+    proportionUpperPercentile: asNumber(p.proportionUpperPercentile, fallback.proportionUpperPercentile),
   };
 }
 

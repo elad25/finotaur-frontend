@@ -78,6 +78,12 @@ export const FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT_EXIT = 9;
  * entering 'full'. This is the PRIMARY progressive-disclosure boundary
  * (dxFeed/Motivewave-style): zoomed out = plain candles, zoom in past this =
  * full bid×ask numbers appear over the candles.
+ *
+ * Also the FALLBACK for `FootprintConfig.minCellPxForText` (ATAS "Width to
+ * show text") — see drawCandleFootprint's `showText` gate in
+ * footprintRender.ts. Every caller that doesn't set `minCellPxForText`
+ * (i.e. every caller from before that field existed) keeps reading this
+ * exact constant, so behavior is unchanged.
  */
 export const FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT = 50;
 /**

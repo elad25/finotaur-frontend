@@ -145,6 +145,51 @@ describe('footprintSettingsToConfig', () => {
     const config = footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, autoTransform: false });
     expect(config.autoTransformMinPx).toBeUndefined();
   });
+
+  it('new ATAS-parity fields map straight through at their defaults', () => {
+    // NOTE: DEFAULT_FOOTPRINT_SETTINGS.minCellPxForText (40, the user-facing
+    // Settings-dialog default) is DELIBERATELY different from
+    // DEFAULT_FOOTPRINT_CONFIG.minCellPxForText (50, FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT
+    // — the renderer's own fallback for callers that never set the field at
+    // all) — see footprintSettings.ts's DEFAULT_FOOTPRINT_MIN_CELL_PX_FOR_TEXT
+    // doc comment. Every other new field IS a byte-identical no-op default.
+    const config = footprintSettingsToConfig(DEFAULT_FOOTPRINT_SETTINGS);
+    expect(config.valuesDivider).toBe(DEFAULT_FOOTPRINT_CONFIG.valuesDivider);
+    expect(config.minCellPxForText).toBe(DEFAULT_FOOTPRINT_SETTINGS.minCellPxForText);
+    expect(config.imbalanceMinDiff).toBe(DEFAULT_FOOTPRINT_CONFIG.imbalanceMinDiff);
+    expect(config.imbalanceIgnoreZeros).toBe(DEFAULT_FOOTPRINT_CONFIG.imbalanceIgnoreZeros);
+    expect(config.imbalanceBold).toBe(DEFAULT_FOOTPRINT_CONFIG.imbalanceBold);
+    expect(config.proportionUpperPercentile).toBe(DEFAULT_FOOTPRINT_CONFIG.proportionUpperPercentile);
+  });
+
+  it('valuesDivider/imbalanceIgnoreZeros/imbalanceBold plumb through unchanged (non-clamped fields)', () => {
+    const config = footprintSettingsToConfig({
+      ...DEFAULT_FOOTPRINT_SETTINGS,
+      valuesDivider: 1,
+      imbalanceIgnoreZeros: false,
+      imbalanceBold: false,
+    });
+    expect(config.valuesDivider).toBe(1);
+    expect(config.imbalanceIgnoreZeros).toBe(false);
+    expect(config.imbalanceBold).toBe(false);
+  });
+
+  it('minCellPxForText is clamped to [20, 80]', () => {
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, minCellPxForText: 5 }).minCellPxForText).toBe(20);
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, minCellPxForText: 500 }).minCellPxForText).toBe(80);
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, minCellPxForText: 42 }).minCellPxForText).toBe(42);
+  });
+
+  it('proportionUpperPercentile is clamped to [90, 100]', () => {
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, proportionUpperPercentile: 50 }).proportionUpperPercentile).toBe(90);
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, proportionUpperPercentile: 999 }).proportionUpperPercentile).toBe(100);
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, proportionUpperPercentile: 95 }).proportionUpperPercentile).toBe(95);
+  });
+
+  it('imbalanceMinDiff is floored at 0 (never negative)', () => {
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, imbalanceMinDiff: -5 }).imbalanceMinDiff).toBe(0);
+    expect(footprintSettingsToConfig({ ...DEFAULT_FOOTPRINT_SETTINGS, imbalanceMinDiff: 25 }).imbalanceMinDiff).toBe(25);
+  });
 });
 
 describe('snapRowSizePriceToTick', () => {

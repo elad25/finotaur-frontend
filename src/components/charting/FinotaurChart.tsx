@@ -1292,9 +1292,12 @@ export function FinotaurChart({
 
   // ─── Muted candles (footprint overlay dimming) ──────────────
   // When `mutedCandles` toggles on, applyOptions() the candle series colors
-  // down to a thin semi-transparent skeleton so the footprint clusters read
-  // clearly on top (dxFeed-reference look). Toggling off restores the normal
-  // theme palette. Undefined/false (every existing caller) never runs this —
+  // down to a near-invisible thin skeleton — the body fill is almost fully
+  // transparent so the bid×ask cluster numbers own the cell visually; the
+  // FootprintLayer's own hairline-wick + 2px-body OHLC skeleton strip (drawn
+  // at detail === 'full') is the actual OHLC reference while clusters show,
+  // not this series (ATAS-style). Toggling off restores the normal theme
+  // palette. Undefined/false (every existing caller) never runs this —
   // additive, zero behavior change.
   useEffect(() => {
     const series = seriesRef.current;
@@ -1302,10 +1305,10 @@ export function FinotaurChart({
     try {
       if (mutedCandles) {
         series.applyOptions({
-          upColor: 'rgba(34, 197, 94, 0.25)',
-          downColor: 'rgba(220, 38, 38, 0.25)',
-          borderUpColor: 'rgba(34, 197, 94, 0.35)',
-          borderDownColor: 'rgba(220, 38, 38, 0.35)',
+          upColor: 'rgba(34, 197, 94, 0.05)',
+          downColor: 'rgba(220, 38, 38, 0.05)',
+          borderUpColor: 'rgba(34, 197, 94, 0.10)',
+          borderDownColor: 'rgba(220, 38, 38, 0.10)',
           wickUpColor: 'rgba(22, 163, 74, 0.25)',
           wickDownColor: 'rgba(185, 28, 28, 0.25)',
         });

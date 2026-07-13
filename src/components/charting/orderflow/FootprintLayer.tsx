@@ -49,13 +49,27 @@ import {
   type FootprintDetailLevel,
   type PreparedCandleDraw,
 } from './footprintRender';
-import { FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH } from './footprintTheme';
+import {
+  FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
+  FOOTPRINT_TOTALS_FONT_SIZE,
+  FOOTPRINT_FONT_FAMILY,
+} from './footprintTheme';
 import { MagnifierPopup } from './MagnifierPopup';
+import { getRequestHistoryForStore } from './useOrderFlow';
 
 /** Dwell time (ms) the cursor must stay over a candle before the Magnifier popup appears. */
 const MAGNIFIER_HOVER_DELAY_MS = 150;
 /** Horizontal offset (px) from the cursor so the popup never covers the hovered candle. */
 const MAGNIFIER_CURSOR_OFFSET_X = 16;
+
+/** Minimum spacing (ms) between onHistoryNeeded/requestHistory firings from the draw loop — a pan gesture redraws every frame, but the underlying REST walk (useOrderFlow.ts) is already debounced/single-flight, so this is just a cheap guard against calling into that machinery 60x/sec. */
+const HISTORY_NEEDED_MIN_INTERVAL_MS = 1000;
+
+// F7 (grid-continuity) — empty-bar stats-cell placeholder colors. Same
+// zinc-400 hue as FOOTPRINT_NEUTRAL_TEXT but low-opacity, so a bar with no
+// footprint data yet reads as "no data" rather than a real (zero-value) row.
+const FOOTPRINT_EMPTY_CELL_BORDER = 'rgba(161, 161, 170, 0.18)';
+const FOOTPRINT_EMPTY_CELL_TEXT = 'rgba(161, 161, 170, 0.35)';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +108,23 @@ export interface FootprintLayerProps {
    * it simply skips the skeleton (no behavior change for other callers).
    */
   bars?: Bar[];
+  /**
+   * Fired when the visible window's left edge extends earlier than the
+   * history the store currently has loaded — i.e. the user panned left past
+   * the backfilled edge. `fromMs` is the requested epoch-ms edge (see the
+   * draw loop's `fromSec*1000` call site). Throttled to at most once per
+   * second and only re-fired when the requested edge moves earlier.
+   *
+   * Optional — when omitted (every current caller, since FinotaurChart.tsx
+   * instantiates this layer without wiring a new prop), the layer still
+   * calls into useOrderFlow.ts's `requestHistory` directly via
+   * `getRequestHistoryForStore(store)`, a side-channel keyed by the same
+   * `store` instance this component already receives (see useOrderFlow.ts's
+   * registry doc comment for why: it avoids threading a new callback prop
+   * through FinotaurChart.tsx). This prop exists for callers/tests that want
+   * to observe or override that lookup directly.
+   */
+  onHistoryNeeded?: (fromMs: number) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -108,6 +139,7 @@ export function FootprintLayer({
   height,
   onStageChange,
   bars,
+  onHistoryNeeded,
 }: FootprintLayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -123,6 +155,7 @@ export function FootprintLayer({
   const storeRef = useRef<FlowBinStore>(store);
   const onStageChangeRef = useRef<((stage: FootprintDetailLevel) => void) | undefined>(onStageChange);
   const barsRef = useRef<Bar[] | undefined>(bars);
+  const onHistoryNeededRef = useRef<((fromMs: number) => void) | undefined>(onHistoryNeeded);
 
   configRef.current = config;
   visibleRef.current = visible;
@@ -131,6 +164,17 @@ export function FootprintLayer({
   storeRef.current = store;
   onStageChangeRef.current = onStageChange;
   barsRef.current = bars;
+  onHistoryNeededRef.current = onHistoryNeeded;
+
+  // ── Pan-triggered history-request throttle state (F7) ───────────────────
+  // Last fromMs actually fired (null = never fired this store lifetime) and
+  // the wall-clock time it fired at — the draw loop only re-fires when the
+  // requested edge moves EARLIER than the last one AND at least
+  // HISTORY_NEEDED_MIN_INTERVAL_MS has elapsed (see maybeRequestHistory
+  // below). Reset whenever the store identity changes (below), since a new
+  // store means a fresh coverage state.
+  const lastHistoryRequestFromMsRef = useRef<number | null>(null);
+  const lastHistoryRequestFireAtRef = useRef<number>(0);
 
   // ── Magnifier hover state ────────────────────────────────────────────────
   // React state (NOT rAF-driven) — the popup only repaints when the hovered
@@ -205,6 +249,10 @@ export function FootprintLayer({
     preparedCacheRef.current.clear();
     mergeFactorCacheRef.current.clear();
     statsCacheRef.current.clear();
+    // New store = fresh coverage state — forget the last-requested edge so a
+    // history request isn't wrongly suppressed as "hasn't moved earlier".
+    lastHistoryRequestFromMsRef.current = null;
+    lastHistoryRequestFireAtRef.current = 0;
     return unsubscribe;
   }, [store]);
 
@@ -236,7 +284,7 @@ export function FootprintLayer({
     dirtyRef.current = true;
     preparedCacheRef.current.clear();
     mergeFactorCacheRef.current.clear();
-  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly, config.showValueArea]);
+  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly, config.showValueArea, config.imbalanceMinDiff, config.imbalanceIgnoreZeros, config.proportionUpperPercentile]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
   useEffect(() => {
@@ -345,6 +393,30 @@ export function FootprintLayer({
     const seriesInstance = series;
     let running = true;
 
+    // F7 (pan-left backfill trigger): asks for more history when the
+    // visible window's left edge outruns what's currently loaded. Throttled
+    // to at most once/sec and only re-fires when `fromMs` moves EARLIER than
+    // the last fired value — a pan that stays within already-requested
+    // territory (or pans back right) is a no-op here (useOrderFlow.ts's
+    // requestHistory is itself debounced/single-flight/coverage-checked too,
+    // this is just a cheap guard against calling into it on every dirty
+    // frame). Reaches the actual backfill via BOTH the optional
+    // `onHistoryNeeded` prop (if a caller supplied one) and the store-keyed
+    // registry lookup (getRequestHistoryForStore) — see FootprintLayerProps'
+    // onHistoryNeeded doc comment for why both paths exist.
+    function maybeRequestHistory(fromMs: number) {
+      const lastRequested = lastHistoryRequestFromMsRef.current;
+      if (lastRequested !== null && fromMs >= lastRequested) return; // hasn't moved earlier
+      const now = Date.now();
+      if (now - lastHistoryRequestFireAtRef.current < HISTORY_NEEDED_MIN_INTERVAL_MS) return;
+
+      lastHistoryRequestFromMsRef.current = fromMs;
+      lastHistoryRequestFireAtRef.current = now;
+
+      onHistoryNeededRef.current?.(fromMs);
+      getRequestHistoryForStore(storeRef.current)?.(fromMs);
+    }
+
     function drawFrame() {
       if (!running) return;
       rafRef.current = requestAnimationFrame(drawFrame);
@@ -422,7 +494,14 @@ export function FootprintLayer({
         const fromSec = Math.floor(visRange.from as unknown as number) - 3600;
         const toSec = Math.ceil(visRange.to as unknown as number) + 3600;
         const candles = activeStore.getRange(fromSec, toSec);
-        if (candles.length === 0) return;
+        if (candles.length === 0) {
+          // The store returned NOTHING for this window at all — always worth
+          // asking for more history regardless of zoom (there's nothing to
+          // show at any detail level either way; see the `detail`-gated
+          // request further below for the "partially loaded" case).
+          maybeRequestHistory(fromSec * 1000);
+          return;
+        }
 
         // Prefer the store's own config (authoritative, set by useOrderFlow /
         // OrderFlowControls) over inference from loaded data. Inference
@@ -505,6 +584,15 @@ export function FootprintLayer({
           onStageChangeRef.current?.(detail);
         }
         if (detail === 'hidden') return;
+
+        // F7 (pan-left backfill trigger, "partially loaded" case): the store
+        // DID return candles for this window, but the earliest one is later
+        // than the window's own left edge — the user panned into a region
+        // that isn't backfilled yet. `candles` is ascending by time (see
+        // FlowBinStore.getRange), so candles[0] is the earliest.
+        if (fromSec < candles[0].time) {
+          maybeRequestHistory(fromSec * 1000);
+        }
 
         // Live edge = x of the last visible logical bar (right edge of the pane
         // when the chart is scrolled to "now", else the rightmost resolvable bar).
@@ -667,7 +755,36 @@ export function FootprintLayer({
           }
         }
 
-        if (statsBars.length > 0) {
+        // F7 (grid-continuity): placeholder cells for visible OHLC bars that
+        // have NO footprint data loaded yet (the requestHistory backfill
+        // triggered above hasn't landed for them). Without this the stats
+        // strip visually stops partway through the visible window instead
+        // of reading as a continuous grid. Built from `bars` (the
+        // candlestick series' own OHLC array — loaded independently of
+        // footprint/trade data, so it's the authoritative "which bar times
+        // exist on screen" source) rather than `candles`, since a bar with
+        // no footprint data never appears in `candles` at all (see
+        // FlowBinStore.getRange — it only returns candles with landed
+        // trades). Only meaningful when the stats strip itself would render
+        // (needsStats) and there's an OHLC bars source to know which times
+        // SHOULD have a column.
+        const emptyStatsBars: { leftX: number; rightX: number }[] = [];
+        if (needsStats && allBars && allBars.length > 0) {
+          const presentTimes = new Set(candles.map((c) => c.time));
+          for (const bar of allBars) {
+            const t = bar.time as unknown as number;
+            if (t < fromSec || t > toSec) continue;
+            if (presentTimes.has(t)) continue; // has real footprint data — drawn above
+            const x = timeToX(t);
+            if (x + candleWidthPx / 2 < 0 || x - candleWidthPx / 2 > paneW) continue; // cull
+            const barLeftX = Math.max(0, x - candleWidthPx / 2);
+            const barRightX = Math.min(paneW, x + candleWidthPx / 2);
+            if (barRightX <= barLeftX) continue;
+            emptyStatsBars.push({ leftX: barLeftX, rightX: barRightX });
+          }
+        }
+
+        if (needsStats && (statsBars.length > 0 || emptyStatsBars.length > 0)) {
           const rowMaxima: ClusterStatsRowMaxima = {
             volume: 0,
             delta: 0,
@@ -691,6 +808,13 @@ export function FootprintLayer({
             rowMaxima,
             statsRows: config.statsRows,
           });
+          if (emptyStatsBars.length > 0) {
+            drawEmptyStatsPlaceholders(ctx, emptyStatsBars, {
+              top: cssH - statsBandHeight,
+              rowHeightPx: enabledStatsRowCount > 0 ? statsBandHeight / enabledStatsRowCount : 0,
+              rowCount: enabledStatsRowCount,
+            });
+          }
         } else if (totalsBars.length > 0) {
           const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;
           for (const bar of totalsBars) {
@@ -775,6 +899,53 @@ export function FootprintLayer({
 }
 
 // ─── Local helpers (frame-cheap; no heavy scans) ────────────────────────────
+
+/**
+ * F7 (grid-continuity): draws a placeholder stats-cell frame (subtle border
+ * + centered em-dash, low opacity) for a visible OHLC bar that has no
+ * footprint data loaded yet — keeps the Cluster Statistics strip reading as
+ * a CONTINUOUS grid across the visible window instead of visually stopping
+ * at the backfilled edge (see the draw loop's emptyStatsBars build). Kept
+ * local to this file (rather than added to footprintRender.ts) since this
+ * task's scope is limited to useOrderFlow.ts + FootprintLayer.tsx.
+ * Deliberately minimal — no heat-chip tinting, no per-row values, just
+ * enough visual structure that the strip doesn't look broken while
+ * requestHistory's incremental backfill (useOrderFlow.ts) is still landing.
+ */
+function drawEmptyStatsPlaceholders(
+  ctx: CanvasRenderingContext2D,
+  bars: { leftX: number; rightX: number }[],
+  bounds: { top: number; rowHeightPx: number; rowCount: number },
+): void {
+  const { top, rowHeightPx, rowCount } = bounds;
+  if (rowHeightPx <= 0 || rowCount <= 0) return;
+
+  ctx.font = `${FOOTPRINT_TOTALS_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+
+  for (const bar of bars) {
+    const width = bar.rightX - bar.leftX;
+    if (width <= 0) continue;
+
+    for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+      const rowTop = top + rowIdx * rowHeightPx;
+      const rowMid = rowTop + rowHeightPx / 2;
+
+      // Subtle cell border — same row height as real cells, low-opacity so
+      // it reads as "no data" rather than a real (zero-value) row.
+      ctx.strokeStyle = FOOTPRINT_EMPTY_CELL_BORDER;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bar.leftX + 0.5, rowTop + 0.5, Math.max(0, width - 1), Math.max(0, rowHeightPx - 1));
+
+      ctx.fillStyle = FOOTPRINT_EMPTY_CELL_TEXT;
+      ctx.fillText('—', bar.leftX + width / 2, rowMid);
+    }
+  }
+
+  ctx.textAlign = 'left'; // restore canvas default, mirrors drawStatsBandAt
+}
+
 // FALLBACK ONLY — the primary source of rowSize/intervalSec is now
 // store.getConfig() (see the draw loop above). These infer from loaded data
 // and are used only when the store's config is unset or invalid (rowSize/
