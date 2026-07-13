@@ -120,11 +120,23 @@ export type IndicatorType =
  *  - MACD: ignored (fast / slow / signal are fixed at 12 / 26 / 9 in Phase 2.5).
  *
  * `color` is optional — when omitted, FinotaurChart picks from its palette.
+ *
+ * `macdParams` / `bbandsStdDev` (added for the Trading Arena's editable
+ * Indicators popup — see trading-arena/components/indicatorsSettings.ts) are
+ * OPTIONAL per-indicator overrides for the two parameterized types. When
+ * omitted, FinotaurChart's compute calls fall back to their own hardcoded
+ * defaults (12/26/9 for MACD, stdDev=2 for BBANDS) — so every existing
+ * caller (Journal/Backtest/ReplayChart) that never sets these fields is
+ * unaffected.
  */
 export interface Indicator {
   type: IndicatorType;
   period: number;
   color?: string;
+  /** MACD-only override for the fast/slow/signal EMA periods. */
+  macdParams?: { fast: number; slow: number; signal: number };
+  /** BBANDS-only override for the standard-deviation multiplier. */
+  bbandsStdDev?: number;
 }
 
 /**

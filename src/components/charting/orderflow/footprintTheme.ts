@@ -142,13 +142,20 @@ export const FOOTPRINT_BIDASK_BG_STRONG_ALPHA = 0.32;
 
 /**
  * Candle skeleton strip (NT/MW convention) — at 'full' detail, a thin
- * open/close body + a hairline high/low wick draw at the LEFT edge of each
- * footprint column, beneath the cell fills/text. Widths only — colors reuse
- * the existing FOOTPRINT_BUY_COLOR/FOOTPRINT_SELL_COLOR tokens above (no new
- * hexes), matching the buy/sell family used everywhere else in this theme.
+ * open/close body + a hairline high/low wick draw CENTERED on the column's
+ * bid|ask seam (the midpoint between the bid and ask half-cells), above the
+ * cell backgrounds but beneath the cell text, so the candle TYPE (bullish/
+ * bearish, body vs wick) reads clearly without ever competing with the
+ * bid/ask numbers. Widths + alphas only — colors reuse the existing
+ * FOOTPRINT_BUY_COLOR/FOOTPRINT_SELL_COLOR tokens above (no new hexes),
+ * matching the buy/sell family used everywhere else in this theme.
  */
 export const FOOTPRINT_SKELETON_WICK_WIDTH_PX = 1;
-export const FOOTPRINT_SKELETON_BODY_WIDTH_PX = 2;
+export const FOOTPRINT_SKELETON_BODY_WIDTH_PX = 5;
+/** Body fill alpha — high enough to read as a solid mini-candle against either a red or green cell fill. */
+export const FOOTPRINT_SKELETON_BODY_FILL_ALPHA = 0.85;
+/** Wick stroke alpha — slightly higher than the body fill (hairline needs full presence to stay visible at 1px). */
+export const FOOTPRINT_SKELETON_WICK_ALPHA = 0.9;
 
 /** Stacked-imbalance zone band border — hairline outline at higher alpha than the band fill, same hue. */
 export const FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX = 1;

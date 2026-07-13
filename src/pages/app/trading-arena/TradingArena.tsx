@@ -54,8 +54,8 @@ import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferenc
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
 import { ChartStyleContext } from './components/chartStyleSettings';
-import { isIntradayInterval } from '@/components/charting/indicators';
-import { INDICATOR_PERIODS, type Indicator } from '@/components/charting/types';
+import { buildIndicatorsFromArenaSettings } from './components/indicatorsSettings';
+import type { Indicator } from '@/components/charting/types';
 
 // ---------------------------------------------------------------------------
 // Default symbol and interval
@@ -99,8 +99,15 @@ export default function TradingArena() {
   // tabs, so switching tabs keeps the same selection on screen. Persisted
   // via useArenaIndicatorPreferences (arena-only localStorage key — does
   // NOT touch Backtest/Journal's saved preferences). Starts empty (no
-  // indicators) until the user opts in via ArenaToolbar's Indicators ▾ picker.
-  const [indicatorSettings, setIndicatorSettings] = useArenaIndicatorPreferences();
+  // indicators, except Volume Profile which defaults on) until the user
+  // edits via ArenaToolbar's Indicators (N) popup (see IndicatorsDialog.tsx).
+  const {
+    enabled: indicatorsEnabled,
+    params: indicatorsParams,
+    updateEnabled: updateIndicatorsEnabled,
+    updateParams: updateIndicatorsParams,
+    reset: resetIndicators,
+  } = useArenaIndicatorPreferences();
 
   // Chart Settings (Chart ▾ menu) — single source of truth shared across all
   // 3 tabs. Persisted globally (not per-symbol) via useChartStylePreferences.
@@ -109,22 +116,10 @@ export default function TradingArena() {
   // chartStyleSettings.ts's header comment for why.
   const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
 
-  const indicators = useMemo<Indicator[]>(() => {
-    const list: Indicator[] = [];
-    if (indicatorSettings.sma) list.push({ type: 'SMA', period: INDICATOR_PERIODS.sma });
-    if (indicatorSettings.ema) list.push({ type: 'EMA', period: INDICATOR_PERIODS.ema });
-    if (indicatorSettings.rsi) list.push({ type: 'RSI', period: INDICATOR_PERIODS.rsi });
-    // VWAP gate: only meaningful on intraday intervals — same belt-and-
-    // suspenders guard TradeChart.tsx applies (the toolbar also disables
-    // the row on non-intraday intervals).
-    if (indicatorSettings.vwap && isIntradayInterval(interval)) {
-      list.push({ type: 'VWAP', period: 0 });
-    }
-    if (indicatorSettings.macd) list.push({ type: 'MACD', period: 0 });
-    if (indicatorSettings.bbands) list.push({ type: 'BBANDS', period: INDICATOR_PERIODS.bbands.period });
-    if (indicatorSettings.atr) list.push({ type: 'ATR', period: INDICATOR_PERIODS.atr });
-    return list;
-  }, [indicatorSettings, interval]);
+  const indicators = useMemo<Indicator[]>(
+    () => buildIndicatorsFromArenaSettings(indicatorsEnabled, indicatorsParams, interval),
+    [indicatorsEnabled, indicatorsParams, interval],
+  );
 
   // Order-flow raw-trade cache warm-up (PR 3, H4) — mounts a fire-and-forget
   // phase-1-sized backfill into flowStoreCache regardless of which tab is
@@ -232,8 +227,11 @@ export default function TradingArena() {
             onIntervalChange={setIntervalValue}
             intervalCapability={intervalCapability}
             activeTab={activeTab}
-            indicatorSettings={indicatorSettings}
-            onIndicatorSettingsChange={setIndicatorSettings}
+            indicatorsEnabled={indicatorsEnabled}
+            indicatorsParams={indicatorsParams}
+            onIndicatorsEnabledChange={updateIndicatorsEnabled}
+            onIndicatorsParamsChange={updateIndicatorsParams}
+            onIndicatorsReset={resetIndicators}
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             onChartStyleReset={resetChartStyle}
@@ -263,6 +261,7 @@ export default function TradingArena() {
               interval={interval}
               assetClass={assetClass}
               indicators={indicators}
+              volumeProfileEnabled={indicatorsEnabled.volumeProfile}
             />
           )}
           {activeTab === 'order-flow' && (

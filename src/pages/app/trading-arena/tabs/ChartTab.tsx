@@ -31,9 +31,12 @@
  * safe no-ops unless the user turns them on via Chart ▾ → Chart Settings):
  *
  *  1. Session Volume Profile (ATAS-style, multi-session, OHLCV-bar-derived —
- *     see sessionVolumeProfile.ts). Reads `chartStyle.volumeProfile` from
- *     ChartStyleContext and threads it into FinotaurChart's
- *     `sessionVolumeProfile` prop. Works for every asset class — it only
+ *     see sessionVolumeProfile.ts). Its detail params (period/custom
+ *     session/vPOC/VAH-VAL/width/opacity) still read `chartStyle.volumeProfile`
+ *     from ChartStyleContext, but VISIBILITY is now the `volumeProfileEnabled`
+ *     prop (single source of truth: TradingArena's
+ *     `indicatorsEnabled.volumeProfile`, edited from the Indicators popup —
+ *     see indicatorsSettings.ts). Works for every asset class — it only
  *     needs the OHLCV bars the chart already fetches, no new data feed.
  *
  *  2. `footprintOnZoom` (ATAS "Auto transform candles to footprint"): when
@@ -80,6 +83,14 @@ interface ChartTabProps {
   assetClass: string;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
+  /**
+   * Session Volume Profile is now modeled as an "indicator" toggle (see
+   * indicatorsSettings.ts's ArenaIndicatorEnabled.volumeProfile), edited
+   * from the Indicators popup rather than Chart ▾ → Chart Settings. This
+   * replaces the old `chartStyle.volumeProfile.enabled` gate — that field
+   * still exists on ChartStyleSettings but is no longer read for visibility.
+   */
+  volumeProfileEnabled: boolean;
 }
 
 // Rolling 24-hour window for the chart (from = now − 24h, to = now).
@@ -114,7 +125,7 @@ function readStoredRailWidth(): number {
   return RAIL_DEFAULT_WIDTH;
 }
 
-export function ChartTab({ symbol, interval, assetClass, indicators }: ChartTabProps) {
+export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfileEnabled }: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
 
   const isCrypto = assetClass === 'crypto';
@@ -289,7 +300,7 @@ export function ChartTab({ symbol, interval, assetClass, indicators }: ChartTabP
               to={to}
               chartDataSource={chartDataSource}
               indicators={indicators}
-              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: chartStyle.volumeProfile.enabled }}
+              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
             />
           ) : (
             <FinotaurChart
@@ -301,7 +312,7 @@ export function ChartTab({ symbol, interval, assetClass, indicators }: ChartTabP
               indicators={indicators}
               theme="dark"
               height="100%"
-              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: chartStyle.volumeProfile.enabled }}
+              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
             />
           )}
         </div>
