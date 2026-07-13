@@ -403,7 +403,15 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
       locale: 'en-US',
     },
     layout: {
-      background: { type: ColorType.Solid, color: t.background },
+      // Transparent so the behind-candle canvas overlays (DepthMatrixLayer,
+      // SessionVolumeProfileLayer — z-index 5, see the containerRef div's
+      // z-index 6 below) are actually visible THROUGH the chart's own
+      // background instead of being painted over by it. The wrapper div
+      // (see the outer `<div>` in the render return below) carries the
+      // former solid `t.background` color, so every consumer of
+      // FinotaurChart still looks pixel-identical when no behind-layer is
+      // mounted.
+      background: { type: ColorType.Solid, color: 'transparent' },
       textColor: t.text,
       fontFamily: t.fontFamily,
       fontSize: t.fontSizeAxis,
@@ -1863,11 +1871,18 @@ export function FinotaurChart({
         style={{ background: themeTokens.brandGold, opacity: 0.5 }}
       />
 
-      {/* Chart canvas mount */}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* Chart canvas mount — z-index 6 so it paints ABOVE the z-index-5
+          behind-layers (DepthMatrixLayer, SessionVolumeProfileLayer) but
+          BELOW every above-candle overlay (WallHeatLayer z10, FootprintLayer
+          z15, VolumeBubblesLayer z12, VolumeProfileLayer z14). The chart's
+          own background is transparent (see buildChartOptions above) so the
+          z5 layers are genuinely visible behind the candles. */}
+      <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 6 }} />
 
       {/* Session Volume Profile overlay (Chart tab only) — rendered BEHIND
-          candles (z-index 5, same as DepthMatrixLayer below). Fed directly by
+          candles (z-index 5 vs the chart canvas mount's z-index 6, and the
+          chart's background is transparent — see buildChartOptions — so this
+          layer is genuinely visible through the candle pane). Fed directly by
           this component's own barsRef.current — see the `sessionVolumeProfile`
           prop's doc comment. Undefined = zero mount, zero cost. */}
       {sessionVolumeProfile &&
@@ -1904,8 +1919,10 @@ export function FinotaurChart({
       )}
 
       {/* Depth matrix heatmap canvas — only in matrix mode.
-          Rendered BEHIND candles (z-index 5 vs candle canvas z-index auto/0 — the
-          chart canvas is positioned after containerRef so it paints on top).
+          Rendered BEHIND candles (z-index 5 vs the chart canvas mount's
+          z-index 6; the chart's layout.background is transparent — see
+          buildChartOptions above — so this canvas genuinely shows through
+          behind the candles instead of being painted over by them).
           Mounted once chart + series are ready so coordinate APIs are available. */}
       {wallRenderMode === 'matrix' &&
        chartRef.current && seriesRef.current &&

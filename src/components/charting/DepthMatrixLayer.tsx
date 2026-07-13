@@ -31,24 +31,33 @@
 //   - imageSmoothingEnabled = false (pixel-sharp cells).
 //   - Cells with q===0 → transparent. Gap columns (flags bit0) → transparent.
 //
-// Color mapping (exact spec):
-//   STOPS: [0.00 → navy] [0.18 → blue] [0.40 → cyan] [0.65 → yellow] [0.88+ → white]
+// Color mapping (Bookmap-style continuous field — see BookmapChart.tsx's
+// compressIntensity/HEAT_GAMMA for the reference implementation this copies):
 //   vHi  = p99 of visible q values (NOT max — one iceberg must not flatten field)
-//   vLo  = p70 fixed floor percentile (was slider-driven, now fixed since size
-//          filtering is the user control instead of sensitivity)
-//   t    = (q/1000 - vLo) / (vHi - vLo), gamma 0.50
-//   q===0 → transparent; t≤0 → faint context (lut[0] + alpha 0x40)
+//   x    = min(1, usd / vHi)                         — linear, capped at 1
+//   t    = compressIntensity(x)
+//        = pow(log1p(x * 9) / log1p(9), 2.5)          — log spread + gamma darken
+//   palette index = round(t * 255)
+//   All painted cells are fully opaque (lut already encodes alpha 0xff) — no
+//   forced-alpha games; the matrix is now BEHIND the candles (see
+//   FinotaurChart.tsx's containerRef z-index 6 / transparent layout.background)
+//   so opacity tricks to "read through" candles are unnecessary.
+//   q===0 (no data in this bin) → transparent (index 0); the black wrapper
+//   background supplies the void, Bookmap-style.
 //
-// Floor filter: bins with decoded USD < floorUsd are treated as q=0.
-//   USD = expm1(q / 1000). A bin passes iff expm1(q/1000) >= floorUsd
-//   i.e. q >= round(log1p(floorUsd) * 1000).
-//
-// Size filter (replaces sensitivity slider):
-//   sizeFilterPct: 0 (All) | 1 | 5 | 10 | 25 — percent of the p99 cell.
-//   Reference = vHi (the p99 USD value of the visible window).
-//   qCut = round(log1p(sizeFilterPct/100 * expm1(qP99/1000)) * 1000)
-//   With sizeFilterPct=0 (All): no additional cut — same as current behavior.
-//   With sizeFilterPct>0: bins below qCut are fully transparent (not faint).
+// Floor filter + size filter are HIGHLIGHT thresholds, not visibility
+// switches (Bookmap-style dimming): a bin below floorUsd, or below the
+// sizeFilterPct cut, is still PAINTED — its intensity `t` is just clamped to
+// ≤0.10 so it renders as a faint near-black/bronze shadow (the palette's low
+// stops) instead of vanishing. This keeps the book's continuous shape intact
+// across time even where individual levels don't clear the highlight bar.
+//   Floor: a bin is "weak" if its decoded USD (= expm1(q/1000)) < floorUsd.
+//   Size filter (replaces the old sensitivity slider):
+//     sizeFilterPct: 0 (All) | 1 | 5 | 10 | 25 — percent of the p99 cell.
+//     Reference = vHi (the p99 USD value of the visible window).
+//     qCut = round(log1p(sizeFilterPct/100 * expm1(qP99/1000)) * 1000)
+//     With sizeFilterPct=0 (All): no additional dimming from this rule.
+//     With sizeFilterPct>0: bins below qCut are also dimmed to t≤0.10.
 //
 // Palette + smoothing (Task S2 — ATAS/Bookmap restyle):
 //   The color LUT itself now lives in depthPalettes.ts (3 palettes: 'finotaur'
@@ -69,13 +78,28 @@ import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import { qToUsd } from '@/pages/app/crypto/scanner/useDepthSlices';
-import { getPaletteLUT, getPaletteFaintColor, type DepthPaletteId } from './depthPalettes';
+import { getPaletteLUT, type DepthPaletteId } from './depthPalettes';
 
-// Normalized-intensity threshold (pre-gamma, linear t ∈ [0,1]) above which a
+// Normalized-intensity threshold (post-compression t ∈ [0,1]) above which a
 // cell is considered "hot" for the bloom pass.
 const BLOOM_HOT_THRESHOLD = 0.95;
 // Fraction of a hot cell's own alpha blended into each of its 4 neighbors.
 const BLOOM_NEIGHBOR_ALPHA_FRACTION = 0.35;
+
+// Log-spread factor + gamma for the Bookmap-style intensity curve — exact
+// copy of BookmapChart.tsx's compressIntensity/HEAT_GAMMA. Applied to the
+// linear-capped ratio `x = min(1, usd / vHi)`: log1p spreads out the low end
+// so weak levels aren't all crushed to the same near-zero value, then the
+// gamma pushes everything below the top ~10-15% back down to near-dark so
+// only real walls glow — see the module doc comment above for the formula.
+const HEAT_LOG_SCALE = 9;
+const HEAT_GAMMA = 2.5;
+
+/** Bookmap-style intensity compression: log1p spread + gamma darken, x/t ∈ [0,1]. */
+function compressIntensity(x: number): number {
+  const logScaled = Math.log1p(x * HEAT_LOG_SCALE) / Math.log1p(HEAT_LOG_SCALE);
+  return Math.pow(logScaled, HEAT_GAMMA);
+}
 
 /** Unpacks an ABGR Uint32 into [r, g, b, a] bytes. */
 function unpackAbgr(color: number): [number, number, number, number] {
@@ -402,18 +426,21 @@ export function DepthMatrixLayer({
     const hotMask = smoothingEnabled ? new Uint8Array(needed_w * needed_h) : null;
 
     const lut = getPaletteLUT(paletteId);
-    const faintColor = getPaletteFaintColor(paletteId);
 
-    const floorQ = Math.round(Math.log1p(floor) * 1000);
-    const dVLo = vLo;
     const dVHi = vHi;
-    const dRange = dVHi - dVLo;
 
-    // Size filter cut: qCut is the minimum q a bin must reach to be rendered
-    // when sizePct > 0. Reference = vHi (the p99 USD wall in the visible window).
+    // Weak-cell dimming cap: floor/size-filter bins render at this intensity
+    // ceiling instead of vanishing (Bookmap-style faint shadow — see the
+    // module doc comment above).
+    const WEAK_CELL_T_CAP = 0.10;
+
+    // Size filter cut: qCut is the minimum q a bin must reach to render at
+    // full intensity when sizePct > 0. Reference = vHi (the p99 USD wall in
+    // the visible window). Bins below qCut are dimmed (see WEAK_CELL_T_CAP),
+    // not hidden.
     // Formula: qCut = round(log1p(sizePct/100 * expm1(qP99/1000)) * 1000)
     // where expm1(qP99/1000) = vHi (already decoded).
-    // With sizePct === 0 (All): qCut = 0 → no additional filtering.
+    // With sizePct === 0 (All): qCut = 0 → no additional dimming.
     const qCut = sizePct > 0
       ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
       : 0;
@@ -423,62 +450,44 @@ export function DepthMatrixLayer({
     // Avoids qToColor allocating a [color, hot] tuple on every cell.
     let lastCellWasHot = false;
 
-    // Helper: map a q value to a canvas pixel color.
+    // Helper: map a q value to a canvas pixel color (Bookmap-style continuous
+    // intensity field — see module doc comment above for the exact formula).
     function qToColor(q: number): number {
       lastCellWasHot = false;
-      if (q === 0 || q < floorQ) return 0; // transparent
-
-      // Size filter: fully hide sub-threshold bins (not even faint context)
-      // when a ≥N% tier is active.
-      if (qCut > 0 && q < qCut) return 0;
+      if (q === 0) return 0; // no data in this bin — transparent (the void)
 
       const usd = qToUsd(q);
-      if (usd < floor) return 0;
-
-      let t = (usd - dVLo) / dRange;
-      if (t <= 0) return faintColor; // below vLo → faint context
+      const x = Math.min(1, usd / dVHi); // linear ratio to the p99 reference, capped at 1
+      let t = compressIntensity(x);
       if (t > 1) t = 1;
+      if (t < 0) t = 0;
+
+      // Floor + size filter are HIGHLIGHT thresholds, not visibility
+      // switches: weak cells are still painted, just dimmed to a faint
+      // near-black/bronze shadow instead of disappearing.
+      const belowFloor = usd < floor;
+      const belowSizeFilter = qCut > 0 && q < qCut;
+      if (belowFloor || belowSizeFilter) {
+        t = Math.min(t, WEAK_CELL_T_CAP);
+      }
+
       lastCellWasHot = t >= BLOOM_HOT_THRESHOLD;
 
-      // gamma compression (0.50) — stronger mid-lift, cells pop earlier
-      const gamma = Math.pow(t, 0.50);
-      const idx = Math.min(255, (gamma * 255) | 0);
-      // Ensure above-threshold cells are fully opaque for t≥0.35; floor ~0xB0 below.
-      const lutColor = lut[idx];
-      if (t >= 0.35) {
-        // Force full opacity (LUT already encodes 0xff alpha, but be explicit)
-        return (lutColor & 0x00ffffff) | (0xff << 24);
-      }
-      // Low end of ramp (0 < t < 0.35): ensure alpha ≥ 0xB0
-      const existingAlpha = (lutColor >>> 24) & 0xff;
-      if (existingAlpha < 0xb0) {
-        return (lutColor & 0x00ffffff) | (0xb0 << 24);
-      }
-      return lutColor;
+      const idx = Math.min(255, Math.max(0, Math.round(t * 255)));
+      // lut already encodes full 0xff alpha at every stop — cells behind the
+      // candles (see FinotaurChart.tsx) don't need opacity games to read
+      // through, so the LUT color is used as-is.
+      return lut[idx];
     }
 
-    // Fill cells.
-    //
-    // Penetration kill: once price has traded THROUGH a resting level, that
-    // order is consumed — never paint it again, even if a fresh order later
-    // refills the same price. We scan columns left→right (time order) tracking
-    // the running price envelope [seenLo, seenHi] from each column's mid
-    // (anchor). A cell's side is implied by its price vs that column's mid:
-    // below mid = bid, above mid = ask. A bid dies once price has reached down
-    // to it (seenLo <= price); an ask dies once price has reached up to it
-    // (seenHi >= price). Gap columns (anchor 0) never widen the envelope.
-    let seenLo = Infinity;
-    let seenHi = -Infinity;
-
+    // Fill cells. Historical columns render the book exactly as it WAS at
+    // that time, even if price later traded through the level — no
+    // penetration suppression. Suppressing "already-traded-through" levels
+    // turned continuous walls into isolated blobs; Bookmap shows the book's
+    // full history per column instead.
     for (let ci = 0; ci < cols.length; ci++) {
       const col = cols[ci];
       if (col.flags & 1) continue; // gap column — leave transparent
-
-      const mid = col.anchor;
-      if (isFinite(mid) && mid > 0) {
-        if (mid < seenLo) seenLo = mid;
-        if (mid > seenHi) seenHi = mid;
-      }
 
       // Build a map from binFloor(price) → q for bids + asks combined.
       // Bids go on one side, asks on another, but for the heatmap we render
@@ -495,13 +504,6 @@ export function DepthMatrixLayer({
       }
 
       for (const [price, q] of cellMap) {
-        // Suppress any level price has already traded through (see comment above).
-        const penetrated =
-          price < mid ? seenLo <= price :
-          price > mid ? seenHi >= price :
-          false;
-        if (penetrated) continue;
-
         const color = qToColor(q);
         if (color === 0) continue;
 
@@ -870,7 +872,10 @@ export function DepthMatrixLayer({
         width:         `${width}px`,
         height:        `${height}px`,
         pointerEvents: 'none',
-        // Behind candles (z-index 5) and below WallHeatLayer (z-index 10).
+        // Genuinely behind candles: z-index 5 vs the chart canvas mount's
+        // z-index 6 (FinotaurChart.tsx containerRef div), whose
+        // layout.background is transparent — see buildChartOptions there.
+        // Also below WallHeatLayer (z-index 10).
         zIndex:        5,
       }}
       aria-hidden="true"
