@@ -1,27 +1,31 @@
 // src/components/AuthLandingGate.tsx
 // =====================================================
-// Post-OAuth / post-email-confirmation landing gate.
+// Post-OAuth / post-email-confirmation landing gate for /pricing-selection.
 //
-// Supabase redirects OAuth (Google) and email-confirmation flows to
-// `${origin}/pricing-selection` (an allowlisted redirect URL). With the PKCE
-// flow (supabase-js default), the browser lands on `/pricing-selection?code=…`
-// and supabase-js exchanges the code for a session ASYNCHRONOUSLY via
-// detectSessionInUrl. During that exchange `user` is momentarily null and the
-// session token is not yet in localStorage.
+// /pricing-selection is EXCLUSIVELY the redirect target Supabase sends OAuth
+// (Google) and email-confirmation flows to (an allowlisted redirect URL — see
+// the route comment in App.tsx). With the PKCE flow (supabase-js default) the
+// browser lands on `/pricing-selection?code=…` and supabase-js exchanges the
+// code for a session ASYNCHRONOUSLY via detectSessionInUrl. Crucially,
+// supabase-js consumes and CLEANS the callback markers (the `?code=` query and
+// the PKCE code-verifier in storage) almost immediately — so by the time React
+// renders there is nothing left to sniff, yet `user` is still null for another
+// beat until onAuthStateChange delivers the session.
 //
-// The previous behaviour here was an immediate `<Navigate to="/welcome">`. That
+// The previous behaviour was an immediate `<Navigate to="/welcome">`, which
 // forwarded the user to a ProtectedRoute-gated route mid-exchange, where
-// user==null resolved to a redirect to `/auth/login` — the post-signup OAuth
-// redirect bounce (observed 2026-07-13: a Google signup pinballed
-// /welcome↔/auth/login↔/pricing-selection before the user gave up and used
-// email instead). ProtectedRoute's own hydration wait only covers the window
-// once the token is already in localStorage; it cannot cover the earlier
-// code-exchange window, which is why the fix lives here at the landing route.
+// user==null resolved to `/auth/login` — the OAuth redirect bounce (observed
+// 2026-07-13: a Google signup pinballed /welcome↔/auth/login↔/pricing-selection
+// before giving up and using email). ProtectedRoute's hydration wait (#1467)
+// only covers the window once the token is already in localStorage; it cannot
+// cover the earlier code-exchange window, which is why the fix lives here.
 //
-// This gate holds on a loader while an auth callback is settling, then forwards
-// to /welcome once the session is delivered. Non-callback visits preserve the
-// original immediate forward to /welcome (ProtectedRoute there resolves a
-// logged-out visitor to /auth/login exactly as before).
+// Rather than race the (already-cleaned) markers, we simply wait a bounded
+// grace for the session to arrive before forwarding. As soon as it lands we go
+// to /welcome; if it never comes (genuine no-session / abandoned OAuth) we
+// forward after the grace and /welcome's ProtectedRoute resolves to /auth/login
+// exactly as before. Because this route is only ever a machine redirect target,
+// the brief wait costs a real user nothing.
 // =====================================================
 
 import { Navigate } from 'react-router-dom';
@@ -29,45 +33,31 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageLoader } from '@/components/ds/Spinner';
 
-// Bounded wait so a stalled/abandoned exchange never hangs on the loader.
-const CALLBACK_SETTLE_TIMEOUT_MS = 15_000;
-
-/** True when the current URL/storage indicates an in-flight Supabase auth callback. */
-function hasPendingAuthCallback(): boolean {
-  if (typeof window === 'undefined') return false;
-  // PKCE (?code=) or error redirect, implicit-flow (#access_token=), or the
-  // PKCE code-verifier still in storage (survives even after supabase-js cleans
-  // the URL, until the exchange completes). storageKey = 'finotaur-auth-token'.
-  return (
-    /[?&](code|error)=/.test(window.location.search) ||
-    window.location.hash.includes('access_token') ||
-    !!localStorage.getItem('finotaur-auth-token-code-verifier')
-  );
-}
+// Bounded wait for the OAuth code-exchange to deliver a session. Typical
+// exchange + onAuthStateChange completes in 1-3s; 6s absorbs a slow network.
+const SESSION_SETTLE_GRACE_MS = 6_000;
 
 export default function AuthLandingGate() {
   const { user, isLoading } = useAuth();
-  const [isCallback] = useState<boolean>(hasPendingAuthCallback);
-  const [waitedTooLong, setWaitedTooLong] = useState(false);
+  const [graceElapsed, setGraceElapsed] = useState(false);
 
   useEffect(() => {
-    if (!isCallback) return;
-    const timer = setTimeout(() => setWaitedTooLong(true), CALLBACK_SETTLE_TIMEOUT_MS);
+    const timer = setTimeout(() => setGraceElapsed(true), SESSION_SETTLE_GRACE_MS);
     return () => clearTimeout(timer);
-  }, [isCallback]);
+  }, []);
 
   // Session delivered → continue to the proven onboarding screen (→ /app/home).
   if (user) {
     return <Navigate to="/welcome" replace />;
   }
 
-  // Auth callback still settling → wait instead of bouncing to /auth/login.
-  if (isCallback && !waitedTooLong && (isLoading || !user)) {
+  // Auth still initialising, or within the settle grace → wait for the session
+  // instead of forwarding into a ProtectedRoute that would bounce to /auth/login.
+  if (isLoading || !graceElapsed) {
     return <PageLoader />;
   }
 
-  // No callback (or the wait was exhausted): preserve the original forward.
-  // ProtectedRoute at /welcome resolves a genuinely logged-out visitor to
-  // /auth/login, unchanged from prior behaviour.
+  // No session after the grace → forward; /welcome → /auth/login for a genuinely
+  // logged-out visitor, unchanged from the prior behaviour.
   return <Navigate to="/welcome" replace />;
 }
