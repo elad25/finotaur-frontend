@@ -36,49 +36,8 @@ interface PropFirm {
   bottomLine?: string;
 }
 
-// 🏢 Prop Firms Data — Alpha Futures (FINOTAUR top pick)
-const propFirmsData: PropFirm[] = [
-  {
-    id: 'alpha-futures',
-    name: 'Alpha Futures',
-    logo: 'https://logo.clearbit.com/alpha-futures.com',
-    description: 'Our #1 pick for funded CME futures. Single-step challenge, 90% split from day 1, and the most forgiving drawdown in the industry.',
-    assetTypes: ['futures'],
-    minAccountSize: 50000,
-    maxAccountSize: 150000,
-    profitSplit: 'Up to 90% — flat from day 1',
-    challengeRules: {
-      maxDailyLoss: 'None (Standard / Advanced) · 2% on Zero',
-      maxTotalLoss: '4% EOD-trailing — locks at start balance',
-      profitTarget: '6% (Standard / Zero) · 8% (Advanced)',
-      tradingPeriod: 'Unlimited — no time pressure',
-      minTradingDays: '2 days · just 1 on Zero (single-session pass possible)',
-    },
-    payoutRules: {
-      firstPayout: 'Weekly after 5 winning days of $200+',
-      subsequentPayouts: 'Up to $15K per request · processed in 48 hours',
-      payoutMethods: ['ACH', 'Wire', 'Wise', 'Rise'],
-    },
-    features: [],
-    pros: [
-      '90% profit split — flat from day 1',
-      'EOD-trailing drawdown that locks at start balance',
-      '$15K max payout · paid in 48 hours',
-      'Zero plan: $0 activation, pass in one session',
-      '4.9/5 Trustpilot · $25M+ already paid out',
-    ],
-    cons: [
-      '40% consistency rule on funded Standard / Zero',
-      'No bots / EAs · flatten by 4:20 PM EST',
-    ],
-    pricing: {
-      challenge: 'From $79/mo · Zero plan = $0 activation',
-    },
-    affiliateLink: 'https://app.alpha-futures.com/signup/Elad013916/',
-    rating: 5.0,
-    bottomLine: '🏆 FINOTAUR\'s top-recommended futures prop firm. If you trade CME futures with discipline, this is the cleanest, fastest path to real capital we\'ve found — 90% splits, $15K payouts, no time pressure. Stop risking your own money. Get funded today.',
-  },
-];
+// 🏢 Prop Firms Data
+const propFirmsData: PropFirm[] = [];
 
 // 🎨 Tab Component
 const TabButton = ({ 
