@@ -23,6 +23,7 @@ import {
 
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -166,6 +167,11 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-full overflow-hidden">
+      {/* ── NOTIFICATION BELL — fixed to the Home top-right corner ── */}
+      <div className="absolute top-ds-5 right-ds-5 z-20">
+        <NotificationBell />
+      </div>
+
       {/* ── GOLD ATMOSPHERE — subtle institutional glow behind the hub ── */}
       <div
         aria-hidden="true"
