@@ -1052,7 +1052,18 @@ export function FinotaurChart({
     const series = seriesRef.current;
     if (!chart || !series) return;
     try {
-      chart.applyOptions(chartStyleToChartOptions(effectiveChartStyle));
+      const styleChartOptions = chartStyleToChartOptions(effectiveChartStyle);
+      chart.applyOptions({
+        ...styleChartOptions,
+        layout: {
+          ...styleChartOptions.layout,
+          // The canvas must STAY transparent (see buildChartOptions) so the
+          // behind-candle z5 layers remain visible; the user's chosen
+          // backgroundColor is carried by the wrapper div in the render
+          // return instead of the chart canvas.
+          background: { type: ColorType.Solid, color: 'transparent' },
+        },
+      });
       series.applyOptions(chartStyleToSeriesOptions(effectiveChartStyle));
     } catch {
       // Chart/series may be mid-teardown — safe to ignore.
@@ -1862,7 +1873,10 @@ export function FinotaurChart({
       className="relative w-full overflow-hidden"
       style={{
         height: typeof height === 'number' ? `${height}px` : height,
-        background: themeTokens.background,
+        // Carries the chart background (canvas itself is transparent so z5
+        // behind-candle layers show through) — including the user's Chart
+        // Settings backgroundColor when set.
+        background: effectiveChartStyle?.backgroundColor ?? themeTokens.background,
       }}
     >
       {/* Brand bar — 1px gold accent at the top edge */}
