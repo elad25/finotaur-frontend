@@ -13,6 +13,7 @@ import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { MentorViewProvider } from "@/contexts/MentorViewContext";
 import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import AuthLandingGate from "@/components/AuthLandingGate";
 import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { Suspense, memo, useEffect } from "react";
@@ -527,7 +528,7 @@ function AppContent() {
         {/* Post-OAuth / post-email-confirmation landing. Supabase redirects here (allowlisted URL),
             then we forward to the proven onboarding screen. Was "/onboarding" — a route that never
             existed, which 404'd every Google sign-in/up. Unified with the email-signup destination. */}
-        <Route path="/pricing-selection" element={<Navigate to="/welcome" replace />} />
+        <Route path="/pricing-selection" element={<AuthLandingGate />} />
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
