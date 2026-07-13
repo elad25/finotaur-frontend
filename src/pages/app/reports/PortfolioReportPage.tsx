@@ -124,5 +124,5 @@ export default function PortfolioReportPage() {
     </ReportSlideFrame>
   ));
 
-  return <ReportShell slides={PORTFOLIO_REPORT_SLIDES}>{children}</ReportShell>;
+  return <ReportShell slides={PORTFOLIO_REPORT_SLIDES} watermark>{children}</ReportShell>;
 }
