@@ -25,7 +25,6 @@ import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +37,6 @@ import {
 export const TopNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const onHome = location.pathname.startsWith('/app/home');
   const { user } = useAuth();
   const { open: openFino } = useFinoChat();
   const { toggle: toggleDrawer } = useProductDrawer();
@@ -209,9 +207,6 @@ export const TopNav = () => {
               className="h-9 w-9 object-contain"
             />
           </button>
-
-          {/* Notification bell — Home only */}
-          {onHome && <NotificationBell />}
 
           {/* User menu */}
           <DropdownMenu>
