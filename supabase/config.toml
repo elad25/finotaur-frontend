@@ -82,6 +82,14 @@ verify_jwt = false  # ← This makes it public!
 # enabled = true
 # verify_jwt = true
 
+[functions.publish-announcement]
+enabled = true
+verify_jwt = true
+
+[functions.dispatch-scheduled-announcements]
+enabled = true
+verify_jwt = false
+
 # ============================================
 # 📊 REPORT GENERATION FUNCTIONS
 # ============================================

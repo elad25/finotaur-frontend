@@ -49,6 +49,7 @@ import { FounderCockpitTab } from './tabs/FounderCockpitTab';
 import { GrowthTab } from './tabs/GrowthTab';
 import { AttributionTab } from './tabs/AttributionTab';
 import SeoAnalyticsPage from './SeoAnalyticsPage';
+import { AnnouncementsAdmin } from './tabs/AnnouncementsAdmin';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
 const Users = lazy(() => import('@/pages/app/journal/admin/Users'));
@@ -184,6 +185,9 @@ export function AdminCRMShell() {
             path="communication/subscribers"
             element={<Lazy><NewsletterSub /></Lazy>}
           />
+
+          {/* Announcements */}
+          <Route path="announcements" element={<AnnouncementsAdmin />} />
 
           {/* Leads & Funnel (planned) */}
           <Route path="leads" element={<LeadsPlaceholder />} />
