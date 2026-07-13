@@ -27,7 +27,6 @@ import { supabase } from '@/lib/supabase';
 import { Spinner } from '@/components/ds/Spinner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
-  buildReferralLink,
   fetchMemberReferralRow,
   provisionMemberReferralCode,
   rowFromProvisionResult,
@@ -91,7 +90,7 @@ export function ReferralCodeInline() {
   const { user } = useAuth();
   const { isPaidUser, isLoading: subLoading } = useSubscription();
   const [state, setState] = useState<InlineState>({ kind: 'checking' });
-  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
   const [requestedCode, setRequestedCode] = useState('');
   const [codeCheck, setCodeCheck] = useState<CodeCheckStatus>('idle');
@@ -185,11 +184,11 @@ export function ReferralCodeInline() {
     setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
   }, [user?.id, requestedCode]);
 
-  const copy = useCallback(async (text: string, type: 'code' | 'link') => {
+  const copy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API unavailable — silently no-op, nothing to recover from.
     }
@@ -218,7 +217,6 @@ export function ReferralCodeInline() {
   // the popup reveals the bonus copy plus whichever action fits the
   // current state (provision button, or code/link + copy).
   const code = state.kind === 'ready' ? (state.row.coupon_code as string) : null;
-  const link = code ? buildReferralLink(code) : null;
 
   return (
     <>
@@ -264,7 +262,7 @@ export function ReferralCodeInline() {
               </p>
             </div>
 
-            {state.kind === 'ready' && code && link ? (
+            {state.kind === 'ready' && code ? (
               <>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className="rounded-md border border-dashed border-[#C9A646]/40 bg-zinc-900/60 px-3 py-1.5 font-mono text-base font-semibold tracking-wider text-[#C9A646]">
@@ -272,19 +270,11 @@ export function ReferralCodeInline() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => copy(code, 'code')}
+                    onClick={() => copy(code)}
                     className="inline-flex items-center gap-1 rounded-md border border-zinc-700/30 px-2 py-1 text-xs text-zinc-400 transition-colors hover:border-[#C9A646] hover:text-[#C9A646]"
                   >
-                    {copied === 'code' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    {copied === 'code' ? 'Copied' : 'Copy code'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copy(link, 'link')}
-                    className="inline-flex items-center gap-1 rounded-md border border-zinc-700/30 px-2 py-1 text-xs text-zinc-400 transition-colors hover:border-[#C9A646] hover:text-[#C9A646]"
-                  >
-                    {copied === 'link' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    {copied === 'link' ? 'Copied' : 'Copy link'}
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copied ? 'Copied' : 'Copy code'}
                   </button>
                 </div>
                 <Link

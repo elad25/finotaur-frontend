@@ -8,13 +8,12 @@
 // - Referrals and their status
 // - Earnings and commissions
 // - Payout history
-// - Affiliate code and link
+// - Affiliate coupon code
 // =====================================================
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Link2,
   Copy,
   Check,
   Users,
@@ -114,7 +113,7 @@ export default function AffiliateDashboard({ embedded = false }: { embedded?: bo
   const [activeTab, setActiveTab] = useState<'overview' | 'referrals' | 'earnings' | 'payouts'>('overview');
   
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useAffiliateProfile();
-  const { copyLink, copyCode } = useCopyAffiliateLink();
+  const { copyCode } = useCopyAffiliateLink();
 
   // Loading state
   if (profileLoading) {
@@ -159,11 +158,9 @@ export default function AffiliateDashboard({ embedded = false }: { embedded?: bo
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Affiliate Code Card */}
-        <AffiliateCodeCard 
+        <AffiliateCodeCard
           code={profile.affiliate_code}
-          link={profile.referral_link || `https://finotaur.com/ref/${profile.affiliate_code}`}
           onCopyCode={copyCode}
-          onCopyLink={copyLink}
         />
 
         {/* Stats Overview */}
@@ -221,19 +218,14 @@ export default function AffiliateDashboard({ embedded = false }: { embedded?: bo
 // AFFILIATE CODE CARD
 // ============================================
 
-function AffiliateCodeCard({ 
-  code, 
-  link, 
-  onCopyCode, 
-  onCopyLink 
-}: { 
-  code: string; 
-  link: string;
+function AffiliateCodeCard({
+  code,
+  onCopyCode,
+}: {
+  code: string;
   onCopyCode: () => void;
-  onCopyLink: () => void;
 }) {
   const [codeCopied, setCodeCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
 
   const handleCopyCode = async () => {
     await onCopyCode();
@@ -241,64 +233,36 @@ function AffiliateCodeCard({
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  const handleCopyLink = async () => {
-    await onCopyLink();
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
   return (
     <div className="bg-gradient-to-br from-[#D4AF37]/10 via-[#D4AF37]/5 to-transparent border border-[#D4AF37]/30 rounded-2xl p-6 mb-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        {/* Code Section */}
-        <div className="flex-1">
-          <p className="text-sm text-gray-400 mb-2">Your Affiliate Code</p>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-[#D4AF37]">{code}</span>
-            <button
-              onClick={handleCopyCode}
-              className="p-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 rounded-lg transition-colors"
-            >
-              {codeCopied ? (
+      {/* Code Section */}
+      <div className="flex-1">
+        <p className="text-sm text-gray-400 mb-2">Your Coupon Code</p>
+        <div className="flex items-center gap-3">
+          <span className="text-2xl font-bold text-[#D4AF37]">{code}</span>
+          <button
+            onClick={handleCopyCode}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 rounded-lg transition-colors"
+          >
+            {codeCopied ? (
+              <>
                 <Check className="w-5 h-5 text-green-400" />
-              ) : (
+                Copied!
+              </>
+            ) : (
+              <>
                 <Copy className="w-5 h-5 text-[#D4AF37]" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Link Section */}
-        <div className="flex-1 lg:border-l lg:border-[#D4AF37]/20 lg:pl-6">
-          <p className="text-sm text-gray-400 mb-2">Your Referral Link</p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 bg-black/30 rounded-lg px-4 py-2.5 font-mono text-sm text-gray-300 truncate">
-              {link}
-            </div>
-            <button
-              onClick={handleCopyLink}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#D4AF37] hover:bg-[#E5C158] text-black font-semibold rounded-lg transition-colors"
-            >
-              {linkCopied ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Link2 className="w-4 h-4" />
-                  Copy Link
-                </>
-              )}
-            </button>
-          </div>
+                Copy Code
+              </>
+            )}
+          </button>
         </div>
       </div>
 
       {/* Quick Share */}
       <div className="mt-4 pt-4 border-t border-[#D4AF37]/20">
         <p className="text-xs text-gray-500">
-          Share your link to earn up to <span className="text-[#D4AF37] font-semibold">20%</span> commission on every subscription!
+          Share your code to earn up to <span className="text-[#D4AF37] font-semibold">20%</span> commission on every subscription!
         </p>
       </div>
     </div>
@@ -740,7 +704,7 @@ function ReferralsTab() {
         <div className="text-center py-12">
           <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400">No referrals yet</p>
-          <p className="text-sm text-gray-500 mt-1">Share your link to start earning!</p>
+          <p className="text-sm text-gray-500 mt-1">Share your code to start earning!</p>
         </div>
       )}
 
