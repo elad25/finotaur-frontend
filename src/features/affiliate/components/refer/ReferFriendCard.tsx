@@ -19,7 +19,6 @@ import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Spinner } from '@/components/ds/Spinner';
 import {
-  buildReferralLink,
   fetchMemberReferralRow,
   provisionMemberReferralCode,
   rowFromProvisionResult,
@@ -81,7 +80,7 @@ export function ReferFriendCard() {
   const { user } = useAuth();
   const { isPaidUser, isLoading: subLoading } = useSubscription();
   const [state, setState] = useState<CardState>({ kind: 'checking' });
-  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [copied, setCopied] = useState(false);
   const [requestedCode, setRequestedCode] = useState('');
   const [codeCheck, setCodeCheck] = useState<CodeCheckStatus>('idle');
 
@@ -174,11 +173,11 @@ export function ReferFriendCard() {
     setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
   }, [user?.id, requestedCode]);
 
-  const copy = useCallback(async (text: string, type: 'code' | 'link') => {
+  const copy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API unavailable — silently no-op, nothing to recover from.
     }
@@ -264,7 +263,6 @@ export function ReferFriendCard() {
 
   const { row } = state;
   const code = row.coupon_code as string;
-  const link = buildReferralLink(code);
 
   return (
     <Card padding="default" className="flex flex-col gap-4">
@@ -284,19 +282,11 @@ export function ReferFriendCard() {
         </span>
         <button
           type="button"
-          onClick={() => copy(code, 'code')}
+          onClick={() => copy(code)}
           className="inline-flex items-center gap-1.5 rounded-[8px] border-[0.5px] border-border-ds-subtle px-2.5 py-1.5 text-small text-ink-secondary transition-colors duration-base ease-out hover:border-gold-primary hover:text-gold-primary"
         >
-          {copied === 'code' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied === 'code' ? 'Copied' : 'Copy code'}
-        </button>
-        <button
-          type="button"
-          onClick={() => copy(link, 'link')}
-          className="inline-flex items-center gap-1.5 rounded-[8px] border-[0.5px] border-border-ds-subtle px-2.5 py-1.5 text-small text-ink-secondary transition-colors duration-base ease-out hover:border-gold-primary hover:text-gold-primary"
-        >
-          {copied === 'link' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied === 'link' ? 'Copied' : 'Copy link'}
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? 'Copied' : 'Copy code'}
         </button>
       </div>
 

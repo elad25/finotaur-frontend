@@ -18,7 +18,6 @@ import {
   FRIEND_DISCOUNT_PCT,
   FRIEND_DISCOUNT_MONTHS,
   MIN_PAYOUT_USD,
-  ATTRIBUTION_WINDOW_DAYS,
 } from '@/features/affiliate/affiliateTerms';
 import {
   DollarSign,
@@ -50,8 +49,8 @@ const howItWorks = [
   },
   {
     step: "02",
-    title: "Share Your Link & Coupon",
-    description: `Get a unique referral link + a ${FRIEND_DISCOUNT_PCT}% discount coupon code your audience can use at checkout, valid for their first ${FRIEND_DISCOUNT_MONTHS} months.`,
+    title: "Share Your Coupon Code",
+    description: `Get a unique ${FRIEND_DISCOUNT_PCT}% discount coupon code your audience applies at checkout, valid for their first ${FRIEND_DISCOUNT_MONTHS} months.`,
     icon: Copy,
   },
   {
@@ -74,8 +73,8 @@ const benefits = [
   `${COMMISSION_RATE_PCT}% commission on all plans — monthly and yearly`,
   `Commissions paid for the first ${COMMISSION_DURATION_MONTHS} months per referral`,
   `Your referrals save ${FRIEND_DISCOUNT_PCT}% for their first ${FRIEND_DISCOUNT_MONTHS} months with your coupon code`,
-  "Real-time dashboard to track clicks, signups & earnings",
-  `${ATTRIBUTION_WINDOW_DAYS}-day cookie window — they don't need to buy immediately`,
+  "Real-time dashboard to track referrals & earnings",
+  "No pressure — friends can redeem your coupon code whenever they're ready to subscribe",
   `Monthly payouts via PayPal — $${MIN_PAYOUT_USD} minimum payout`,
   "Marketing assets, banners & email templates provided",
   "No cap on earnings — the more you refer, the more you earn",
@@ -272,7 +271,7 @@ const AffiliatePage = () => {
                 </div>
               </div>
               <p className="text-slate-400 text-sm leading-relaxed">
-                For every subscriber who signs up through your referral link, you earn <span className="text-white font-semibold">{COMMISSION_RATE_PCT}% of every payment</span> — monthly or yearly — for the first {COMMISSION_DURATION_MONTHS} months of their subscription.
+                For every subscriber who uses your coupon code, you earn <span className="text-white font-semibold">{COMMISSION_RATE_PCT}% of every payment</span> — monthly or yearly — for the first {COMMISSION_DURATION_MONTHS} months of their subscription.
               </p>
             </motion.div>
 

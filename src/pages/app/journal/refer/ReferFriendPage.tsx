@@ -20,7 +20,6 @@ import { Button } from '@/components/ds/Button';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { SectionSpinner, Spinner } from '@/components/ds/Spinner';
 import {
-  buildReferralLink,
   fetchMemberReferralRow,
   provisionMemberReferralCode,
   rowFromProvisionResult,
@@ -73,7 +72,7 @@ export default function ReferFriendPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [referrals, setReferrals] = useState<MemberReferralListItem[]>([]);
   const [commissions, setCommissions] = useState<CommissionTotals>({ pending: 0, confirmed: 0, paid: 0 });
-  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [copied, setCopied] = useState(false);
   const [paypalEmail, setPaypalEmail] = useState('');
   const [savingPaypal, setSavingPaypal] = useState(false);
   const [paypalSaved, setPaypalSaved] = useState(false);
@@ -175,11 +174,11 @@ export default function ReferFriendPage() {
     if (state.kind === 'ready') setPaypalEmail(state.row.paypal_email || '');
   }, [state]);
 
-  const copy = useCallback(async (text: string, type: 'code' | 'link') => {
+  const copy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API unavailable — nothing to recover from.
     }
@@ -269,7 +268,6 @@ export default function ReferFriendPage() {
   // ── Ready ──
   const { row } = state;
   const code = row.coupon_code as string;
-  const link = buildReferralLink(code);
 
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
@@ -278,7 +276,7 @@ export default function ReferFriendPage() {
         <p className="mt-1 text-small text-ink-secondary">Give 30%, Get 20% for 12 months</p>
       </div>
 
-      {/* Hero — code + share link + terms */}
+      {/* Hero — code + terms */}
       <Card padding="spacious" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Gift className="h-5 w-5 text-gold-primary" aria-hidden="true" />
@@ -291,25 +289,11 @@ export default function ReferFriendPage() {
           </span>
           <button
             type="button"
-            onClick={() => copy(code, 'code')}
+            onClick={() => copy(code)}
             className="inline-flex items-center gap-1.5 rounded-[8px] border-[0.5px] border-border-ds-subtle px-3 py-2 text-small text-ink-secondary transition-colors duration-base ease-out hover:border-gold-primary hover:text-gold-primary"
           >
-            {copied === 'code' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied === 'code' ? 'Copied' : 'Copy code'}
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-1 px-3 py-2 text-small text-ink-secondary">
-            {link}
-          </span>
-          <button
-            type="button"
-            onClick={() => copy(link, 'link')}
-            className="inline-flex items-center gap-1.5 rounded-[8px] border-[0.5px] border-border-ds-subtle px-3 py-2 text-small text-ink-secondary transition-colors duration-base ease-out hover:border-gold-primary hover:text-gold-primary"
-          >
-            {copied === 'link' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied === 'link' ? 'Copied' : 'Copy link'}
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Copied' : 'Copy code'}
           </button>
         </div>
 
