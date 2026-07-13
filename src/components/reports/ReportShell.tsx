@@ -43,9 +43,11 @@ export interface ReportShellProps {
   /** Slide keys that are currently locked — hides the camera/share button
    *  while a locked slide is active (no point capturing a blurred card). */
   lockedKeys?: string[];
+  /** When true, renders a large faint golden-bull watermark as the full-screen modal background. */
+  watermark?: boolean;
 }
 
-export function ReportShell({ slides, children, onClose, title, subtitle, lockedKeys }: ReportShellProps) {
+export function ReportShell({ slides, children, onClose, title, subtitle, lockedKeys, watermark }: ReportShellProps) {
   const navigate = useNavigate();
   const [api, setApi] = useState<CarouselApi>();
   const [selected, setSelected] = useState(0);
@@ -94,6 +96,15 @@ export function ReportShell({ slides, children, onClose, title, subtitle, locked
         }}
         aria-hidden="true"
       />
+
+      {watermark && (
+        <img
+          src={finoBullWatermark}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 z-0 w-[82vw] max-w-[1150px] -translate-x-1/2 -translate-y-1/2 select-none opacity-[0.07]"
+        />
+      )}
 
       {/* Optional page-level header */}
       {title && (
@@ -201,8 +212,6 @@ export interface ReportSlideFrameProps {
   pill: string;
   title: string;
   subtitle?: string;
-  /** When true, renders the faint golden-bull brand watermark behind the card. */
-  watermark?: boolean;
   children: ReactNode;
   /** Rendered below content when unlocked — pass a <KeyTakeaway />. */
   takeaway?: ReactNode;
@@ -214,23 +223,13 @@ export function ReportSlideFrame({
   pill,
   title,
   subtitle,
-  watermark = false,
   children,
   takeaway,
   locked = false,
   lockedOverlay,
 }: ReportSlideFrameProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-6">
-      {watermark && (
-        <img
-          src={finoBullWatermark}
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 z-0 w-[92%] max-w-[760px] -translate-x-1/2 -translate-y-1/2 select-none opacity-[0.11]"
-        />
-      )}
-
+    <div className="relative overflow-hidden rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-6">
       <div className="relative z-10 space-y-ds-5">
         <div>
           <Eyebrow>{pill}</Eyebrow>

@@ -115,7 +115,7 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
 function ConsistencyMetricCard({ card }: { card: ConsistencyStatCard }) {
   const Icon = CARD_ICON[card.key] ?? Target;
   return (
-    <div className="relative overflow-hidden rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base/70 p-ds-4">
+    <div className="relative overflow-hidden rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-4">
       <div className="flex items-center justify-between gap-ds-2">
         <div className="flex min-w-0 items-center gap-ds-2">
           <Icon className="h-4 w-4 flex-shrink-0 text-gold-primary" aria-hidden="true" />

@@ -130,7 +130,6 @@ export default function JournalReportPage() {
         key={slide.key}
         pill={JOURNAL_SLIDE_PILLS[slide.key]}
         title={slide.title}
-        watermark
         locked={locked}
         lockedOverlay={
           locked ? (
@@ -163,6 +162,7 @@ export default function JournalReportPage() {
       title="What your trading data reveals"
       subtitle={subtitle}
       lockedKeys={lockedKeys}
+      watermark
     >
       {children}
     </ReportShell>
