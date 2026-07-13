@@ -19,6 +19,7 @@ import { Eyebrow } from '@/components/ds/Card';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { fetchMarketsReport } from '@/lib/reports/reportApi';
 import type { MarketsReportPayload } from '@/lib/reports/reportTypes';
+import finoBullWatermark from '@/assets/brand/fino-bull-watermark.png';
 
 const SECTION_ICON: Record<string, LucideIcon> = {
   indices: TrendingUp,
@@ -56,8 +57,15 @@ export default function MarketsReportPage() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface-base">
-      <div className="flex flex-shrink-0 items-center justify-between px-ds-5 py-ds-4">
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-surface-base">
+      <img
+        src={finoBullWatermark}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute z-0 select-none"
+        style={{ right: 'calc(50vw + 172px)', bottom: 0, height: '90vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
+      />
+      <div className="relative z-10 flex flex-shrink-0 items-center justify-between px-ds-5 py-ds-4">
         <Eyebrow>Markets Today</Eyebrow>
         <button
           type="button"
@@ -69,7 +77,7 @@ export default function MarketsReportPage() {
         </button>
       </div>
 
-      <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-ds-5 pb-ds-8">
+      <div className="relative z-10 mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-ds-5 pb-ds-8">
         {loading ? (
           <div className="flex h-full min-h-[50vh] flex-col items-center justify-center gap-ds-3">
             <Spinner size="lg" />
