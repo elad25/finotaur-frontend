@@ -21,8 +21,10 @@
 // Structure mirrors VolumeProfileLayer.tsx / DepthMatrixLayer.tsx:
 //   - Absolutely-positioned, DPR-aware, pointer-events:none canvas.
 //   - zIndex 5 — same value DepthMatrixLayer uses to paint BEHIND the
-//     lightweight-charts candle canvas (see FinotaurChart.tsx's JSX comment
-//     on DepthMatrixLayer for why zIndex 5 wins that stacking comparison).
+//     lightweight-charts candle canvas mount (z-index 6, transparent
+//     layout.background — see FinotaurChart.tsx's buildChartOptions and the
+//     containerRef div's JSX comment for why zIndex 5 genuinely loses that
+//     stacking comparison and shows through).
 //   - rAF loop with a dirty flag PLUS a per-frame coordinate fingerprint
 //     (price-axis rescale fires no lw-charts v4 event).
 //   - The EXPENSIVE step (computeSessionProfiles) runs ONLY when `bars`
@@ -218,8 +220,9 @@ export function SessionVolumeProfileLayer({ chart, series, bars, settings, visib
         height: `${height}px`,
         pointerEvents: 'none',
         // Behind candles — see FinotaurChart.tsx's DepthMatrixLayer comment
-        // for why zIndex 5 wins the stacking comparison against the
-        // lightweight-charts candle canvas nested inside containerRef.
+        // for why zIndex 5 genuinely loses the stacking comparison against
+        // the lightweight-charts candle canvas (zIndex 6, transparent
+        // background) nested inside containerRef.
         zIndex: 5,
       }}
       aria-hidden="true"
