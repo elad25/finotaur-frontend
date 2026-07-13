@@ -49,13 +49,6 @@ const CARD_ICON: Record<string, typeof Target> = {
   'max-drawdown': TrendingDown,
 };
 
-const CONSISTENCY_LEDGER_HEADERS = [
-  { label: 'METRIC', className: 'col-span-3' },
-  { label: 'VALUE', className: 'col-span-2 text-right' },
-  { label: 'STATUS', className: 'col-span-2 text-right' },
-  { label: 'INSIGHT', className: 'col-span-5' },
-];
-
 function statusBadgeClasses(status: StatusBadge): string {
   switch (status) {
     case 'GREAT':
@@ -105,16 +98,9 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
       <AIArenaTabNav items={CONSISTENCY_TABS} activeId={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'essential' && (
-        <div className="pt-ds-1">
-          <div className="grid grid-cols-12 items-center gap-ds-2 border-b border-border-ds-subtle pb-ds-2">
-            {CONSISTENCY_LEDGER_HEADERS.map((h) => (
-              <span key={h.label} className={cn('text-[10px] uppercase tracking-[0.15em] text-ink-tertiary', h.className)}>
-                {h.label}
-              </span>
-            ))}
-          </div>
-          {data.consistency.map((card, i) => (
-            <ConsistencyRow key={card.key} card={card} isLast={i === data.consistency.length - 1} />
+        <div className="grid grid-cols-1 gap-ds-3 pt-ds-1 sm:grid-cols-2">
+          {data.consistency.map((card) => (
+            <ConsistencyMetricCard key={card.key} card={card} />
           ))}
         </div>
       )}
@@ -126,45 +112,44 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
   );
 }
 
-function ConsistencyRow({ card, isLast }: { card: ConsistencyStatCard; isLast: boolean }) {
+function ConsistencyMetricCard({ card }: { card: ConsistencyStatCard }) {
   const Icon = CARD_ICON[card.key] ?? Target;
   return (
-    <div className={cn('grid grid-cols-12 items-center gap-ds-2 py-ds-3', !isLast && 'border-b border-border-ds-subtle')}>
-      <div className="col-span-3 flex min-w-0 items-center gap-2">
-        <Icon className="h-4 w-4 flex-shrink-0 text-gold-primary" aria-hidden="true" />
-        <span className="truncate text-sm text-ink-primary">{card.label}</span>
-        <TooltipProvider delayDuration={150}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={card.tooltip}
-                onClick={(e) => e.preventDefault()}
-                className="inline-flex flex-shrink-0 items-center justify-center"
-              >
-                <HelpCircle className="h-3.5 w-3.5 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[220px] text-xs">
-              {card.tooltip}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      <div className="col-span-2 text-right">
-        <span className={cn('font-mono text-lg tabular-nums', statusValueClasses(card.status))}>{card.displayValue}</span>
-      </div>
-
-      <div className="col-span-2 text-right">
-        <span className={cn('inline-flex rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(card.status))}>
+    <div className="relative overflow-hidden rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-base p-ds-4">
+      <div className="flex items-center justify-between gap-ds-2">
+        <div className="flex min-w-0 items-center gap-ds-2">
+          <Icon className="h-4 w-4 flex-shrink-0 text-gold-primary" aria-hidden="true" />
+          <span className="truncate text-sm text-ink-secondary">{card.label}</span>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={card.tooltip}
+                  onClick={(e) => e.preventDefault()}
+                  className="inline-flex flex-shrink-0 items-center justify-center"
+                >
+                  <HelpCircle className="h-3.5 w-3.5 text-ink-tertiary hover:text-gold-primary" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[220px] text-xs">
+                {card.tooltip}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <span className={cn('inline-flex flex-shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide', statusBadgeClasses(card.status))}>
           {card.status}
         </span>
       </div>
 
-      <div className="col-span-5 min-w-0">
-        <span className="text-xs leading-snug text-ink-secondary">{card.explanation}</span>
+      <div className="mt-ds-3">
+        <span className={cn('font-mono text-3xl tabular-nums leading-none', statusValueClasses(card.status))}>
+          {card.displayValue}
+        </span>
       </div>
+
+      <p className="mt-ds-3 text-xs leading-snug text-ink-secondary">{card.explanation}</p>
     </div>
   );
 }

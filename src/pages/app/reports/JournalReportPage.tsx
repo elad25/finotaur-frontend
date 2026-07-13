@@ -130,6 +130,7 @@ export default function JournalReportPage() {
         key={slide.key}
         pill={JOURNAL_SLIDE_PILLS[slide.key]}
         title={slide.title}
+        watermark
         locked={locked}
         lockedOverlay={
           locked ? (
