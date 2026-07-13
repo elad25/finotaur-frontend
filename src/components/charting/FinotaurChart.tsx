@@ -1573,7 +1573,12 @@ export function FinotaurChart({
           (seriesList[0] as ISeriesApi<'Line'>).setData(computeVWAP(bars));
           break;
         case 'MACD': {
-          const { macd, signal, histogram } = computeMACD(bars);
+          const { macd, signal, histogram } = computeMACD(
+            bars,
+            ind.macdParams?.fast,
+            ind.macdParams?.slow,
+            ind.macdParams?.signal,
+          );
           (seriesList[0] as ISeriesApi<'Line'>).setData(macd);
           (seriesList[1] as ISeriesApi<'Line'>).setData(signal);
           (seriesList[2] as ISeriesApi<'Histogram'>).setData(histogram);
@@ -1583,6 +1588,7 @@ export function FinotaurChart({
           const { middle, upper, lower } = computeBollinger(
             bars,
             ind.period,
+            ind.bbandsStdDev,
           );
           (seriesList[0] as ISeriesApi<'Line'>).setData(middle);
           (seriesList[1] as ISeriesApi<'Line'>).setData(upper);

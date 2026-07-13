@@ -7,13 +7,16 @@
  *   - Timeframe    — always shown. Now a TimeframeMenu (see that file):
  *                    favorite chips + a TradingView-style grouped dropdown
  *                    (SECONDS/MINUTES/HOURS/DAYS) with a "Custom…" dialog.
- *   - Indicators ▾ — chart tab only. A real add/remove picker: 7 toggle
- *                    rows (SMA/EMA/RSI/VWAP/MACD/BB/ATR — the same set
- *                    IndicatorToolbar exposes for Backtest/Journal, and the
- *                    only types FinotaurChart renders). Selection state
- *                    lives in TradingArena.tsx (single source of truth,
- *                    shared across tabs) and persists via
- *                    useArenaIndicatorPreferences.
+ *   - Indicators (N) — chart tab only. Opens the Indicators POPUP
+ *                    (see ./IndicatorsDialog.tsx) — a full settings dialog
+ *                    (toggle + editable params per indicator, 8 rows:
+ *                    VWAP/EMA/SMA/Bollinger/Volume Profile/RSI/MACD/ATR,
+ *                    max 5 active at once). Same lifted-dialog-state pattern
+ *                    FootprintTab.tsx uses for FootprintSettingsDialog — the
+ *                    trigger is a plain button, not a ToolbarTrigger dropdown.
+ *                    Selection + params live in TradingArena.tsx (single
+ *                    source of truth, shared across tabs) and persist via
+ *                    useArenaIndicatorPreferences (v2 — see that hook).
  *   - Chart ▾      — always shown (all 3 tabs). TradingView-style Chart
  *                    Settings (see ChartSettingsMenu.tsx): candle colors,
  *                    canvas/grid/crosshair/watermark, price axis + last
@@ -30,41 +33,24 @@
  * FootprintTab.tsx), which manages its own controls state internally and
  * does not go through this toolbar.
  *
- * Dropdown behavior (Indicators ▾) is a tiny local implementation — a
- * single `openMenu` state here plus one shared document mousedown/Escape
- * listener. No new dependency (no Radix Popover etc. — that's an intentional
- * scope choice for this stub-quality toolbar). Chart ▾ (ChartSettingsMenu)
- * manages its own open/close state internally instead — same pattern
- * FootprintSettingsMenu already uses — so it doesn't need to plug into this
- * shared `openMenu` state machine.
+ * Chart ▾ (ChartSettingsMenu) manages its own open/close state internally —
+ * same pattern FootprintSettingsMenu already uses. Indicators (N) follows
+ * the FootprintTab.tsx lifted-dialog-state pattern instead (a plain trigger
+ * button + a Radix Dialog rendered alongside it, which owns its own
+ * open/close/outside-click/Escape behavior — no shared `openMenu` state
+ * machine needed for it).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { TabId } from '../types';
 import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
 import { TimeframeMenu } from './TimeframeMenu';
-import { ToolbarTrigger } from './ToolbarTrigger';
 import { ChartSettingsMenu } from './ChartSettingsMenu';
+import { IndicatorsDialog } from './IndicatorsDialog';
 import { isIntradayInterval } from '@/components/charting/indicators';
-import { INDICATOR_PERIODS, type IndicatorSettings } from '@/components/charting/types';
+import { countActiveIndicators, type ArenaIndicatorEnabled, type ArenaIndicatorParams } from './indicatorsSettings';
 import type { ChartStyleSettings } from './chartStyleSettings';
-
-type MenuId = 'indicators';
-
-// Same 7 indicator types FinotaurChart can render (see FinotaurChart.tsx's
-// per-type switch) — mirrors IndicatorToolbar.tsx's chip set/labels so the
-// Arena's picker and Backtest/Journal's toolbar stay visually consistent.
-const INDICATOR_ROWS: Array<{ key: keyof IndicatorSettings; label: string }> = [
-  { key: 'sma', label: `SMA ${INDICATOR_PERIODS.sma}` },
-  { key: 'ema', label: `EMA ${INDICATOR_PERIODS.ema}` },
-  { key: 'rsi', label: `RSI ${INDICATOR_PERIODS.rsi}` },
-  { key: 'vwap', label: 'VWAP' },
-  { key: 'macd', label: 'MACD' },
-  { key: 'bbands', label: `BB ${INDICATOR_PERIODS.bbands.period}` },
-  { key: 'atr', label: `ATR ${INDICATOR_PERIODS.atr}` },
-];
 
 interface ArenaToolbarProps {
   interval: ArenaInterval;
@@ -73,8 +59,12 @@ interface ArenaToolbarProps {
   intervalCapability: IntervalCapability;
   activeTab: TabId;
   /** Current indicator on/off state — single source of truth lives in TradingArena.tsx. */
-  indicatorSettings: IndicatorSettings;
-  onIndicatorSettingsChange: (next: IndicatorSettings) => void;
+  indicatorsEnabled: ArenaIndicatorEnabled;
+  /** Current indicator editable params — single source of truth lives in TradingArena.tsx. */
+  indicatorsParams: ArenaIndicatorParams;
+  onIndicatorsEnabledChange: (patch: Partial<ArenaIndicatorEnabled>) => void;
+  onIndicatorsParamsChange: <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => void;
+  onIndicatorsReset: () => void;
   /** Current chart style settings (Chart ▾ menu) — single source of truth lives in TradingArena.tsx. */
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
@@ -88,55 +78,31 @@ export function ArenaToolbar({
   onIntervalChange,
   intervalCapability,
   activeTab,
-  indicatorSettings,
-  onIndicatorSettingsChange,
+  indicatorsEnabled,
+  indicatorsParams,
+  onIndicatorsEnabledChange,
+  onIndicatorsParamsChange,
+  onIndicatorsReset,
   chartStyle,
   onChartStyleChange,
   onChartStyleReset,
   assetClass,
 }: ArenaToolbarProps) {
-  const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
 
-  const toggleMenu = useCallback((id: MenuId) => {
-    setOpenMenu((prev) => (prev === id ? null : id));
-  }, []);
-
-  // One shared listener for the whole toolbar — closes whichever menu is
-  // open on outside click or Escape. Only attached while a menu is open.
-  useEffect(() => {
-    if (!openMenu) return;
-
-    function handlePointerDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpenMenu(null);
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openMenu]);
-
-  // Indicators ▾ only applies to the plain candlestick chart.
+  // Indicators (N) only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
 
   // VWAP is only meaningful on intraday intervals — same gate IndicatorToolbar
   // applies for Backtest/Journal.
   const intraday = isIntradayInterval(interval);
-  const activeIndicatorCount = INDICATOR_ROWS.filter((row) => indicatorSettings[row.key]).length;
+  const activeIndicatorCount = countActiveIndicators(indicatorsEnabled);
   const indicatorsTriggerValue = activeIndicatorCount > 0
     ? `Indicators (${activeIndicatorCount})`
     : 'Indicators';
 
   return (
-    <div ref={containerRef} className="flex items-center gap-1">
+    <div className="flex items-center gap-1">
       {/* Timeframe — always shown (chart / footprint / liquidity tabs all use it).
           Renders favorite chips + the grouped dropdown + a "Custom…" dialog —
           see TimeframeMenu.tsx. */}
@@ -153,7 +119,7 @@ export function ArenaToolbar({
       />
 
       {/* Chart ▾ — TradingView-style Chart Settings. Always shown (all 3
-          tabs respect the style via ChartStyleContext), unlike Indicators ▾
+          tabs respect the style via ChartStyleContext), unlike Indicators (N)
           which is chart-tab only. */}
       <ChartSettingsMenu
         settings={chartStyle}
@@ -170,72 +136,35 @@ export function ArenaToolbar({
             aria-hidden="true"
           />
 
-          {/* Indicators ▾ — real add/remove picker. Row click toggles;
-              active indicators get a gold check + highlight. */}
-          <ToolbarTrigger
-            caption={null}
-            value={indicatorsTriggerValue}
-            isOpen={openMenu === 'indicators'}
-            onClick={() => toggleMenu('indicators')}
+          {/* Indicators (N) — opens the Indicators POPUP (full settings dialog). */}
+          <button
+            type="button"
+            onClick={() => setIndicatorsDialogOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={indicatorsDialogOpen}
+            className={cn(
+              'flex items-center gap-1.5 h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
+              indicatorsDialogOpen
+                ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+                : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+            )}
           >
-            <div className="flex flex-col p-1.5 min-w-[160px]">
-              {INDICATOR_ROWS.map((row) => {
-                const disabled = row.key === 'vwap' && !intraday;
-                return (
-                  <IndicatorRow
-                    key={row.key}
-                    label={row.label}
-                    active={indicatorSettings[row.key]}
-                    disabled={disabled}
-                    disabledHint={disabled ? 'VWAP is intraday-only' : undefined}
-                    onClick={() =>
-                      onIndicatorSettingsChange({
-                        ...indicatorSettings,
-                        [row.key]: !indicatorSettings[row.key],
-                      })
-                    }
-                  />
-                );
-              })}
-            </div>
-          </ToolbarTrigger>
+            {indicatorsTriggerValue}
+          </button>
+          <IndicatorsDialog
+            open={indicatorsDialogOpen}
+            onOpenChange={setIndicatorsDialogOpen}
+            enabled={indicatorsEnabled}
+            params={indicatorsParams}
+            onUpdateEnabled={onIndicatorsEnabledChange}
+            onUpdateParams={onIndicatorsParamsChange}
+            onReset={onIndicatorsReset}
+            intraday={intraday}
+            chartStyle={chartStyle}
+            onChartStyleChange={onChartStyleChange}
+          />
         </>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Indicators ▾ panel row — one toggle per indicator type.
-// ---------------------------------------------------------------------------
-
-interface IndicatorRowProps {
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  disabledHint?: string;
-  onClick: () => void;
-}
-
-function IndicatorRow({ label, active, disabled, disabledHint, onClick }: IndicatorRowProps) {
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={disabled ? disabledHint : undefined}
-      aria-pressed={!disabled && active}
-      className={cn(
-        'flex h-7 items-center justify-between gap-2 rounded px-2 text-[11px] transition-colors duration-150',
-        disabled
-          ? 'cursor-not-allowed text-[#3a3a3a]'
-          : active
-            ? 'cursor-pointer bg-[rgba(201,166,70,0.12)] text-[#C9A646] hover:bg-[rgba(201,166,70,0.18)]'
-            : 'cursor-pointer text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#E8E8E8]',
-      )}
-    >
-      <span>{label}</span>
-      {!disabled && active && <Check className="h-3 w-3 flex-shrink-0" aria-hidden="true" />}
-    </button>
   );
 }

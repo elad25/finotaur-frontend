@@ -56,7 +56,9 @@ import {
   FOOTPRINT_SELL_BG_STRONG,
   FOOTPRINT_SELL_COLOR,
   FOOTPRINT_SELL_COLOR_BRIGHT,
+  FOOTPRINT_SKELETON_BODY_FILL_ALPHA,
   FOOTPRINT_SKELETON_BODY_WIDTH_PX,
+  FOOTPRINT_SKELETON_WICK_ALPHA,
   FOOTPRINT_SKELETON_WICK_WIDTH_PX,
   FOOTPRINT_SOLID_SCHEME_BG,
   FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX,
@@ -652,9 +654,10 @@ export interface FootprintDrawExtras {
   /**
    * This candle's actual OHLC prices (from the underlying candlestick series,
    * NOT derived from footprint bins) — draws the NT/MW-style skeleton strip
-   * (hairline high/low wick + 2px open/close body) at the column's left edge
-   * when present. Optional: omitting it (existing callers, magnifier popup)
-   * simply skips the skeleton — no behavior change for those call sites.
+   * (hairline high/low wick + 5px open/close body) CENTERED on the column's
+   * bid|ask seam when present. Optional: omitting it (existing callers,
+   * magnifier popup) simply skips the skeleton — no behavior change for
+   * those call sites.
    */
   ohlc?: { open: number; high: number; low: number; close: number };
   /**
@@ -708,16 +711,19 @@ export function drawCandleFootprint(
   // candle's rows at a given zoom (see computeCellFontSize).
   const cellFontSize = computeCellFontSize(rowHeightPx);
 
-  // Candle skeleton strip (NT/MW convention) — drawn FIRST, beneath the cell
-  // fills/text below, so the footprint clusters remain the visually dominant
-  // layer and the skeleton reads as a thin structural reference at the
-  // column's left edge. Only at 'full' detail (showText) — same gating as
-  // the numbers themselves, since the skeleton exists to orient the trader
-  // once individual bid/ask cells are legible.
-  if (showText && extras.ohlc) {
-    drawCandleSkeleton(ctx, extras.ohlc, { leftX, priceToY });
-  }
-
+  // Precompute per-row screen geometry ONCE, then render in two passes below
+  // (backgrounds, then skeleton, then text) — this guarantees paint order
+  // regardless of cellMode, instead of relying on any particular mode's
+  // background shape (e.g. bidAsk's center gutter) to keep the skeleton
+  // visible.
+  const rowGeometries: {
+    row: MergedBin;
+    top: number;
+    height: number;
+    isPoc: boolean;
+    dimmed: boolean;
+    imbalanceSide: ImbalanceSide;
+  }[] = [];
   for (let i = 0; i < prepared.merged.length; i++) {
     const row = prepared.merged[i];
     const yTop = priceToY(row.binPrice + groupSize);
@@ -735,7 +741,7 @@ export function drawCandleFootprint(
     // preset this excludes isolated singles even though `side` is still set
     // (side stays available for stacked-zone-band computation elsewhere).
     const rowImbalance = prepared.imbalances[i];
-    const imbalance: ImbalanceSide = rowImbalance?.highlighted ? rowImbalance.side : null;
+    const imbalanceSide: ImbalanceSide = rowImbalance?.highlighted ? rowImbalance.side : null;
 
     // Value Area dimming (F4) — only meaningful when showValueArea produced
     // boundary indices for this candle; otherwise every row is "in" (no dim).
@@ -744,12 +750,18 @@ export function drawCandleFootprint(
         ? row.binPrice < prepared.valBinPrice || row.binPrice > prepared.vahBinPrice
         : false;
 
-    drawCell(ctx, {
+    rowGeometries.push({ row, top: cellTop, height: cellHeight, isPoc, dimmed, imbalanceSide });
+  }
+
+  // Pass 1 — cell backgrounds (POC bands, histogram/flat fills, VA dimming)
+  // for every row.
+  for (const rg of rowGeometries) {
+    drawCellBackground(ctx, {
       leftX,
       rightX,
-      top: cellTop,
-      height: cellHeight,
-      row,
+      top: rg.top,
+      height: rg.height,
+      row: rg.row,
       cellMode: config.cellMode,
       layout: config.layout,
       colorScheme: config.colorScheme,
@@ -757,11 +769,34 @@ export function drawCandleFootprint(
       maxRowSideVol: prepared.maxRowSideVol,
       maxAbsDelta: prepared.maxAbsDelta,
       maxTrades: prepared.maxTrades,
+      isPoc: rg.isPoc,
+      dimmed: rg.dimmed,
+    });
+  }
+
+  // Candle skeleton strip (NT/MW convention) — drawn AFTER cell backgrounds
+  // but BEFORE cell text, centered on the column's bid|ask seam, so it reads
+  // as a real mini-candle against the surrounding bid/ask fills (never
+  // painted over) while the per-cell numbers stay the topmost layer. Only at
+  // 'full' detail (showText) — same gating as the numbers themselves, since
+  // the skeleton exists to orient the trader once individual bid/ask cells
+  // are legible.
+  if (showText && extras.ohlc) {
+    drawCandleSkeleton(ctx, extras.ohlc, { centerX, priceToY });
+  }
+
+  // Pass 2 — cell text (numbers), on top of both backgrounds and the skeleton.
+  for (const rg of rowGeometries) {
+    drawCellText(ctx, {
+      leftX,
+      rightX,
+      top: rg.top,
+      height: rg.height,
+      row: rg.row,
+      cellMode: config.cellMode,
       showText,
-      isPoc,
-      imbalanceSide: imbalance,
+      imbalanceSide: rg.imbalanceSide,
       fontSize: cellFontSize,
-      dimmed,
       valuesDivider: config.valuesDivider,
       imbalanceBold: config.imbalanceBold,
     });
@@ -775,18 +810,21 @@ export function drawCandleFootprint(
 }
 
 /**
- * Draw one candle's skeleton: a hairline high→low wick plus a 2px open/close
- * body strip, both anchored at the column's LEFT edge (NT/MW convention —
- * distinct from the footprint's own bid/ask columns, which occupy the rest
- * of the width). Green (#22c55e) when close >= open, red (#dc2626) otherwise
- * — reuses the existing buy/sell theme tokens, no new hexes.
+ * Draw one candle's skeleton: a hairline high→low wick plus a 5px open/close
+ * body strip, both CENTERED on the column's bid|ask seam (NT/MW convention,
+ * adapted to sit between the bid and ask columns rather than at the left
+ * edge, per Elad's live-view feedback — the seam is where a trader's eye
+ * already rests when scanning bid vs ask). Green (#22c55e) when close >=
+ * open, red (#dc2626) otherwise — reuses the existing buy/sell theme tokens
+ * (no new hexes), rendered at high alpha with a solid-color 1px border so
+ * the mini-candle reads clearly against both red and green cell fills.
  */
 function drawCandleSkeleton(
   ctx: CanvasRenderingContext2D,
   ohlc: { open: number; high: number; low: number; close: number },
-  geo: { leftX: number; priceToY: (price: number) => number | null },
+  geo: { centerX: number; priceToY: (price: number) => number | null },
 ): void {
-  const { leftX, priceToY } = geo;
+  const { centerX, priceToY } = geo;
   const yHigh = priceToY(ohlc.high);
   const yLow = priceToY(ohlc.low);
   const yOpen = priceToY(ohlc.open);
@@ -794,25 +832,31 @@ function drawCandleSkeleton(
   if (yHigh === null || yLow === null || yOpen === null || yClose === null) return;
 
   const isUp = ohlc.close >= ohlc.open;
-  const color = isUp ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
-  const wickX = leftX + FOOTPRINT_SKELETON_WICK_WIDTH_PX / 2;
+  const baseColor = isUp ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
+  const wickColor = mixAlphaValue(baseColor, FOOTPRINT_SKELETON_WICK_ALPHA, FOOTPRINT_SKELETON_WICK_ALPHA, 0);
+  const bodyFillColor = mixAlphaValue(baseColor, FOOTPRINT_SKELETON_BODY_FILL_ALPHA, FOOTPRINT_SKELETON_BODY_FILL_ALPHA, 0);
 
-  // Hairline wick spanning the full high→low range.
-  ctx.strokeStyle = color;
+  // Hairline wick spanning the full high→low range, centered on the seam.
+  ctx.strokeStyle = wickColor;
   ctx.lineWidth = FOOTPRINT_SKELETON_WICK_WIDTH_PX;
   ctx.beginPath();
-  ctx.moveTo(wickX, Math.min(yHigh, yLow));
-  ctx.lineTo(wickX, Math.max(yHigh, yLow));
+  ctx.moveTo(centerX, Math.min(yHigh, yLow));
+  ctx.lineTo(centerX, Math.max(yHigh, yLow));
   ctx.stroke();
 
-  // 2px open/close body strip, same left edge.
+  // 5px open/close body strip, centered on the same seam — filled at high
+  // alpha plus a full-saturation (darker-reading) 1px border.
   const bodyTop = Math.min(yOpen, yClose);
   const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
-  ctx.fillStyle = color;
-  ctx.fillRect(leftX, bodyTop, FOOTPRINT_SKELETON_BODY_WIDTH_PX, bodyHeight);
+  const bodyLeft = centerX - FOOTPRINT_SKELETON_BODY_WIDTH_PX / 2;
+  ctx.fillStyle = bodyFillColor;
+  ctx.fillRect(bodyLeft, bodyTop, FOOTPRINT_SKELETON_BODY_WIDTH_PX, bodyHeight);
+  ctx.strokeStyle = baseColor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bodyLeft + 0.5, bodyTop + 0.5, FOOTPRINT_SKELETON_BODY_WIDTH_PX - 1, Math.max(0, bodyHeight - 1));
 }
 
-interface DrawCellArgs {
+interface DrawCellBackgroundArgs {
   leftX: number;
   rightX: number;
   top: number;
@@ -830,30 +874,46 @@ interface DrawCellArgs {
   maxAbsDelta: number;
   /** Max trades count across the candle's rows — 'trades' histogram normalization (F1). */
   maxTrades: number;
-  showText: boolean;
   isPoc: boolean;
+  /** Value Area dimming (F4) — true when this row's price is outside the candle's VAH/VAL band. */
+  dimmed: boolean;
+}
+
+interface DrawCellTextArgs {
+  leftX: number;
+  rightX: number;
+  top: number;
+  height: number;
+  row: MergedBin;
+  cellMode: FootprintCellMode;
+  showText: boolean;
   imbalanceSide: ImbalanceSide;
   /** Auto font size (px) for this draw pass — see computeCellFontSize. */
   fontSize: number;
-  /** Value Area dimming (F4) — true when this row's price is outside the candle's VAH/VAL band. */
-  dimmed: boolean;
   /** "Values divider" (config.valuesDivider) — 1000 (default) K-compacts cell numbers, 1 shows raw values. */
   valuesDivider: 1 | 1000;
   /** Bold the winning number's text on an imbalanced row (config.imbalanceBold). Default true. */
   imbalanceBold: boolean;
 }
 
-function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
+/**
+ * Cell BACKGROUND pass only (POC band, histogram/flat fill, Value Area dim).
+ * Split from the text pass (`drawCellText` below) so `drawCandleFootprint`
+ * can run ALL rows' backgrounds, then the candle skeleton, then ALL rows'
+ * text — guaranteeing the skeleton paints above every background and below
+ * every number regardless of cellMode (previously relied on the skeleton
+ * drawing before the single combined background+text pass, which worked
+ * only where the background left a gap, e.g. bidAsk's center gutter).
+ */
+function drawCellBackground(ctx: CanvasRenderingContext2D, args: DrawCellBackgroundArgs): void {
   const {
     leftX, rightX, top, height, row, cellMode, layout, colorScheme,
-    maxRowVol, maxRowSideVol, maxAbsDelta, maxTrades,
-    showText, isPoc, imbalanceSide, fontSize, dimmed,
-    valuesDivider, imbalanceBold,
+    maxRowVol, maxRowSideVol, maxAbsDelta, maxTrades, isPoc, dimmed,
   } = args;
   const width = rightX - leftX;
   const midX = leftX + width / 2;
-  // Half the bidAsk center gutter — background fills and text anchors inset
-  // symmetrically from the midline by this amount (see FOOTPRINT_CELL_GUTTER_PX).
+  // Half the bidAsk center gutter — background fills inset symmetrically
+  // from the midline by this amount (see FOOTPRINT_CELL_GUTTER_PX).
   const halfGutter = FOOTPRINT_CELL_GUTTER_PX / 2;
   const delta = row.buyVol - row.sellVol;
   const rowVol = row.buyVol + row.sellVol;
@@ -923,11 +983,23 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
       ctx.fillRect(leftX, top, width, height);
     }
   }
+}
 
-  // ── Imbalance accent ───────────────────────────────────────────────────
-  // No outline draw here (removed — the old gold outline collided with the
-  // FINOTAUR gold POC identity). Imbalance is communicated purely via bold +
-  // recolored NUMBER text on the winning side, handled in the text block below.
+/**
+ * Cell TEXT pass only (the numbers) — see `drawCellBackground` above for why
+ * this is split out. No outline draw for the imbalance accent (removed — the
+ * old gold outline collided with the FINOTAUR gold POC identity); imbalance
+ * is communicated purely via bold + recolored NUMBER text on the winning side.
+ */
+function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): void {
+  const { leftX, rightX, top, height, row, cellMode, showText, imbalanceSide, fontSize, valuesDivider, imbalanceBold } = args;
+  const width = rightX - leftX;
+  const midX = leftX + width / 2;
+  // Half the bidAsk center gutter — text anchors inset symmetrically from
+  // the midline by this amount (see FOOTPRINT_CELL_GUTTER_PX).
+  const halfGutter = FOOTPRINT_CELL_GUTTER_PX / 2;
+  const delta = row.buyVol - row.sellVol;
+  const rowVol = row.buyVol + row.sellVol;
 
   if (!showText || height < FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) return;
 
@@ -1453,7 +1525,7 @@ export function drawStatsBandAt(
       // Max Δ/Min Δ/Session Δ), neutral zinc tint for the unsigned Volume
       // row — alpha always interpolated by this row's relative magnitude
       // via the shared weak/strong endpoints (mirrors the bidAsk cell
-      // pattern in drawCell above).
+      // pattern in drawCellBackground above).
       if (magnitude > 0) {
         const chipHex = !def.colorBySign
           ? FOOTPRINT_NEUTRAL_TEXT

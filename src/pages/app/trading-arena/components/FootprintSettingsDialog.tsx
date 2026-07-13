@@ -62,7 +62,6 @@ import {
   type CrosshairStyle,
   type PriceAxisFontSize,
   type PricePrecision,
-  type SessionVolumeProfilePeriod,
 } from './chartStyleSettings';
 
 export interface FootprintSettingsDialogProps {
@@ -130,13 +129,6 @@ const PRICE_PRECISION_OPTIONS: { value: PricePrecision; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 1, label: '1' },
   { value: 2, label: '2' },
-];
-
-const SESSION_PERIOD_OPTIONS: { value: SessionVolumeProfilePeriod; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'custom', label: 'Custom' },
 ];
 
 function pillClass(active: boolean): string {
@@ -222,41 +214,6 @@ function NumberField({ label, value, min, max, step, onCommit }: NumberFieldProp
         min={min}
         max={max}
         step={step}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        className="w-16 h-6 rounded border px-1.5 text-right text-[11px] text-[#E8E8E8] focus:outline-none"
-        style={{ background: '#0D0D0F', borderColor: 'rgba(201,166,70,0.25)' }}
-      />
-    </label>
-  );
-}
-
-function TimeField({ label, value, onCommit }: { label: string; value: string; onCommit: (value: string) => void }) {
-  const [text, setText] = useState(value);
-
-  useEffect(() => {
-    setText(value);
-  }, [value]);
-
-  const commit = () => {
-    if (/^\d{1,2}:\d{2}$/.test(text.trim())) {
-      if (text !== value) onCommit(text.trim());
-    } else {
-      setText(value); // invalid — revert
-    }
-  };
-
-  return (
-    <label className="flex items-center justify-between gap-2 text-[11px] text-[#C0C0C0]">
-      <span>{label}</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="HH:MM"
-        value={text}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -879,83 +836,13 @@ export function FootprintSettingsDialog({
 
                 <SectionDivider />
 
-                <div>
-                  <SectionLabel>Volume Profile</SectionLabel>
-                  <div className="flex flex-col gap-2">
-                    <FieldRow label="Session Volume Profile">
-                      <ToggleSwitch
-                        active={chartStyle.volumeProfile.enabled}
-                        onClick={() => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, enabled: !chartStyle.volumeProfile.enabled } })}
-                        label={chartStyle.volumeProfile.enabled ? 'On' : 'Off'}
-                      />
-                    </FieldRow>
-
-                    {chartStyle.volumeProfile.enabled && (
-                      <>
-                        <div>
-                          <div className="mb-1 text-[10px] text-[#707070]">Session period</div>
-                          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Session period">
-                            {SESSION_PERIOD_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, period: opt.value } })}
-                                className={pillClass(chartStyle.volumeProfile.period === opt.value)}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {chartStyle.volumeProfile.period === 'custom' && (
-                          <div className="flex flex-col gap-1.5 pl-1">
-                            <TimeField
-                              label="Session start"
-                              value={chartStyle.volumeProfile.customSessionStart}
-                              onCommit={(v) => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, customSessionStart: v } })}
-                            />
-                            <TimeField
-                              label="Session end"
-                              value={chartStyle.volumeProfile.customSessionEnd}
-                              onCommit={(v) => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, customSessionEnd: v } })}
-                            />
-                          </div>
-                        )}
-
-                        <FieldRow label="vPOC ray">
-                          <ToggleSwitch
-                            active={chartStyle.volumeProfile.showVpoc}
-                            onClick={() => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, showVpoc: !chartStyle.volumeProfile.showVpoc } })}
-                            label={chartStyle.volumeProfile.showVpoc ? 'On' : 'Off'}
-                          />
-                        </FieldRow>
-                        <FieldRow label="VAH / VAL lines">
-                          <ToggleSwitch
-                            active={chartStyle.volumeProfile.showVahVal}
-                            onClick={() => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, showVahVal: !chartStyle.volumeProfile.showVahVal } })}
-                            label={chartStyle.volumeProfile.showVahVal ? 'On' : 'Off'}
-                          />
-                        </FieldRow>
-                        <NumberField
-                          label="Profile width %"
-                          value={chartStyle.volumeProfile.profileWidthPct}
-                          min={5}
-                          max={60}
-                          step={5}
-                          onCommit={(v) => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, profileWidthPct: v } })}
-                        />
-                        <NumberField
-                          label="Opacity"
-                          value={chartStyle.volumeProfile.opacity}
-                          min={0}
-                          max={1}
-                          step={0.1}
-                          onCommit={(v) => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, opacity: v } })}
-                        />
-                      </>
-                    )}
-                  </div>
+                {/* Volume Profile moved to the Trading Arena's Indicators
+                    popup (2026-07) — it's now an 8th indicator toggle (see
+                    indicatorsSettings.ts), counted in the max-5-active limit.
+                    This tab used to duplicate ChartSettingsMenu.tsx's Volume
+                    Profile section; same relocation note applies here. */}
+                <div className="text-[10px] text-[#707070]">
+                  Volume Profile moved to Indicators.
                 </div>
 
                 {assetClass !== undefined && assetClass !== 'crypto' && (

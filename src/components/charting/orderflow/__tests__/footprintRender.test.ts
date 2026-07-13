@@ -61,6 +61,9 @@ import {
   FOOTPRINT_STACKED_SELL_BAND_BORDER,
   FOOTPRINT_SOLID_SCHEME_BG,
   FOOTPRINT_VOLUME_HEAT_STRONG_ALPHA,
+  FOOTPRINT_SKELETON_BODY_FILL_ALPHA,
+  FOOTPRINT_SKELETON_BODY_WIDTH_PX,
+  FOOTPRINT_SKELETON_WICK_ALPHA,
 } from '../footprintTheme';
 
 // ─── computeDetailLevel ──────────────────────────────────────────────────────
@@ -1037,7 +1040,19 @@ describe("drawCandleFootprint — 'volume' cell mode renders neutral text (no di
   });
 });
 
-// ─── Candle skeleton strip (task 3): drawn BENEATH cell fills, correct color ──
+// ─── Candle skeleton strip: centered on the bid|ask seam, above cell
+// backgrounds but below cell text, correct color/alpha ──────────────────────
+
+/** Skeleton body-fill/wick-stroke rgba strings — mirrors mixAlphaValue's hex->rgba
+ * math against the known FOOTPRINT_BUY_COLOR/FOOTPRINT_SELL_COLOR rgb breakdown
+ * (34,197,94 / 220,38,38 — same literal breakdown already hardcoded elsewhere in
+ * footprintTheme.ts, e.g. FOOTPRINT_BUY_BG). */
+const SKELETON_BODY_FILL_BUY = `rgba(34, 197, 94, ${FOOTPRINT_SKELETON_BODY_FILL_ALPHA})`;
+const SKELETON_BODY_FILL_SELL = `rgba(220, 38, 38, ${FOOTPRINT_SKELETON_BODY_FILL_ALPHA})`;
+const SKELETON_WICK_BUY = `rgba(34, 197, 94, ${FOOTPRINT_SKELETON_WICK_ALPHA})`;
+const SKELETON_WICK_SELL = `rgba(220, 38, 38, ${FOOTPRINT_SKELETON_WICK_ALPHA})`;
+const SKELETON_FILL_COLORS = new Set([SKELETON_BODY_FILL_BUY, SKELETON_BODY_FILL_SELL]);
+const SKELETON_STROKE_COLORS = new Set([SKELETON_WICK_BUY, SKELETON_WICK_SELL]);
 
 /** Call-order-aware mock: every draw call is appended (in order) to `log`, tagged by kind. */
 function createOrderedMockCtx() {
@@ -1085,9 +1100,9 @@ describe('drawCandleFootprint — candle skeleton strip', () => {
     ];
     const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
     // showPoc disabled — the POC band also issues a stroke() (gold top/bottom
-    // rule), which would confound a plain 'strokeLine' filter in the ordering
-    // test below. Isolating the skeleton's own buy/sell-styled stroke/fill
-    // events is the point of this fixture.
+    // rule), which would confound the strokeLine filter in the ordering test
+    // below. Isolating the skeleton's own buy/sell-styled stroke/fill events
+    // (now rgba() with alpha, not the plain hex) is the point of this fixture.
     const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', showPoc: false };
     const prepared = prepareCandleDraw(candle, rowSize, 1, config);
 
@@ -1103,38 +1118,53 @@ describe('drawCandleFootprint — candle skeleton strip', () => {
     return { prepared, projection, config, extras };
   }
 
-  it('the skeleton wick+body draw BEFORE any cell fillRect (i.e. beneath, per canvas paint order)', () => {
+  it('the skeleton wick+body draw AFTER cell background fillRects (i.e. above the backgrounds, per canvas paint order)', () => {
     const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
     const ctx = createOrderedMockCtx();
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    const skeletonEvents = ctx.log.filter((e) => e.kind === 'strokeLine' || (e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR)));
+    const isSkeletonFill = (e: (typeof ctx.log)[number]) => e.kind === 'fillRect' && SKELETON_FILL_COLORS.has(e.fillStyle);
+    const isSkeletonStroke = (e: (typeof ctx.log)[number]) => e.kind === 'strokeLine' && SKELETON_STROKE_COLORS.has(e.strokeStyle);
+
+    const skeletonEvents = ctx.log.filter((e) => isSkeletonStroke(e) || isSkeletonFill(e));
     expect(skeletonEvents.length).toBeGreaterThan(0);
 
     const firstSkeletonIdx = ctx.log.indexOf(skeletonEvents[0]);
-    const firstCellFillIdx = ctx.log.findIndex(
-      (e) => e.kind === 'fillRect' && e.fillStyle !== FOOTPRINT_BUY_COLOR && e.fillStyle !== FOOTPRINT_SELL_COLOR,
-    );
+    const firstCellFillIdx = ctx.log.findIndex((e) => e.kind === 'fillRect' && !isSkeletonFill(e));
     expect(firstCellFillIdx).toBeGreaterThan(-1);
-    expect(firstSkeletonIdx).toBeLessThan(firstCellFillIdx);
+    // Backgrounds now paint FIRST, then the skeleton — inverted from the old
+    // left-edge/beneath-everything geometry, so the skeleton always reads
+    // above the bid/ask fills instead of relying on a mode-specific gap.
+    expect(firstSkeletonIdx).toBeGreaterThan(firstCellFillIdx);
   });
 
-  it('close >= open renders the body strip in FOOTPRINT_BUY_COLOR (green)', () => {
+  it('close >= open renders the body strip in FOOTPRINT_BUY_COLOR at FOOTPRINT_SKELETON_BODY_FILL_ALPHA (green)', () => {
     const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
     const ctx = createOrderedMockCtx();
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_BUY_COLOR);
+    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === SKELETON_BODY_FILL_BUY);
     expect(bodyFill).toBeDefined();
+    // Centered on the bid|ask seam (projection.centerX = 400), not the column's left edge.
+    expect(bodyFill?.x).toBeCloseTo(400 - FOOTPRINT_SKELETON_BODY_WIDTH_PX / 2);
+    expect(bodyFill?.w).toBe(FOOTPRINT_SKELETON_BODY_WIDTH_PX);
+
+    const wickStroke = ctx.log.find((e) => e.kind === 'strokeLine' && e.strokeStyle === SKELETON_WICK_BUY);
+    expect(wickStroke).toBeDefined();
   });
 
-  it('close < open renders the body strip in FOOTPRINT_SELL_COLOR (red)', () => {
+  it('close < open renders the body strip in FOOTPRINT_SELL_COLOR at FOOTPRINT_SKELETON_BODY_FILL_ALPHA (red)', () => {
     const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 110, high: 115, low: 95, close: 100 });
     const ctx = createOrderedMockCtx();
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_SELL_COLOR);
+    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === SKELETON_BODY_FILL_SELL);
     expect(bodyFill).toBeDefined();
+    expect(bodyFill?.x).toBeCloseTo(400 - FOOTPRINT_SKELETON_BODY_WIDTH_PX / 2);
+    expect(bodyFill?.w).toBe(FOOTPRINT_SKELETON_BODY_WIDTH_PX);
+
+    const wickStroke = ctx.log.find((e) => e.kind === 'strokeLine' && e.strokeStyle === SKELETON_WICK_SELL);
+    expect(wickStroke).toBeDefined();
   });
 
   it('omitting extras.ohlc draws no skeleton (backward compatible — existing callers unaffected)', () => {
@@ -1143,16 +1173,12 @@ describe('drawCandleFootprint — candle skeleton strip', () => {
     const ctx = createOrderedMockCtx();
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extrasNoOhlc);
 
-    const skeletonFills = ctx.log.filter(
-      (e) => e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR),
-    );
+    const skeletonFills = ctx.log.filter((e) => e.kind === 'fillRect' && SKELETON_FILL_COLORS.has(e.fillStyle));
     expect(skeletonFills.length).toBe(0);
-    // Skeleton wick strokes are tagged by their own buy/sell strokeStyle —
+    // Skeleton wick strokes are tagged by their own buy/sell rgba strokeStyle —
     // distinct from the (unrelated) POC-band top/bottom stroke, which uses
     // FOOTPRINT_POC_COLOR and still fires independently (showPoc defaults on).
-    const skeletonStrokes = ctx.log.filter(
-      (e) => e.kind === 'strokeLine' && (e.strokeStyle === FOOTPRINT_BUY_COLOR || e.strokeStyle === FOOTPRINT_SELL_COLOR),
-    );
+    const skeletonStrokes = ctx.log.filter((e) => e.kind === 'strokeLine' && SKELETON_STROKE_COLORS.has(e.strokeStyle));
     expect(skeletonStrokes.length).toBe(0);
   });
 
@@ -1161,14 +1187,15 @@ describe('drawCandleFootprint — candle skeleton strip', () => {
     const ctx = createOrderedMockCtx();
     drawCandleFootprint(ctx, prepared, projection, 'shaded', config, extras);
 
-    // 'shaded' never reaches drawCell/drawCandleSkeleton at all (drawCandleFootprint
-    // returns after the merged-length guard only for 'hidden'; 'shaded' still loops
-    // but showText=false gates the skeleton call) — assert on buy/sell-styled events only,
-    // same reasoning as the previous test.
+    // 'shaded' never reaches drawCellBackground/drawCandleSkeleton at all
+    // (drawCandleFootprint returns after the merged-length guard only for
+    // 'hidden'; 'shaded' still loops but showText=false gates the skeleton
+    // call) — assert on buy/sell-styled rgba events only, same reasoning as
+    // the previous test.
     const skeletonEvents = ctx.log.filter(
       (e) =>
-        (e.kind === 'strokeLine' && (e.strokeStyle === FOOTPRINT_BUY_COLOR || e.strokeStyle === FOOTPRINT_SELL_COLOR)) ||
-        (e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR)),
+        (e.kind === 'strokeLine' && SKELETON_STROKE_COLORS.has(e.strokeStyle)) ||
+        (e.kind === 'fillRect' && SKELETON_FILL_COLORS.has(e.fillStyle)),
     );
     expect(skeletonEvents.length).toBe(0);
   });

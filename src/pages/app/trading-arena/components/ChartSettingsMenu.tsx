@@ -25,7 +25,6 @@ import {
   type CrosshairStyle,
   type PriceAxisFontSize,
   type PricePrecision,
-  type SessionVolumeProfilePeriod,
 } from './chartStyleSettings';
 
 export interface ChartSettingsMenuProps {
@@ -54,13 +53,6 @@ const PRICE_PRECISION_OPTIONS: { value: PricePrecision; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 1, label: '1' },
   { value: 2, label: '2' },
-];
-
-const SESSION_PERIOD_OPTIONS: { value: SessionVolumeProfilePeriod; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'custom', label: 'Custom' },
 ];
 
 function pillClass(active: boolean): string {
@@ -143,42 +135,6 @@ function NumberField({ label, value, min, max, step, onCommit }: {
         min={min}
         max={max}
         step={step}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        className="w-16 h-6 rounded border px-1.5 text-right text-[11px] text-[#E8E8E8] focus:outline-none"
-        style={{ background: '#0D0D0F', borderColor: 'rgba(201,166,70,0.25)' }}
-      />
-    </label>
-  );
-}
-
-/** 'HH:MM' text field — used by the custom session start/end rows. */
-function TimeField({ label, value, onCommit }: { label: string; value: string; onCommit: (value: string) => void }) {
-  const [text, setText] = useState(value);
-
-  useEffect(() => {
-    setText(value);
-  }, [value]);
-
-  const commit = () => {
-    if (/^\d{1,2}:\d{2}$/.test(text.trim())) {
-      if (text !== value) onCommit(text.trim());
-    } else {
-      setText(value); // invalid — revert
-    }
-  };
-
-  return (
-    <label className="flex items-center justify-between gap-2 text-[11px] text-[#C0C0C0]">
-      <span>{label}</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="HH:MM"
-        value={text}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -408,84 +364,15 @@ export function ChartSettingsMenu({ settings, onChange, onReset, assetClass }: C
 
           <SectionDivider />
 
-          {/* VOLUME PROFILE (Chart tab — Session Volume Profile) */}
-          <div>
-            <SectionLabel>Volume Profile</SectionLabel>
-            <div className="flex flex-col gap-2">
-              <FieldRow label="Session Volume Profile">
-                <ToggleSwitch
-                  active={settings.volumeProfile.enabled}
-                  onClick={() => onChange({ volumeProfile: { ...settings.volumeProfile, enabled: !settings.volumeProfile.enabled } })}
-                  label={settings.volumeProfile.enabled ? 'On' : 'Off'}
-                />
-              </FieldRow>
-
-              {settings.volumeProfile.enabled && (
-                <>
-                  <div>
-                    <div className="text-[10px] text-[#707070] mb-1">Session period</div>
-                    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Session period">
-                      {SESSION_PERIOD_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => onChange({ volumeProfile: { ...settings.volumeProfile, period: opt.value } })}
-                          className={pillClass(settings.volumeProfile.period === opt.value)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {settings.volumeProfile.period === 'custom' && (
-                    <div className="flex flex-col gap-1.5 pl-1">
-                      <TimeField
-                        label="Session start"
-                        value={settings.volumeProfile.customSessionStart}
-                        onCommit={(v) => onChange({ volumeProfile: { ...settings.volumeProfile, customSessionStart: v } })}
-                      />
-                      <TimeField
-                        label="Session end"
-                        value={settings.volumeProfile.customSessionEnd}
-                        onCommit={(v) => onChange({ volumeProfile: { ...settings.volumeProfile, customSessionEnd: v } })}
-                      />
-                    </div>
-                  )}
-
-                  <FieldRow label="vPOC ray">
-                    <ToggleSwitch
-                      active={settings.volumeProfile.showVpoc}
-                      onClick={() => onChange({ volumeProfile: { ...settings.volumeProfile, showVpoc: !settings.volumeProfile.showVpoc } })}
-                      label={settings.volumeProfile.showVpoc ? 'On' : 'Off'}
-                    />
-                  </FieldRow>
-                  <FieldRow label="VAH / VAL lines">
-                    <ToggleSwitch
-                      active={settings.volumeProfile.showVahVal}
-                      onClick={() => onChange({ volumeProfile: { ...settings.volumeProfile, showVahVal: !settings.volumeProfile.showVahVal } })}
-                      label={settings.volumeProfile.showVahVal ? 'On' : 'Off'}
-                    />
-                  </FieldRow>
-                  <NumberField
-                    label="Profile width %"
-                    value={settings.volumeProfile.profileWidthPct}
-                    min={5}
-                    max={60}
-                    step={5}
-                    onCommit={(v) => onChange({ volumeProfile: { ...settings.volumeProfile, profileWidthPct: v } })}
-                  />
-                  <NumberField
-                    label="Opacity"
-                    value={settings.volumeProfile.opacity}
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    onCommit={(v) => onChange({ volumeProfile: { ...settings.volumeProfile, opacity: v } })}
-                  />
-                </>
-              )}
-            </div>
+          {/* Volume Profile moved to the Indicators popup (2026-07) — it's now
+              modeled as an 8th indicator toggle (see indicatorsSettings.ts),
+              counted in the max-5-active limit. This menu only edits its
+              detail params (period/vPOC/etc.) — that plumbing was relocated
+              into IndicatorsDialog.tsx's Volume Profile row, which reads/
+              writes the same ChartStyleSettings.volumeProfile object via
+              this same onChange. */}
+          <div className="text-[10px] text-[#707070]">
+            Volume Profile moved to Indicators.
           </div>
 
           <SectionDivider />
