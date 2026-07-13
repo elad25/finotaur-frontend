@@ -135,6 +135,17 @@ export interface ChartStyleSettings {
   candleDownColor: string;
   candleBordersVisible: boolean;
   candleWicksVisible: boolean;
+  /**
+   * Optional per-element color overrides (TradingView-style full color
+   * freedom) — `undefined` mirrors the body color exactly, reproducing
+   * today's behavior (see chartStyleMapping.ts's `?? settings.candleUpColor`
+   * fallback). Hex6 or hex8 (with alpha byte) — hex8 comes from
+   * ColorSwatchPicker's opacity slider.
+   */
+  candleBorderUpColor?: string;
+  candleBorderDownColor?: string;
+  candleWickUpColor?: string;
+  candleWickDownColor?: string;
 
   // CANVAS
   backgroundColor: string;
@@ -210,6 +221,11 @@ function asHexColor(v: unknown, fallback: string): string {
   return typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : fallback;
 }
 
+/** Optional-field variant — invalid/missing degrades to `undefined` (mirror body color), never to a fallback string. */
+function asOptionalHexColor(v: unknown, fallback: string | undefined): string | undefined {
+  return typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : fallback;
+}
+
 function asOneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
 }
@@ -279,6 +295,10 @@ export function sanitizeChartStyleSettings(raw: unknown, fallback: ChartStyleSet
     candleDownColor: asHexColor(p.candleDownColor, fallback.candleDownColor),
     candleBordersVisible: asBool(p.candleBordersVisible, fallback.candleBordersVisible),
     candleWicksVisible: asBool(p.candleWicksVisible, fallback.candleWicksVisible),
+    candleBorderUpColor: asOptionalHexColor(p.candleBorderUpColor, fallback.candleBorderUpColor),
+    candleBorderDownColor: asOptionalHexColor(p.candleBorderDownColor, fallback.candleBorderDownColor),
+    candleWickUpColor: asOptionalHexColor(p.candleWickUpColor, fallback.candleWickUpColor),
+    candleWickDownColor: asOptionalHexColor(p.candleWickDownColor, fallback.candleWickDownColor),
 
     backgroundColor: asHexColor(p.backgroundColor, fallback.backgroundColor),
     gridVerticalVisible: asBool(p.gridVerticalVisible, fallback.gridVerticalVisible),

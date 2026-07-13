@@ -17,15 +17,19 @@
  *                    Selection + params live in TradingArena.tsx (single
  *                    source of truth, shared across tabs) and persist via
  *                    useArenaIndicatorPreferences (v2 — see that hook).
- *   - Chart ▾      — always shown (all 3 tabs). TradingView-style Chart
- *                    Settings (see ChartSettingsMenu.tsx): candle colors,
- *                    canvas/grid/crosshair/watermark, price axis + last
- *                    price line, timezone, price precision. Applies LIVE,
- *                    persists globally via useChartStylePreferences, and
- *                    reaches all 3 tabs' FinotaurChart instances through
- *                    ChartStyleContext (provided in TradingArena.tsx) rather
- *                    than per-tab prop threading — see chartStyleSettings.ts's
- *                    header comment for why.
+ *   - Gear icon    — always shown (all 3 tabs). Opens the Chart Settings
+ *                    POPUP (see ./ChartSettingsDialog.tsx — replaces the old
+ *                    "Chart ▾" dropdown, ChartSettingsMenu.tsx, superseded
+ *                    but kept for rollback): candle Body/Border/Wick colors
+ *                    (full TradingView-style color freedom via
+ *                    ColorSwatchPicker), canvas/grid/crosshair/watermark,
+ *                    price axis + last price line, timezone, price
+ *                    precision. Applies LIVE, persists globally via
+ *                    useChartStylePreferences, and reaches all 3 tabs'
+ *                    FinotaurChart instances through ChartStyleContext
+ *                    (provided in TradingArena.tsx) rather than per-tab prop
+ *                    threading — see chartStyleSettings.ts's header comment
+ *                    for why.
  *
  * The Chart tab is a plain candlestick chart (2026-07 restructure) — no
  * order-flow controls apply to it anymore. The full OrderFlowControls
@@ -33,20 +37,19 @@
  * FootprintTab.tsx), which manages its own controls state internally and
  * does not go through this toolbar.
  *
- * Chart ▾ (ChartSettingsMenu) manages its own open/close state internally —
- * same pattern FootprintSettingsMenu already uses. Indicators (N) follows
- * the FootprintTab.tsx lifted-dialog-state pattern instead (a plain trigger
- * button + a Radix Dialog rendered alongside it, which owns its own
- * open/close/outside-click/Escape behavior — no shared `openMenu` state
- * machine needed for it).
+ * The gear icon (Chart Settings) and Indicators (N) both follow the same
+ * lifted-dialog-state pattern (a plain trigger button + a Radix Dialog
+ * rendered alongside it, which owns its own open/close/outside-click/
+ * Escape behavior) — no shared `openMenu` state machine needed.
  */
 
 import { useState } from 'react';
+import { Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TabId } from '../types';
 import type { ArenaInterval, IntervalCapability } from '../utils/intervals';
 import { TimeframeMenu } from './TimeframeMenu';
-import { ChartSettingsMenu } from './ChartSettingsMenu';
+import { ChartSettingsDialog } from './ChartSettingsDialog';
 import { IndicatorsDialog } from './IndicatorsDialog';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { countActiveIndicators, type ArenaIndicatorEnabled, type ArenaIndicatorParams } from './indicatorsSettings';
@@ -69,7 +72,7 @@ interface ArenaToolbarProps {
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
   onChartStyleReset: () => void;
-  /** Current asset class — passed straight through to ChartSettingsMenu (gates the footprint auto-transform toggle). */
+  /** Current asset class — passed straight through to ChartSettingsDialog (gates the footprint auto-transform toggle). */
   assetClass: string;
 }
 
@@ -89,6 +92,7 @@ export function ArenaToolbar({
   assetClass,
 }: ArenaToolbarProps) {
   const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
+  const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
 
   // Indicators (N) only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
@@ -118,10 +122,27 @@ export function ArenaToolbar({
         aria-hidden="true"
       />
 
-      {/* Chart ▾ — TradingView-style Chart Settings. Always shown (all 3
+      {/* Gear icon — TradingView-style Chart Settings. Always shown (all 3
           tabs respect the style via ChartStyleContext), unlike Indicators (N)
           which is chart-tab only. */}
-      <ChartSettingsMenu
+      <button
+        type="button"
+        onClick={() => setChartSettingsDialogOpen(true)}
+        aria-label="Chart settings"
+        aria-haspopup="dialog"
+        aria-expanded={chartSettingsDialogOpen}
+        className={cn(
+          'flex items-center justify-center h-7 w-7 flex-shrink-0 rounded transition-all duration-150 border',
+          chartSettingsDialogOpen
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+      >
+        <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <ChartSettingsDialog
+        open={chartSettingsDialogOpen}
+        onOpenChange={setChartSettingsDialogOpen}
         settings={chartStyle}
         onChange={onChartStyleChange}
         onReset={onChartStyleReset}

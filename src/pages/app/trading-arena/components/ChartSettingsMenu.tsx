@@ -1,4 +1,7 @@
 /**
+ * SUPERSEDED by ChartSettingsDialog (gear icon in ArenaToolbar) — kept
+ * temporarily for rollback; remove in a cleanup pass.
+ *
  * Trading Arena — "Chart ▾" TradingView-style Chart Settings menu.
  *
  * One `Chart` ToolbarTrigger (see ./ToolbarTrigger.tsx — the same gold-on-

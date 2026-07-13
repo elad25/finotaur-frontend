@@ -84,38 +84,6 @@ export const ARENA_TIMEFRAME_GROUPS: TimeframeGroup[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// Favorites — persisted to localStorage
-// ═══════════════════════════════════════════════════════════════
-
-export const DEFAULT_FAVORITE_INTERVALS: ArenaInterval[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
-
-export const FAVORITES_STORAGE_KEY = 'arena.tf.favorites';
-
-/** Reads favorites from localStorage; falls back to the default set on first run or corrupt data. */
-export function loadFavoriteIntervals(): ArenaInterval[] {
-  try {
-    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (!raw) return [...DEFAULT_FAVORITE_INTERVALS];
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string') && parsed.length > 0) {
-      return parsed as ArenaInterval[];
-    }
-  } catch {
-    // localStorage unavailable (privacy mode) or corrupt JSON — fall back to defaults.
-  }
-  return [...DEFAULT_FAVORITE_INTERVALS];
-}
-
-/** Persists favorites to localStorage. Silently no-ops if storage is unavailable. */
-export function saveFavoriteIntervals(favorites: ArenaInterval[]): void {
-  try {
-    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
-  } catch {
-    // localStorage unavailable — favorites just won't persist across reloads.
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
 // Custom interval builder (feeds the "Custom..." dialog)
 // ═══════════════════════════════════════════════════════════════
 

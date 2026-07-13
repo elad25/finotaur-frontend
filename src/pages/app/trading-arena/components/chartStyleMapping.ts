@@ -208,22 +208,22 @@ export function chartStyleToChartOptions(settings: ChartStyleSettings): DeepPart
  * Maps the CANDLES section (+ last-price-line + price precision) onto
  * `candleSeries.applyOptions()`.
  *
- * Border/wick colors mirror the up/down body color (the spec exposes only a
- * single up/down swatch — no separate border/wick color pickers — so
- * "Borders on/off" and "Wicks on/off" are pure visibility toggles, not color
- * choices). `borderVisible`/`wickVisible` fully hide the border/wick
- * regardless of color when off.
+ * Border/wick colors default to mirroring the up/down body color, but the
+ * user may override each independently (candleBorderUpColor/-DownColor,
+ * candleWickUpColor/-DownColor — see chartStyleSettings.ts) for full
+ * TradingView-style color freedom. `borderVisible`/`wickVisible` fully hide
+ * the border/wick regardless of color when off.
  */
 export function chartStyleToSeriesOptions(settings: ChartStyleSettings): CandlestickSeriesPartialOptions {
   const base: CandlestickSeriesPartialOptions = {
     upColor: settings.candleUpColor,
     downColor: settings.candleDownColor,
     borderVisible: settings.candleBordersVisible,
-    borderUpColor: settings.candleUpColor,
-    borderDownColor: settings.candleDownColor,
+    borderUpColor: settings.candleBorderUpColor ?? settings.candleUpColor,
+    borderDownColor: settings.candleBorderDownColor ?? settings.candleDownColor,
     wickVisible: settings.candleWicksVisible,
-    wickUpColor: settings.candleUpColor,
-    wickDownColor: settings.candleDownColor,
+    wickUpColor: settings.candleWickUpColor ?? settings.candleUpColor,
+    wickDownColor: settings.candleWickDownColor ?? settings.candleDownColor,
     priceLineVisible: settings.lastPriceLineVisible,
   };
 
