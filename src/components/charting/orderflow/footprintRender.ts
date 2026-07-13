@@ -255,10 +255,20 @@ export function formatCompact(n: number): string {
  * 1234→"1.2K", 12345→"12.3K"); numbers < 1000 keep the existing formatCompact
  * behavior (no K-suffix, one decimal below 100, integer at/above 100).
  * Sign is preserved on the outside so negative deltas read "-1.2K".
+ *
+ * `divider` (ATAS "Values divider" setting, FootprintConfig.valuesDivider):
+ * 1000 (default, unchanged) applies the K/M/B compaction above; 1 disables
+ * ALL compaction and returns the raw number instead (5300 -> "5300", not
+ * "5.3K") — no behavior change for any of the many 1-arg call sites in this
+ * file (totals band, stats strip, magnifier) that never pass a second arg.
  */
-export function formatCellValue(n: number): string {
+export function formatCellValue(n: number, divider: 1 | 1000 = 1000): string {
   const sign = n < 0 ? '-' : '';
   const abs = Math.abs(n);
+  if (divider === 1) {
+    if (abs === 0) return '0';
+    return `${sign}${abs.toFixed(Number.isInteger(abs) || abs >= 100 ? 0 : 1)}`;
+  }
   if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 1000) {
@@ -268,6 +278,21 @@ export function formatCellValue(n: number): string {
   }
   if (abs >= 1) return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
   return abs === 0 ? '0' : `${sign}${abs.toFixed(2)}`;
+}
+
+/**
+ * Nth-percentile value of a numeric array via the nearest-rank method (no
+ * interpolation — simple, deterministic, and matches ATAS's own coarse
+ * percentile behavior closely enough for a display-only normalization cap).
+ * Returns 0 for an empty array. `percentile` is clamped to [0, 100].
+ */
+export function computePercentile(values: number[], percentile: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const clampedPct = Math.min(100, Math.max(0, percentile));
+  const rank = Math.ceil((clampedPct / 100) * sorted.length) - 1;
+  const idx = Math.min(sorted.length - 1, Math.max(0, rank));
+  return sorted[idx];
 }
 
 // ─── Merged bin (row-merge prep) ────────────────────────────────────────────
@@ -378,6 +403,10 @@ function detectImbalances(
   config: FootprintConfig,
 ): RowImbalance[] {
   const minVol = totalVol * (config.imbalanceMinVolPct / 100);
+  // ATAS-parity extras (default values reproduce today's exact behavior —
+  // see FootprintConfig's doc comments for imbalanceMinDiff/imbalanceIgnoreZeros):
+  const minDiff = config.imbalanceMinDiff ?? 0;
+  const ignoreZeros = config.imbalanceIgnoreZeros ?? true;
   const out: RowImbalance[] = new Array(merged.length).fill(null).map(() => ({ side: null, highlighted: false }));
 
   for (let i = 0; i < merged.length; i++) {
@@ -386,19 +415,33 @@ function detectImbalances(
     if (rowVol < minVol) continue;
 
     // Ask (buyVol) at level i vs bid (sellVol) at level i-1 → buy-side imbalance.
-    // The `below.sellVol > 0` check is the zero-opposite-side guard: without
-    // it, a reference row with zero volume would make ANY buyVol trivially
-    // "infinite ratio" and always flag — see imbalancePresets.test.ts.
+    // The zero-opposite-side guard (`ignoreZeros` — default true, today's
+    // exact pre-existing behavior): without it, a reference row with zero
+    // volume would make ANY buyVol trivially "infinite ratio" and always
+    // flag — see imbalancePresets.test.ts. Setting imbalanceIgnoreZeros=false
+    // lifts that guard (ATAS "don't ignore zero values"): a fully one-sided
+    // level (opposite side exactly 0) now qualifies on its own, subject to
+    // the same dust floor (`minVol`, already checked above) and imbalanceMinDiff.
     if (i > 0) {
       const below = merged[i - 1];
-      if (below.sellVol > 0 && row.buyVol >= below.sellVol * config.imbalanceRatio) {
+      const hasReference = below.sellVol > 0;
+      const ratioOk = hasReference
+        ? row.buyVol >= below.sellVol * config.imbalanceRatio
+        : !ignoreZeros && row.buyVol > 0;
+      const diffOk = minDiff <= 0 || Math.abs(row.buyVol - below.sellVol) >= minDiff;
+      if (ratioOk && diffOk) {
         out[i].side = 'buy';
       }
     }
     // Bid (sellVol) at level i vs ask (buyVol) at level i+1 → sell-side imbalance.
     if (i < merged.length - 1) {
       const above = merged[i + 1];
-      if (above.buyVol > 0 && row.sellVol >= above.buyVol * config.imbalanceRatio) {
+      const hasReference = above.buyVol > 0;
+      const ratioOk = hasReference
+        ? row.sellVol >= above.buyVol * config.imbalanceRatio
+        : !ignoreZeros && row.sellVol > 0;
+      const diffOk = minDiff <= 0 || Math.abs(row.sellVol - above.buyVol) >= minDiff;
+      if (ratioOk && diffOk) {
         // A row can only carry one imbalance flag; sell-side check runs second
         // so a row imbalanced on both diagonals (rare, thin books) keeps 'buy'.
         if (out[i].side === null) out[i].side = 'sell';
@@ -532,6 +575,29 @@ export function prepareCandleDraw(
     }
   }
 
+  // ATAS "Proportion Settings" upper percentile: clamp the normalization
+  // ceilings computed above at the Nth percentile of this candle's OWN row
+  // values instead of the raw max, so a single outlier print can't flatten
+  // every other row's histogram-bar width / heat alpha (see
+  // FootprintConfig.proportionUpperPercentile's doc comment). 100 (default)
+  // is a no-op that skips this block entirely — the loop above already IS
+  // the raw max, byte-identical to pre-existing behavior.
+  if (config.proportionUpperPercentile < 100 && merged.length > 0) {
+    const rowVols = merged.map((r) => r.buyVol + r.sellVol);
+    const rowSideVols = merged.map((r) => Math.max(r.buyVol, r.sellVol));
+    const absDeltas = merged.map((r) => Math.abs(r.buyVol - r.sellVol));
+    const tradeCounts = merged.map((r) => r.trades);
+    const pct = config.proportionUpperPercentile;
+    const clampedRowVol = computePercentile(rowVols, pct);
+    const clampedRowSideVol = computePercentile(rowSideVols, pct);
+    const clampedAbsDelta = computePercentile(absDeltas, pct);
+    const clampedTrades = computePercentile(tradeCounts, pct);
+    if (clampedRowVol > 0) maxRowVol = clampedRowVol;
+    if (clampedRowSideVol > 0) maxRowSideVol = clampedRowSideVol;
+    if (clampedAbsDelta > 0) maxAbsDelta = clampedAbsDelta;
+    if (clampedTrades > 0) maxTrades = clampedTrades;
+  }
+
   // Per-bar Value Area (F4) — only computed when the toggle is on, since it's
   // an extra O(rows) walk on top of the loop above. Uses the same shared
   // `computeValueArea` helper as volumeProfile.ts (single source of truth for
@@ -628,7 +694,14 @@ export function drawCandleFootprint(
   const rightX = Math.min(extras.clipRightX, centerX + halfWidth);
   if (rightX <= leftX) return;
 
-  const showText = detail === 'full';
+  // ATAS "Width to show text" (config.minCellPxForText, falls back to the
+  // theme constant) — even at 'full' detail (forceFullDetail callers can
+  // reach 'full' at ANY zoom), numbers stay hidden until the on-screen
+  // candle is wide enough to fit them legibly. Evaluated fresh every draw
+  // frame (candleWidthPx is a live projection value, never cached), so this
+  // needs no FootprintLayer cache-invalidation wiring.
+  const minTextPx = config.minCellPxForText ?? FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT;
+  const showText = detail === 'full' && candleWidthPx >= minTextPx;
   const groupSize = rowSize * prepared.mergeFactor;
   // Auto font size by row height (ATAS/Exocharts parity) — computed once per
   // candle draw, not per-cell, since rowHeightPx is uniform across a
@@ -689,6 +762,8 @@ export function drawCandleFootprint(
       imbalanceSide: imbalance,
       fontSize: cellFontSize,
       dimmed,
+      valuesDivider: config.valuesDivider,
+      imbalanceBold: config.imbalanceBold,
     });
   }
 
@@ -762,6 +837,10 @@ interface DrawCellArgs {
   fontSize: number;
   /** Value Area dimming (F4) — true when this row's price is outside the candle's VAH/VAL band. */
   dimmed: boolean;
+  /** "Values divider" (config.valuesDivider) — 1000 (default) K-compacts cell numbers, 1 shows raw values. */
+  valuesDivider: 1 | 1000;
+  /** Bold the winning number's text on an imbalanced row (config.imbalanceBold). Default true. */
+  imbalanceBold: boolean;
 }
 
 function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
@@ -769,6 +848,7 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     leftX, rightX, top, height, row, cellMode, layout, colorScheme,
     maxRowVol, maxRowSideVol, maxAbsDelta, maxTrades,
     showText, isPoc, imbalanceSide, fontSize, dimmed,
+    valuesDivider, imbalanceBold,
   } = args;
   const width = rightX - leftX;
   const midX = leftX + width / 2;
@@ -852,7 +932,7 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   if (!showText || height < FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) return;
 
   const textY = top + height / 2;
-  const boldSuffix = imbalanceSide ? 'bold ' : '';
+  const boldSuffix = imbalanceSide && imbalanceBold ? 'bold ' : '';
 
   if (cellMode === 'bidAsk') {
     // Professional convention (ATAS/Exocharts/NinjaTrader): regular numbers
@@ -864,35 +944,35 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCellValue(row.sellVol), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.sellVol, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY);
 
     ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'left';
-    ctx.fillText(formatCellValue(row.buyVol), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.buyVol, valuesDivider), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY);
   } else if (cellMode === 'delta') {
     ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(delta), midX, textY);
+    ctx.fillText(formatCellValue(delta, valuesDivider), midX, textY);
   } else if (cellMode === 'trades') {
     // ATAS-style "number of trades" mode — count of prints per level, neutral
     // shading + neutral text (no directional color; a print count has no sign).
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(row.trades), midX, textY);
+    ctx.fillText(formatCellValue(row.trades, valuesDivider), midX, textY);
   } else if (cellMode === 'volumeDelta') {
     // Two values per cell: total volume (neutral) on the left half, signed
     // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCellValue(rowVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(rowVol, valuesDivider), midX - FOOTPRINT_CELL_PADDING_X, textY);
 
     const deltaSign = delta > 0 ? '+' : '';
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'left';
-    ctx.fillText(`${deltaSign}${formatCellValue(delta)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(`${deltaSign}${formatCellValue(delta, valuesDivider)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else {
     // 'volume' — neutral shading AND neutral text (pro convention: a plain
     // volume footprint carries no directional signal; delta belongs to the
@@ -900,7 +980,7 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(rowVol), midX, textY);
+    ctx.fillText(formatCellValue(rowVol, valuesDivider), midX, textY);
   }
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }

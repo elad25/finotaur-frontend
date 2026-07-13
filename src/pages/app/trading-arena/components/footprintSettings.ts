@@ -41,6 +41,17 @@ export type FootprintRowSizeMode = 'auto' | 'price' | 'ticks';
 export const DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX = 20;
 export const FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE = { min: 8, max: 60 } as const;
 
+/** ATAS "Width to show text" — user-facing default/range for the Settings dialog's NumberField. Distinct from the renderer's own fallback constant (FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT, 50px, footprintTheme.ts) — this is the DEFAULT VALUE OF THE SETTING, not the fallback used when the setting is entirely absent. */
+export const DEFAULT_FOOTPRINT_MIN_CELL_PX_FOR_TEXT = 40;
+export const FOOTPRINT_MIN_CELL_PX_FOR_TEXT_RANGE = { min: 20, max: 80 } as const;
+
+/** ATAS "Proportion Settings" upper percentile — user-facing default/range. */
+export const DEFAULT_FOOTPRINT_PROPORTION_UPPER_PERCENTILE = 100;
+export const FOOTPRINT_PROPORTION_UPPER_PERCENTILE_RANGE = { min: 90, max: 100 } as const;
+
+/** K-formatting divider for cell numbers (ATAS "Values divider"). 1000 = "5.3K" style compaction (default); 1 = raw un-compacted numbers. */
+export type FootprintValuesDivider = 1 | 1000;
+
 export interface FootprintStatsRowsVisibility {
   volume: boolean;
   delta: boolean;
@@ -85,6 +96,18 @@ export interface FootprintSettings {
   magnifierEnabled: boolean;
   /** Per-row visibility within the 6-row Cluster Statistics strip. Row-level filtering dispatch lands in PR 3 — persisted/exposed now (footprintRender.ts renders all 6 rows unconditionally whenever showStats is true, same as before this PR). */
   statsRows: FootprintStatsRowsVisibility;
+  /** ATAS "Values divider" — K-formatting of per-cell numbers. See footprintSettingsToConfig / footprintRender.ts's formatCellValue. */
+  valuesDivider: FootprintValuesDivider;
+  /** ATAS "Width to show text" — minimum candle width (px) before cell numbers paint. Range [20, 80]. */
+  minCellPxForText: number;
+  /** Extra absolute qty-difference gate on top of imbalanceRatioPct. 0 = off. */
+  imbalanceMinDiff: number;
+  /** When false, a 0-vs-N opposite-side pair DOES qualify as an imbalance (ATAS "don't ignore zero values"). Default true = today's existing guarded behavior. */
+  imbalanceIgnoreZeros: boolean;
+  /** Bold the winning number's text on an imbalanced row. Default true. */
+  imbalanceBold: boolean;
+  /** ATAS "Proportion Settings" upper percentile — clamps per-candle histogram/heat normalization. 100 = off. Range [90, 100]. */
+  proportionUpperPercentile: number;
 }
 
 /**
@@ -122,6 +145,12 @@ export const DEFAULT_FOOTPRINT_SETTINGS: FootprintSettings = {
     minDelta: true,
     sessionDelta: true,
   },
+  valuesDivider: 1000,
+  minCellPxForText: DEFAULT_FOOTPRINT_MIN_CELL_PX_FOR_TEXT,
+  imbalanceMinDiff: 0,
+  imbalanceIgnoreZeros: true,
+  imbalanceBold: true,
+  proportionUpperPercentile: DEFAULT_FOOTPRINT_PROPORTION_UPPER_PERCENTILE,
 };
 
 /**
@@ -163,6 +192,18 @@ export function footprintSettingsToConfig(
     colorScheme: settings.colorScheme,
     showValueArea: settings.showValueArea,
     statsRows: settings.statsRows,
+    valuesDivider: settings.valuesDivider,
+    minCellPxForText: Math.min(
+      FOOTPRINT_MIN_CELL_PX_FOR_TEXT_RANGE.max,
+      Math.max(FOOTPRINT_MIN_CELL_PX_FOR_TEXT_RANGE.min, settings.minCellPxForText),
+    ),
+    imbalanceMinDiff: Math.max(0, settings.imbalanceMinDiff),
+    imbalanceIgnoreZeros: settings.imbalanceIgnoreZeros,
+    imbalanceBold: settings.imbalanceBold,
+    proportionUpperPercentile: Math.min(
+      FOOTPRINT_PROPORTION_UPPER_PERCENTILE_RANGE.max,
+      Math.max(FOOTPRINT_PROPORTION_UPPER_PERCENTILE_RANGE.min, settings.proportionUpperPercentile),
+    ),
     // autoTransformMinPx takes priority over forceFullDetail in
     // FootprintLayer (see that file's detail-gate comment) — only set when
     // the user has autoTransform ON, so autoTransform=false reproduces

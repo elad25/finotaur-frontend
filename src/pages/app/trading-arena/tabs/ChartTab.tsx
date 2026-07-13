@@ -71,6 +71,7 @@ import { resolveTradeSource } from '@/components/charting/orderflow/sourceRegist
 import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTickSizes';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { footprintSettingsToConfig, DEFAULT_FOOTPRINT_SETTINGS } from '../components/footprintSettings';
+import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 
 interface ChartTabProps {
   symbol: string;
@@ -417,6 +418,14 @@ function ChartTabFootprintOnZoomBody({
     backfillBars: 40,
   });
 
+  // Candle dimming: mirror FuturesChartTab.tsx's zoom-driven stage — the
+  // footprint's own zoom-gated auto-transform (hidden → shaded → full) is
+  // what drives this here (no forceFullDetail on this bridge), so at wide
+  // zoom the candles stay full and only reduce to the thin ATAS skeleton
+  // once cells are actually showing.
+  const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
+  const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
+
   return (
     <FinotaurChart
       symbol={chartSymbol}
@@ -431,8 +440,10 @@ function ChartTabFootprintOnZoomBody({
         store,
         config: CHART_TAB_FOOTPRINT_ON_ZOOM_CONFIG,
         visible: true,
+        onStageChange: setFootprintStage,
       }}
       sessionVolumeProfile={sessionVolumeProfile}
+      mutedCandles={mutedCandles}
     />
   );
 }

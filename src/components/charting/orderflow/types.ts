@@ -4,6 +4,8 @@
 // into the same aggregation store and renderer without those layers ever
 // knowing which exchange/broker the ticks came from.
 
+import { FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT } from './footprintTheme';
+
 /** A single normalized trade tick, source-agnostic. */
 export interface FlowTrade {
   /** Trade time, epoch ms. */
@@ -323,6 +325,58 @@ export interface FootprintConfig {
     minDelta: boolean;
     sessionDelta: boolean;
   };
+  /**
+   * "Values divider" (ATAS parity) — 1000 (default) K-compacts cell numbers
+   * (5300 -> "5.3K", today's existing behavior, byte-identical); 1 shows the
+   * raw un-compacted number instead. Applied only to the per-cell bid/ask/
+   * delta/volume/trades numbers (drawCell in footprintRender.ts) — totals
+   * band / stats strip / magnifier keep their own always-K-compact
+   * formatCellValue(n) calls (1-arg, default 1000), unaffected.
+   */
+  valuesDivider: 1 | 1000;
+  /**
+   * ATAS "Width to show text" — minimum on-screen CANDLE width (px) required
+   * before a cell's numbers are painted, evaluated every draw frame
+   * (drawCandleFootprint) independently of `detail`/`forceFullDetail`. This
+   * matters specifically for forceFullDetail callers (the Arena's dedicated
+   * Footprint tab): today, forceFullDetail always renders 'full' regardless
+   * of zoom, so cell numbers could paint even in candles too narrow to fit
+   * them legibly. Falls back to FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT
+   * (footprintTheme.ts, 50px) when omitted — matches every existing caller's
+   * behavior before this field existed.
+   */
+  minCellPxForText: number;
+  /**
+   * Extra ABSOLUTE quantity-difference gate on top of `imbalanceRatio` — a
+   * row only qualifies as imbalanced once |thisRowVol - referenceRowVol| is
+   * also >= this value. 0 (default) = off, the ratio test alone decides
+   * (today's exact behavior).
+   */
+  imbalanceMinDiff: number;
+  /**
+   * When true (default — today's existing hardcoded behavior), a completely
+   * one-sided level (the diagonal reference row's opposite-side volume is
+   * exactly 0) never auto-qualifies as an imbalance purely from having a
+   * technically-infinite ratio; the row still needs a real non-zero
+   * reference to compare against. When false, a 0-vs-N pair DOES qualify as
+   * an imbalance as long as N still clears the existing dust/volume floor
+   * (imbalanceMinVolPct) and imbalanceMinDiff — an ATAS-style "don't ignore
+   * zero values" opt-out.
+   */
+  imbalanceIgnoreZeros: boolean;
+  /** Bold the winning number's cell text on an imbalanced row. Default true (today's existing hardcoded behavior). */
+  imbalanceBold: boolean;
+  /**
+   * ATAS "Proportion Settings" upper percentile — clamps the per-candle
+   * histogram-bar / volume-heat normalization ceiling (maxRowVol /
+   * maxRowSideVol / maxAbsDelta / maxTrades in prepareCandleDraw) at this
+   * percentile of the candle's OWN visible-row values instead of the raw
+   * max, so a single outlier print can't flatten every other row's bar/heat
+   * intensity. 100 (default) is a no-op — resolves to the exact same value
+   * as the raw max, and is short-circuited to skip the extra computation
+   * entirely. Range [90, 100].
+   */
+  proportionUpperPercentile: number;
 }
 
 /** Standard preset: ratio 1.5x (150%), 0.5% dust filter, singles highlighted. */
@@ -356,4 +410,10 @@ export const DEFAULT_FOOTPRINT_CONFIG: FootprintConfig = {
     minDelta: true,
     sessionDelta: true,
   },
+  valuesDivider: 1000,
+  minCellPxForText: FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT,
+  imbalanceMinDiff: 0,
+  imbalanceIgnoreZeros: true,
+  imbalanceBold: true,
+  proportionUpperPercentile: 100,
 };

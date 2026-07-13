@@ -58,6 +58,7 @@ import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTra
 import { refineNt8TickSize } from '@/components/charting/orderflow/Nt8TradeSource';
 import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
 import type { TradeSourceStatus } from '@/components/charting/orderflow/types';
+import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import {
   FUTURES_CONTRACTS,
   FUTURES_ROOTS,
@@ -66,8 +67,10 @@ import {
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
 import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
-import { footprintSettingsToConfig, resolveEffectiveRowSize } from '../components/footprintSettings';
-import { FootprintSettingsMenu, type FootprintSettingsMenuProps } from '../components/FootprintSettingsMenu';
+import { useChartStylePreferences } from '../hooks/useChartStylePreferences';
+import { DEFAULT_FOOTPRINT_SETTINGS, footprintSettingsToConfig, resolveEffectiveRowSize, type FootprintSettings } from '../components/footprintSettings';
+import { FootprintSettingsDialog } from '../components/FootprintSettingsDialog';
+import type { ChartStyleSettings } from '../components/chartStyleSettings';
 import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
@@ -146,12 +149,29 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
   const isCrypto = assetClass === 'crypto';
   const isFutures = assetClass === 'futures';
 
+  // Chart-style ("Chart" tab of the new Footprint Settings dialog) — a
+  // SEPARATE useChartStylePreferences() instance from ArenaToolbar's own
+  // (TradingArena.tsx), reading/writing the same global localStorage key
+  // (CHART_STYLE_STORAGE_KEY). Passed explicitly to each body's own
+  // <FinotaurChart chartStyle=.../> below so an edit made from THIS dialog
+  // is reflected live on THIS tab immediately (explicit prop wins over
+  // ChartStyleContext — see FinotaurChart.tsx). Known limitation: because
+  // this is a second hook instance, a change made here does not live-push
+  // into the Chart tab's own chart (driven by TradingArena's instance)
+  // until that tab re-reads localStorage (symbol/interval change or a
+  // fresh mount) — the toolbar's own "Chart ▾" quick path is unaffected
+  // either way and stays perfectly in sync with the Chart tab as before.
+  const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
+
   if (isCrypto) {
     return (
       <CryptoFootprintBody
         symbol={symbol}
         interval={interval}
         indicators={indicators}
+        chartStyle={chartStyle}
+        onChartStyleChange={updateChartStyle}
+        onChartStyleReset={resetChartStyle}
       />
     );
   }
@@ -168,6 +188,9 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
           indicators={indicators}
           isAdmin={isAdmin}
           sourceToggle={sourceToggle}
+          chartStyle={chartStyle}
+          onChartStyleChange={updateChartStyle}
+          onChartStyleReset={resetChartStyle}
         />
       );
     }
@@ -179,6 +202,9 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
         onRootChange={setFuturesRoot}
         indicators={indicators}
         sourceToggle={sourceToggle}
+        chartStyle={chartStyle}
+        onChartStyleChange={updateChartStyle}
+        onChartStyleReset={resetChartStyle}
       />
     );
   }
@@ -229,7 +255,18 @@ function FuturesSourceToggle({ mode, onChange }: FuturesSourceToggleProps) {
 // ─── Shared "Settings ▾ + quick toggles" strip ──────────────────────────────
 
 interface FootprintToolbarStripProps {
-  settingsMenuProps: FootprintSettingsMenuProps;
+  settings: FootprintSettings;
+  onSettingsChange: (patch: Partial<FootprintSettings>) => void;
+  /** Current instrument tick size — drives the dialog's Row Size $/ticks translation + snapping. */
+  tickSize: number;
+  /** True when FlowBinStore.wasRowSizeClamped() reports the last setConfig() clamped the row size upward. */
+  rowSizeClamped: boolean;
+  /** Chart tab (general chart-style settings) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
+  /** 'crypto' | 'futures' — literal per body, only used for the dialog's disabled-hint copy. */
+  assetClass: string;
   showVolumeProfile: boolean;
   showCvd: boolean;
   showDelta: boolean;
@@ -241,7 +278,14 @@ interface FootprintToolbarStripProps {
 }
 
 function FootprintToolbarStrip({
-  settingsMenuProps,
+  settings,
+  onSettingsChange,
+  tickSize,
+  rowSizeClamped,
+  chartStyle,
+  onChartStyleChange,
+  onChartStyleReset,
+  assetClass,
   showVolumeProfile,
   showCvd,
   showDelta,
@@ -251,13 +295,41 @@ function FootprintToolbarStrip({
   statusNote,
   historyLimitedNote,
 }: FootprintToolbarStripProps) {
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+
   return (
     <div
       className="flex items-center gap-2 flex-wrap px-3 py-1.5 border-b"
       style={{ borderColor: 'rgba(201,166,70,0.10)' }}
       title={historyLimitedNote}
     >
-      <FootprintSettingsMenu {...settingsMenuProps} />
+      <button
+        type="button"
+        onClick={() => setSettingsDialogOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={settingsDialogOpen}
+        className={cn(
+          'flex items-center gap-1.5 h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
+          settingsDialogOpen
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+      >
+        Settings
+      </button>
+      <FootprintSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        settings={settings}
+        onChange={onSettingsChange}
+        onReset={() => onSettingsChange(DEFAULT_FOOTPRINT_SETTINGS)}
+        tickSize={tickSize}
+        rowSizeClamped={rowSizeClamped}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+        assetClass={assetClass}
+      />
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
 
@@ -304,6 +376,10 @@ interface CryptoFootprintBodyProps {
   symbol: string;
   interval: ArenaInterval;
   indicators: Indicator[];
+  /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
 }
 
 // Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
@@ -311,7 +387,7 @@ interface CryptoFootprintBodyProps {
 // those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
 const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
-function CryptoFootprintBody({ symbol, interval, indicators }: CryptoFootprintBodyProps) {
+function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChartStyleChange, onChartStyleReset }: CryptoFootprintBodyProps) {
   // resolveTradeSource('crypto', ...) never returns null (see its doc
   // comment) — the isAdmin opt is only consulted on the 'futures' branch.
   // tickSize here is the synchronous hardcoded-map value (cryptoTickSizes.ts);
@@ -468,10 +544,24 @@ function CryptoFootprintBody({ symbol, interval, indicators }: CryptoFootprintBo
 
   const showSubPanes = klineDeltaInterval !== null && (settings.showCvd || settings.showDelta);
 
+  // Candle dimming: this tab's footprint is always forceFullDetail (cells
+  // are permanently visible, see file header) — the thin OHLC skeleton stays
+  // on for as long as the footprint pane is mounted, same mechanism
+  // FuturesChartTab.tsx uses for its zoom-gated overlay.
+  const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
+  const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       <FootprintToolbarStrip
-        settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+        settings={settings}
+        onSettingsChange={updateSettings}
+        tickSize={tickSize}
+        rowSizeClamped={rowSizeClamped}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+        assetClass="crypto"
         showVolumeProfile={settings.showVolumeProfile}
         showCvd={settings.showCvd}
         showDelta={settings.showDelta}
@@ -494,6 +584,7 @@ function CryptoFootprintBody({ symbol, interval, indicators }: CryptoFootprintBo
           height="100%"
           focusRange={focusRange}
           timeFitToken={timeFitToken}
+          chartStyle={chartStyle}
           onBarsLoad={handleBarsLoad}
           footprint={{
             store,
@@ -502,8 +593,10 @@ function CryptoFootprintBody({ symbol, interval, indicators }: CryptoFootprintBo
               forceFullDetail: true,
             },
             visible: true,
+            onStageChange: setFootprintStage,
           }}
           volumeProfile={{ store, visible: settings.showVolumeProfile }}
+          mutedCandles={mutedCandles}
         />
       </div>
 
@@ -538,9 +631,13 @@ interface FuturesFootprintBodyProps {
   isAdmin: boolean;
   /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
   sourceToggle?: FuturesSourceToggleProps;
+  /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
 }
 
-function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, sourceToggle }: FuturesFootprintBodyProps) {
+function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesFootprintBodyProps) {
   // Server-side cache warm-up (H5, admin-only — this body only ever mounts
   // when isFutures = assetClass==='futures' && isAdmin, per FootprintTab's
   // own gate above). Fire-and-forget: pre-populates the server's durable
@@ -666,6 +763,10 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
 
   const feedUnavailable = status === 'error';
 
+  // Candle dimming — same forceFullDetail rationale as CryptoFootprintBody above.
+  const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
+  const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       {/* Contract selector pills — same FUTURES_ROOTS reuse as FuturesChartTab.tsx */}
@@ -733,7 +834,14 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
       </div>
 
       <FootprintToolbarStrip
-        settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+        settings={settings}
+        onSettingsChange={updateSettings}
+        tickSize={tickSize}
+        rowSizeClamped={rowSizeClamped}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+        assetClass="futures"
         showVolumeProfile={settings.showVolumeProfile}
         showCvd={settings.showCvd}
         showDelta={settings.showDelta}
@@ -756,6 +864,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
           <FinotaurChart
             symbol={contractSymbol}
             interval={DATABENTO_INTERVAL_PLACEHOLDER}
+            chartStyle={chartStyle}
             from={from}
             to={to}
             dataSource={barsSource}
@@ -772,7 +881,9 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
                 forceFullDetail: true,
               },
               visible: true,
+              onStageChange: setFootprintStage,
             }}
+            mutedCandles={mutedCandles}
           />
         )}
       </div>
@@ -795,6 +906,10 @@ interface FuturesNt8FootprintBodyProps {
   indicators: Indicator[];
   /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
   sourceToggle?: FuturesSourceToggleProps;
+  /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
 }
 
 /**
@@ -805,7 +920,7 @@ interface FuturesNt8FootprintBodyProps {
  * automatically the moment the bridge connects/reconnects (see
  * nt8Bridge.ts's resubscribe-on-welcome design) without remounting hooks.
  */
-function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sourceToggle }: FuturesNt8FootprintBodyProps) {
+function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesNt8FootprintBodyProps) {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
   useEffect(() => onNt8BridgeStatus(setBridgeStatus), []);
   const isLive = bridgeStatus === 'live';
@@ -932,6 +1047,10 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
     }
   }
 
+  // Candle dimming — same forceFullDetail rationale as CryptoFootprintBody above.
+  const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
+  const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       <div
@@ -973,7 +1092,14 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
 
       {isLive && (
         <FootprintToolbarStrip
-          settingsMenuProps={{ settings, onChange: updateSettings, tickSize, rowSizeClamped }}
+          settings={settings}
+          onSettingsChange={updateSettings}
+          tickSize={tickSize}
+          rowSizeClamped={rowSizeClamped}
+          chartStyle={chartStyle}
+          onChartStyleChange={onChartStyleChange}
+          onChartStyleReset={onChartStyleReset}
+          assetClass="futures"
           showVolumeProfile={settings.showVolumeProfile}
           showCvd={settings.showCvd}
           showDelta={settings.showDelta}
@@ -993,6 +1119,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
             from={from}
             to={to}
             dataSource={barsSource}
+            chartStyle={chartStyle}
             indicators={indicators}
             theme="dark"
             height="100%"
@@ -1006,7 +1133,9 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
                 forceFullDetail: true,
               },
               visible: true,
+              onStageChange: setFootprintStage,
             }}
+            mutedCandles={mutedCandles}
           />
         ) : (
           <Nt8ConnectPanel variant="footprint" />

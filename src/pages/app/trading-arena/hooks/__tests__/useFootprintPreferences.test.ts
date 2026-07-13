@@ -78,6 +78,52 @@ describe('sanitizeFootprintSettings', () => {
     expect(result.statsRows.deltaPct).toBe(DEFAULT_FOOTPRINT_SETTINGS.statsRows.deltaPct); // missing -> fallback
   });
 
+  it('new ATAS-parity fields: field-by-field validates, invalid falls back per-field', () => {
+    const raw = {
+      valuesDivider: 1, // valid enum member -> passes through
+      minCellPxForText: 55,
+      imbalanceMinDiff: 12,
+      imbalanceIgnoreZeros: false,
+      imbalanceBold: false,
+      proportionUpperPercentile: 95,
+    };
+    const result = sanitizeFootprintSettings(raw, DEFAULT_FOOTPRINT_SETTINGS);
+    expect(result.valuesDivider).toBe(1);
+    expect(result.minCellPxForText).toBe(55);
+    expect(result.imbalanceMinDiff).toBe(12);
+    expect(result.imbalanceIgnoreZeros).toBe(false);
+    expect(result.imbalanceBold).toBe(false);
+    expect(result.proportionUpperPercentile).toBe(95);
+  });
+
+  it('new ATAS-parity fields: invalid values / wrong types fall back to defaults', () => {
+    const raw = {
+      valuesDivider: 7, // not in [1, 1000] -> fallback
+      minCellPxForText: 'wide', // wrong type -> fallback
+      imbalanceMinDiff: 'none', // wrong type -> fallback
+      imbalanceIgnoreZeros: 'nope', // wrong type -> fallback
+      imbalanceBold: 1, // wrong type -> fallback
+      proportionUpperPercentile: 'all', // wrong type -> fallback
+    };
+    const result = sanitizeFootprintSettings(raw, DEFAULT_FOOTPRINT_SETTINGS);
+    expect(result.valuesDivider).toBe(DEFAULT_FOOTPRINT_SETTINGS.valuesDivider);
+    expect(result.minCellPxForText).toBe(DEFAULT_FOOTPRINT_SETTINGS.minCellPxForText);
+    expect(result.imbalanceMinDiff).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceMinDiff);
+    expect(result.imbalanceIgnoreZeros).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceIgnoreZeros);
+    expect(result.imbalanceBold).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceBold);
+    expect(result.proportionUpperPercentile).toBe(DEFAULT_FOOTPRINT_SETTINGS.proportionUpperPercentile);
+  });
+
+  it('new ATAS-parity fields: missing entirely (old localStorage record) merges cleanly to defaults', () => {
+    const result = sanitizeFootprintSettings({ content: 'delta' }, DEFAULT_FOOTPRINT_SETTINGS);
+    expect(result.valuesDivider).toBe(DEFAULT_FOOTPRINT_SETTINGS.valuesDivider);
+    expect(result.minCellPxForText).toBe(DEFAULT_FOOTPRINT_SETTINGS.minCellPxForText);
+    expect(result.imbalanceMinDiff).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceMinDiff);
+    expect(result.imbalanceIgnoreZeros).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceIgnoreZeros);
+    expect(result.imbalanceBold).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceBold);
+    expect(result.proportionUpperPercentile).toBe(DEFAULT_FOOTPRINT_SETTINGS.proportionUpperPercentile);
+  });
+
   it('rowSizeValue: explicit null is preserved (auto mode), missing/invalid falls back', () => {
     const withNull = sanitizeFootprintSettings({ rowSizeValue: null }, { ...DEFAULT_FOOTPRINT_SETTINGS, rowSizeValue: 7 });
     expect(withNull.rowSizeValue).toBeNull();
