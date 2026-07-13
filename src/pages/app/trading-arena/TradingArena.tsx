@@ -30,7 +30,7 @@
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, ChevronLeft } from 'lucide-react';
 import {
@@ -49,19 +49,22 @@ import { LiquidityTab }  from './tabs/LiquidityTab';
 import { DomTab }        from './tabs/DomTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
 import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
+import { ArenaWorkspaceTabs } from './components/ArenaWorkspaceTabs';
 import { AccountSelector } from './components/AccountSelector';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
+import { useArenaWorkspaces } from './hooks/useArenaWorkspaces';
 import { ChartStyleContext } from './components/chartStyleSettings';
 import { buildIndicatorsFromArenaSettings } from './components/indicatorsSettings';
 import type { Indicator } from '@/components/charting/types';
 
 // ---------------------------------------------------------------------------
-// Default symbol and interval
+// Default symbol and interval — the ACTUAL defaults now live in
+// hooks/useArenaWorkspaces.ts (its own local literals, same values, kept
+// separate to avoid a circular import). symbol/interval/assetClass state
+// below is hydrated from the active workspace instead of these.
 // ---------------------------------------------------------------------------
-const DEFAULT_SYMBOL = 'BTCUSDT';
-const DEFAULT_INTERVAL: ArenaInterval = '15m';
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -78,12 +81,29 @@ export default function TradingArena() {
   // (App.tsx), not a new roles system — see tabs/FootprintTab.tsx.
   const { isAdmin } = useAdminAuth();
 
-  // Asset and interval are held in component state.
-  // Using URL search params would be ideal for bookmarking, but keeping it
-  // simple for Phase 0 (local state is sufficient for a workstation).
-  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
-  const [interval, setIntervalValue] = useState<ArenaInterval>(DEFAULT_INTERVAL);
-  const [assetClass, setAssetClass] = useState<AssetClass>('crypto');
+  // NinjaTrader-style bottom workspace tabs — each tab remembers its own
+  // { view, symbol, interval, assetClass } context (see
+  // hooks/useArenaWorkspaces.ts). Mounted BEFORE the symbol/interval/
+  // assetClass useStates below so their lazy initializers can read the
+  // hydrated `activeWorkspace` on first render (zero-flicker restore).
+  const {
+    workspaces,
+    activeId: activeWorkspaceId,
+    activeWorkspace,
+    addWorkspace,
+    removeWorkspace,
+    selectWorkspace,
+    renameWorkspace,
+    updateActiveWorkspace,
+  } = useArenaWorkspaces();
+
+  // Asset and interval are held in component state, hydrated from the active
+  // workspace on first render. Every subsequent user-driven change writes
+  // through to the active workspace (see handleSymbolSelect /
+  // handleIntervalChange below) so it's remembered when tabs are switched.
+  const [symbol, setSymbol] = useState(() => activeWorkspace.symbol);
+  const [interval, setIntervalValue] = useState<ArenaInterval>(() => activeWorkspace.interval);
+  const [assetClass, setAssetClass] = useState<AssetClass>(() => activeWorkspace.assetClass);
 
   // Which timeframe menu sections are usable for the active symbol — only
   // crypto (Binance) has a live trades feed, so it's the only asset class
@@ -137,11 +157,78 @@ export default function TradingArena() {
     }
     setSymbol(arenaSymbol);
     setAssetClass(detected);
-  }, []);
+    // Write-through — remember this context on the active workspace tab.
+    updateActiveWorkspace({ symbol: arenaSymbol, assetClass: detected });
+  }, [updateActiveWorkspace]);
+
+  // Wraps ArenaToolbar's interval setter to also write through to the active
+  // workspace (ArenaToolbar/TimeframeMenu are owned by another concurrent
+  // session — this wrapper is the only touchpoint needed on this side).
+  const handleIntervalChange = useCallback((next: ArenaInterval) => {
+    setIntervalValue(next);
+    updateActiveWorkspace({ interval: next });
+  }, [updateActiveWorkspace]);
 
   const handleBack = useCallback(() => {
     navigate('/app/home');
   }, [navigate]);
+
+  // ── Workspace-switch sync (activeId → local state + URL) ───────────────
+  // Fires whenever the ACTIVE workspace changes identity (tab select / "+"
+  // add / close-that-removes-the-active-tab) — NOT on every write-through
+  // edit to the currently active workspace's fields (those don't change
+  // `activeWorkspaceId`, so this effect stays quiet during normal typing/
+  // symbol/interval edits). Skipped on mount: the initial symbol/interval/
+  // assetClass state already came from `activeWorkspace` via the lazy
+  // initializers above, and initial view/URL reconciliation is handled by
+  // the dedicated effect below — running both on the same mount tick would
+  // race two `navigate()` calls against each other.
+  const didMountWorkspaceSyncRef = useRef(false);
+  useEffect(() => {
+    if (!didMountWorkspaceSyncRef.current) {
+      didMountWorkspaceSyncRef.current = true;
+      return;
+    }
+    setSymbol(activeWorkspace.symbol);
+    setAssetClass(activeWorkspace.assetClass);
+    setIntervalValue(activeWorkspace.interval);
+    if (activeWorkspace.view !== activeTab) {
+      navigate(`/app/trading-arena/${activeWorkspace.view}`);
+    }
+    // Only `activeWorkspaceId` should re-trigger this — activeWorkspace/
+    // activeTab/navigate are read fresh from the same render's closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId]);
+
+  // ── URL (activeTab) ⇄ active workspace's `view` sync ────────────────────
+  // First run (mount): if the route has NO explicit :section, restore the
+  // active workspace's remembered view via navigation (replace, so it
+  // doesn't add a back-stack entry). If the route DOES have an explicit
+  // :section (deep link), adopt it into the active workspace instead —
+  // falls through to the generic sync below.
+  // Later runs: keeps the active workspace's `view` in sync with whatever
+  // ArenaTabSwitcher navigates to (that component only calls `navigate`, it
+  // doesn't know about workspaces) — guarded by an inequality check so it
+  // never fights the workspace-switch effect above (once that effect
+  // navigates to match `activeWorkspace.view`, the two values are already
+  // equal by the time this effect re-runs).
+  const didMountViewSyncRef = useRef(false);
+  useEffect(() => {
+    if (!didMountViewSyncRef.current) {
+      didMountViewSyncRef.current = true;
+      if (section === undefined) {
+        if (activeWorkspace.view !== 'chart') {
+          navigate(`/app/trading-arena/${activeWorkspace.view}`, { replace: true });
+        }
+        return;
+      }
+      // Deep link — fall through to the generic adopt-into-workspace check.
+    }
+    if (activeWorkspace.view !== activeTab) {
+      updateActiveWorkspace({ view: activeTab });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <div
@@ -224,7 +311,7 @@ export default function TradingArena() {
           {/* Controls (Timeframe / Indicators) */}
           <ArenaToolbar
             interval={interval}
-            onIntervalChange={setIntervalValue}
+            onIntervalChange={handleIntervalChange}
             intervalCapability={intervalCapability}
             activeTab={activeTab}
             indicatorsEnabled={indicatorsEnabled}
@@ -292,6 +379,16 @@ export default function TradingArena() {
           )}
         </main>
       </ChartStyleContext.Provider>
+
+      {/* ── Bottom workspace tabs (NinjaTrader-style) ──────────────────── */}
+      <ArenaWorkspaceTabs
+        workspaces={workspaces}
+        activeId={activeWorkspaceId}
+        onSelect={selectWorkspace}
+        onAdd={addWorkspace}
+        onRemove={removeWorkspace}
+        onRename={renameWorkspace}
+      />
     </div>
   );
 }

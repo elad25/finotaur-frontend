@@ -35,11 +35,17 @@ const CLASSIC_STOPS: PaletteStop[] = [
 // 'finotaur' — NEW DEFAULT for the Liquidity tab (Task S2). Premium
 // gold-on-black: near-black → deep bronze → gold (#C9A646, the brand gold
 // token used across the Arena's chrome) → warm white for the hottest walls.
+// Rebalanced (gold-emphasis-scales-with-notional feedback): the ramp used to
+// read as a uniform dim cloud because gold didn't arrive until t=0.62 — large
+// resting orders never popped. Gold now arrives earlier (t=0.55) and the top
+// of the ramp glows hot (bright gold at 0.80, warm white at 1.00) so $ size
+// visibly tracks brightness.
 const FINOTAUR_STOPS: PaletteStop[] = [
-  { t: 0.00, rgb: [8,   7,   6  ] },  // near-black (matches FinotaurChart's #08080a bg register)
-  { t: 0.30, rgb: [77,  49,  20 ] },  // deep bronze
-  { t: 0.62, rgb: [201, 166, 70 ] },  // brand gold #C9A646
-  { t: 0.88, rgb: [255, 244, 214] },  // warm white — hottest walls
+  { t: 0.00, rgb: [8,   7,   6  ] },  // near-black void
+  { t: 0.28, rgb: [77,  49,  20 ] },  // deep bronze — modest liquidity
+  { t: 0.55, rgb: [201, 166, 70 ] },  // brand gold #C9A646 — significant orders
+  { t: 0.80, rgb: [255, 213, 110] },  // bright gold — heavy orders
+  { t: 1.00, rgb: [255, 248, 228] },  // warm white — the biggest walls
 ];
 
 // 'thermal' — ATAS/inferno-like: dark → purple → red → orange → yellow.

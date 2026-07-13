@@ -92,8 +92,14 @@ const BLOOM_NEIGHBOR_ALPHA_FRACTION = 0.35;
 // so weak levels aren't all crushed to the same near-zero value, then the
 // gamma pushes everything below the top ~10-15% back down to near-dark so
 // only real walls glow — see the module doc comment above for the formula.
+// HEAT_GAMMA was 2.5, which crushed everything below the top ~10-15% of
+// notional to near-black — large resting orders barely stood out from the
+// rest of the book (gold-emphasis-scales-with-notional feedback). 1.6 keeps
+// the mid-tier visible as bronze while the log1p compression above still
+// separates the top from the noise, so brightness now tracks order $ size
+// across the whole range instead of only at the extreme top.
 const HEAT_LOG_SCALE = 9;
-const HEAT_GAMMA = 2.5;
+const HEAT_GAMMA = 1.6;
 
 /** Bookmap-style intensity compression: log1p spread + gamma darken, x/t ∈ [0,1]. */
 function compressIntensity(x: number): number {
