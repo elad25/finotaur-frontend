@@ -82,13 +82,14 @@ export function NotificationBell() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4] flex-shrink-0"
-          aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+          className="relative flex h-11 w-11 items-center justify-center rounded-full border border-gold-primary/60 text-gold-bright shadow-glow-gold-resting transition-all duration-200 hover:border-gold-primary hover:shadow-glow-gold-hover flex-shrink-0"
+          style={{ background: 'radial-gradient(circle at 50% 35%, rgba(201,166,70,0.16), rgba(10,10,10,0.9))' }}
+          aria-label={unreadCount > 0 ? `Announcements (${unreadCount} unread)` : 'Announcements'}
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span
-              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] font-mono tabular-nums flex items-center justify-center"
+              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] font-mono tabular-nums flex items-center justify-center border-2 border-surface-base"
               aria-hidden="true"
             >
               {badgeLabel}
@@ -102,7 +103,7 @@ export function NotificationBell() {
         className="w-[360px] p-0 bg-surface-base border border-border-ds-subtle rounded-[12px] z-[150] overflow-hidden"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-ds-subtle">
-          <span className="text-[13px] font-semibold text-ink-primary">Notifications</span>
+          <span className="text-[13px] font-semibold text-ink-primary">Announcements</span>
           <button
             type="button"
             onClick={() => markAllRead()}
