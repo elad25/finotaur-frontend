@@ -167,9 +167,13 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-full overflow-hidden">
-      {/* ── NOTIFICATION BELL — fixed to the Home top-right corner ── */}
-      <div className="absolute top-ds-5 right-ds-5 z-20">
-        <NotificationBell />
+      {/* ── NOTIFICATION BELL — aligned to the content column's right edge ── */}
+      <div className="pointer-events-none absolute inset-x-0 top-ds-6 z-20">
+        <div className="mx-auto w-full max-w-5xl px-ds-5 flex justify-end">
+          <div className="pointer-events-auto">
+            <NotificationBell />
+          </div>
+        </div>
       </div>
 
       {/* ── GOLD ATMOSPHERE — subtle institutional glow behind the hub ── */}
