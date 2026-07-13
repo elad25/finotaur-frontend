@@ -144,8 +144,20 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     limits
   } = useSubscription();
 
+  // A persisted Supabase session token means auth is still HYDRATING: the token
+  // is in localStorage but onAuthStateChange has not yet delivered `user`. This
+  // is the post-signup / post-OAuth settle window. During it we must NOT treat
+  // user==null as "logged out" (see the redirect-loop fix in the !user branch
+  // below). Key must match AuthProvider's storageKey ('finotaur-auth-token').
+  const hasStoredSession =
+    typeof window !== 'undefined' && !!localStorage.getItem('finotaur-auth-token');
+
   const isLoading = authLoading || (user && subLoading);
-  const loadTimedOut = useLoadTimeout(!!isLoading);
+  // Keep the timeout ticking through BOTH the loading window and the hydration
+  // wait (authLoading settled but a stored session hasn't delivered `user` yet),
+  // so the wait below is bounded and never becomes an infinite spinner.
+  const awaitingHydration = !isLoading && !user && hasStoredSession;
+  const loadTimedOut = useLoadTimeout(!!isLoading || awaitingHydration);
 
   // 🔥 DEBUG LOGS (only in dev, only once per path)
   logOnce(`route-${location.pathname}`, '[ProtectedRoute] Path:', location.pathname, {
@@ -168,6 +180,17 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // NOT LOGGED IN - Redirect to login
   // ═══════════════════════════════════════════
   if (!user) {
+    // Post-signup / post-OAuth redirect-loop fix: if a session token is still in
+    // localStorage, auth is mid-hydration — wait (bounded by useLoadTimeout, 20s)
+    // instead of bouncing to /auth/login. When onAuthStateChange delivers the
+    // user we render normally; when the session is genuinely unrecoverable
+    // AuthProvider purges the token, hasStoredSession flips false, and we fall
+    // through to /auth/login correctly. Without this the settle window pinballs
+    // freshly-signed-up users between /welcome, /auth/login and /pricing-selection
+    // and they never reach /app/*.
+    if (hasStoredSession && !loadTimedOut) {
+      return <PageLoader timedOut={loadTimedOut} />;
+    }
     return <Navigate to="/auth/login" state={{ from: location }} replace />;
   }
 
