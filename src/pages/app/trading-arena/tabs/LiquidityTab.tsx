@@ -129,9 +129,9 @@ const VISIBLE_BARS = 120;
 // tier (5s vs 1m) — same conservative constant MarketScanner uses.
 const APPROX_BAR_SPACING_PX = 8;
 
-// Depth-slice history is far sparser than candle history — the server's
-// own per-request span cap for 1m resolution is 48h (MAX_SPAN_1M in
-// useDepthSlices.ts), and the crypto_depth_slices tables are UNLOGGED
+// Depth-slice history is far sparser than candle history — historical
+// requests are chunked into 960-row pages via chunked fetch in
+// useDepthSlices.ts (CHUNK_SPAN_1M), and the crypto_depth_slices tables are UNLOGGED
 // (wiped on every DB restart), so depth data older than ~48h realistically
 // never exists. The candle lookback, however, is 600 bars — up to 6.25
 // DAYS at 15m. Feeding that full candle window straight into useDepthSlices
