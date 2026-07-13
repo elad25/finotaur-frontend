@@ -141,6 +141,15 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'Newsletter admin, subscriber management, broadcasts',
     mountedFrom: 'pages/app/journal/admin/NewsletterAdmin.tsx',
   },
+  {
+    id: 'announcements',
+    label: 'Announcements',
+    path: '/app/admin/announcements',
+    icon: Megaphone,
+    phase: 1,
+    enabled: true,
+    description: 'Compose and publish in-app / email announcements to segmented audiences',
+  },
   // 'leads' and 'onboarding' sidebar entries removed — empty SOON placeholders.
   // Routes /app/admin/leads and /app/admin/onboarding still exist in AdminCRMShell.tsx.
   {
