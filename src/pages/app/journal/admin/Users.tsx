@@ -338,8 +338,13 @@ export default function AdminUsers() {
 
       {/* Users Table */}
       <div className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+        {/* Horizontal scrollbar moved to the TOP of the table via the
+            rotateX(180deg) double-flip: the scroll container is flipped so its
+            scrollbar sits at the top, and the table is flipped back so content
+            renders upright. The Actions menu is a Radix dropdown (portaled to
+            body), so it is unaffected by this transform. */}
+        <div className="overflow-x-auto" style={{ transform: 'rotateX(180deg)' }}>
+          <table className="w-full min-w-[900px]" style={{ transform: 'rotateX(180deg)' }}>
             <thead className="bg-[#0A0A0A] border-b border-gray-800">
               <tr>
                 <TableHeader>User</TableHeader>
