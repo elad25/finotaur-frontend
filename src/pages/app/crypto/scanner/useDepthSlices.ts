@@ -113,12 +113,13 @@ function chooseResolution(barSpacingPx: number, candleIntervalMs: number): Slice
   return width5s >= 1 ? '5s' : '1m';
 }
 
-/** API max spans */
-const MAX_SPAN_5S = 2 * 60 * 60 * 1000;    // 2h in ms
-const MAX_SPAN_1M = 48 * 60 * 60 * 1000;   // 48h in ms
-
-function maxSpan(res: SliceResolution): number {
-  return res === '5s' ? MAX_SPAN_5S : MAX_SPAN_1M;
+// Per-request chunk spans, sized so each response stays under Supabase
+// PostgREST's global 1000-row cap (the server's PAGE_SIZE=3000 is not
+// honored while that cap exists). 960 rows/chunk leaves a 40-row margin.
+const CHUNK_SPAN_5S = 80 * 60 * 1000;      // 80 min @ 5s = 960 rows
+const CHUNK_SPAN_1M = 16 * 60 * 60 * 1000; // 16 h  @ 1m = 960 rows
+function chunkSpan(res: SliceResolution): number {
+  return res === '5s' ? CHUNK_SPAN_5S : CHUNK_SPAN_1M;
 }
 
 /** Grid step (ms) for a resolution tier — the uniform spacing between columns. */
@@ -156,8 +157,10 @@ const REFETCH_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Client-side timeout for a single chunk fetch — prevents a hung/slow
  * server request from staying in-flight indefinitely and stacking up
- * across repeated fetchWindow calls. */
-const FETCH_TIMEOUT_MS = 15_000;
+ * across repeated fetchWindow calls. Must cover downloading a ~8-9MB
+ * chunk body (a near-960-row response) — the abort timer stays armed
+ * through resp.json(), not just until headers arrive. */
+const FETCH_TIMEOUT_MS = 30_000;
 
 /**
  * Returns the sub-ranges of [winFrom, winTo] NOT covered by `covered`
@@ -365,6 +368,12 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   ) => {
     const now = Date.now();
 
+    // Depth tables are UNLOGGED; nothing older ever exists server-side —
+    // clamp the requested range so wide scanner windows never fetch data
+    // that can't possibly be there.
+    const MAX_HISTORY_MS = 48 * 60 * 60 * 1000;
+    const effFrom = Math.max(winFrom, now - MAX_HISTORY_MS);
+
     // Only trust coverage recorded within the cooldown window — see
     // REFETCH_COOLDOWN_MS comment. Stale entries are treated as gaps again
     // so a failed/empty window gets re-verified eventually instead of
@@ -372,46 +381,50 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     const trusted = fetchedWindowsRef.current.filter(
       w => w.res === res && (now - w.fetchedAt) < REFETCH_COOLDOWN_MS,
     );
-    const gaps = computeUncoveredGaps(winFrom, winTo, trusted);
-    if (gaps.length === 0) return;
+    const gaps = effFrom < winTo ? computeUncoveredGaps(effFrom, winTo, trusted) : [];
+    if (effFrom < winTo && gaps.length === 0) return;
 
-    const span = maxSpan(res);
-    for (const gap of gaps) {
-      let cursor = gap.from;
-      while (cursor < gap.to) {
-        const chunkTo = Math.min(cursor + span, gap.to);
-        const url = `/api/crypto/depth-slices?symbol=${sym}&from=${cursor}&to=${chunkTo}&res=${res}`;
+    if (gaps.length > 0) {
+      const span = chunkSpan(res);
+      // Newest-first: the visible window hugs 'to', so the most recent chunk paints immediately; older chunks backfill.
+      for (const gap of [...gaps].reverse()) {
+        let cursor = gap.to;
+        while (cursor > gap.from) {
+          const chunkFrom = Math.max(cursor - span, gap.from);
+          const url = `/api/crypto/depth-slices?symbol=${sym}&from=${chunkFrom}&to=${cursor}&res=${res}`;
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        try {
-          const resp = await fetch(url, { signal: controller.signal });
-          if (!resp.ok) break;
-          const data = await resp.json() as { symbol: string; res: string; slices: RawSlice[] };
-          if (data.slices && data.slices.length > 0) {
-            const decoded = await decodeSlices(data.slices);
-            for (const col of decoded) {
-              historicalRef.current.set(col.t, col);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+          try {
+            const resp = await fetch(url, { signal: controller.signal });
+            if (!resp.ok) break;
+            const data = await resp.json() as { symbol: string; res: string; slices: RawSlice[] };
+            if (data.slices && data.slices.length > 0) {
+              const decoded = await decodeSlices(data.slices);
+              for (const col of decoded) {
+                historicalRef.current.set(col.t, col);
+              }
+              rebuildState(res);
             }
-            rebuildState(res);
+          } catch {
+            // Network errors / timeouts: stop this gap silently — heatmap
+            // degrades gracefully. Still recorded as covered below (with a
+            // cooldown) so a hung/erroring server can't cause a hot refetch
+            // loop every ~30s.
+            break;
+          } finally {
+            clearTimeout(timeoutId);
           }
-        } catch {
-          // Network errors / timeouts: stop this gap silently — heatmap
-          // degrades gracefully. Still recorded as covered below (with a
-          // cooldown) so a hung/erroring server can't cause a hot refetch
-          // loop every ~30s.
-          break;
-        } finally {
-          clearTimeout(timeoutId);
+          cursor = chunkFrom;
         }
-        cursor = chunkTo;
       }
     }
 
     // Replace prior coverage for this resolution with the full requested
-    // window — every part of it was either already trusted or just
-    // attempted above. Bounded to one entry per resolution so this can
-    // never grow unboundedly across ticks.
+    // window (from=winFrom, not effFrom) — every part of it was either
+    // already trusted, just attempted above, or out of possible range.
+    // Bounded to one entry per resolution so this can never grow
+    // unboundedly across ticks.
     fetchedWindowsRef.current = fetchedWindowsRef.current.filter(w => w.res !== res);
     fetchedWindowsRef.current.push({ from: winFrom, to: winTo, res, fetchedAt: now });
   }, [decodeSlices, rebuildState]);
@@ -462,7 +475,6 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       for (const [price, qty] of bids) {
         if (price <= 0 || qty <= 0) continue;
         const usd = price * qty;
-        if (usd < floorUsd) continue;
         const bucket = binFloor(price, binSize);
         bidBins.set(bucket, (bidBins.get(bucket) ?? 0) + usd);
       }
@@ -472,7 +484,6 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       for (const [price, qty] of asks) {
         if (price <= 0 || qty <= 0) continue;
         const usd = price * qty;
-        if (usd < floorUsd) continue;
         const bucket = binFloor(price, binSize);
         askBins.set(bucket, (askBins.get(bucket) ?? 0) + usd);
       }
@@ -483,12 +494,14 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
 
       const bidRecords: BinRecord[] = [];
       for (const [price, usd] of bidBins) {
+        if (usd < floorUsd) continue; // floor AFTER bin aggregation — matches rebucketColumn semantics
         const q = usdToQ(usd);
         if (q > 0) bidRecords.push({ price, q });
       }
 
       const askRecords: BinRecord[] = [];
       for (const [price, usd] of askBins) {
+        if (usd < floorUsd) continue; // floor AFTER bin aggregation — matches rebucketColumn semantics
         const q = usdToQ(usd);
         if (q > 0) askRecords.push({ price, q });
       }
