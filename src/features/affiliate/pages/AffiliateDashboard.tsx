@@ -110,7 +110,7 @@ const REFERRAL_STATUS_CONFIG = {
 // MAIN DASHBOARD COMPONENT
 // ============================================
 
-export default function AffiliateDashboard() {
+export default function AffiliateDashboard({ embedded = false }: { embedded?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState<'overview' | 'referrals' | 'earnings' | 'payouts'>('overview');
   
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useAffiliateProfile();
@@ -132,9 +132,15 @@ export default function AffiliateDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className={embedded ? "text-white" : "min-h-screen bg-[#0A0A0A] text-white"}>
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-gray-800">
+      <header
+        className={
+          embedded
+            ? ""
+            : "sticky top-0 z-40 bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-gray-800"
+        }
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">

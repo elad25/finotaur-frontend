@@ -5,8 +5,9 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useSearchParams, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Settings, CreditCard, Bell, Shield, Activity } from "lucide-react";
+import { Settings, CreditCard, Bell, Shield, Activity, Handshake } from "lucide-react";
 import { SettingsProvider } from "./SettingsProvider";
+import { FEATURES } from "@/config/features";
 
 // Sidebar nav items mapped to new nested route paths
 const navItems = [
@@ -15,6 +16,10 @@ const navItems = [
   { path: "notifications", label: "Notifications", icon: Bell       },
   { path: "security",      label: "Security",      icon: Shield     },
   { path: "the-floor",     label: "The Floor",     icon: Activity   },
+  // Gated on the feature flag so rollback hides it (AFFILIATE_TRACKING off until Stripe migration).
+  ...(FEATURES.AFFILIATE_TRACKING
+    ? [{ path: "affiliates", label: "Affiliates", icon: Handshake }] as const
+    : []),
 ] as const;
 
 // Legacy ?tab= query param values → new path segments

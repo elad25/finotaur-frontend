@@ -1,19 +1,30 @@
 // src/pages/AffiliatePage.tsx
 // ================================================
 // 🔥 AFFILIATE PROGRAM — Full Landing Page
-// 10% recurring commission + 10% coupon discount for referrals
+// 20% recurring commission for 12 months; referred friends save 30% for 3 months
 // Matches Finotaur gold/dark luxury design
 // ================================================
 
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Navbar from '@/components/landing-new/Navbar';
+import Footer from '@/components/landing-new/Footer';
+import { SEO } from '@/components/seo/SEO';
+import { softwareApplication } from '@/components/seo/jsonLd';
+import { Button } from '@/components/ds/Button';
+import {
+  COMMISSION_RATE_PCT,
+  COMMISSION_DURATION_MONTHS,
+  FRIEND_DISCOUNT_PCT,
+  FRIEND_DISCOUNT_MONTHS,
+  MIN_PAYOUT_USD,
+  ATTRIBUTION_WINDOW_DAYS,
+} from '@/features/affiliate/affiliateTerms';
 import {
   DollarSign,
   Users,
   Percent,
   Gift,
-  ArrowRight,
   TrendingUp,
   Clock,
   Shield,
@@ -24,9 +35,9 @@ import {
 } from "lucide-react";
 
 const stats = [
-  { value: "10%", label: "Commission Rate", icon: DollarSign },
+  { value: `${COMMISSION_RATE_PCT}%`, label: "Commission Rate", icon: DollarSign },
   { value: "All Plans", label: "Monthly & Yearly", icon: TrendingUp },
-  { value: "12 mo", label: "Commission Duration", icon: Clock },
+  { value: `${COMMISSION_DURATION_MONTHS} mo`, label: "Commission Duration", icon: Clock },
   { value: "$0", label: "Cost to Join", icon: Shield },
 ];
 
@@ -40,32 +51,32 @@ const howItWorks = [
   {
     step: "02",
     title: "Share Your Link & Coupon",
-    description: "Get a unique referral link + a 10% discount coupon code your audience can use at checkout.",
+    description: `Get a unique referral link + a ${FRIEND_DISCOUNT_PCT}% discount coupon code your audience can use at checkout, valid for their first ${FRIEND_DISCOUNT_MONTHS} months.`,
     icon: Copy,
   },
   {
     step: "03",
-    title: "Earn 10% for 12 Months",
-    description: "Earn 10% on every payment — monthly or yearly — for the first 12 months of each referral.",
+    title: `Earn ${COMMISSION_RATE_PCT}% for ${COMMISSION_DURATION_MONTHS} Months`,
+    description: `Earn ${COMMISSION_RATE_PCT}% on every payment — monthly or yearly — for the first ${COMMISSION_DURATION_MONTHS} months of each referral.`,
     icon: TrendingUp,
   },
 ];
 
 const earningsExamples = [
-  { referrals: 10, plan: "Finotaur Monthly", monthly: "$89", yearly: "$1,068" },
-  { referrals: 10, plan: "Finotaur Yearly", monthly: "—", yearly: "$890" },
-  { referrals: 25, plan: "Mixed (monthly)", monthly: "$222", yearly: "$2,670" },
-  { referrals: 50, plan: "Mixed plans", monthly: "$450+", yearly: "$5,400+" },
-  { referrals: 100, plan: "Mixed plans", monthly: "$900+", yearly: "$10,800+" },
+  { referrals: 10, plan: "Finotaur Monthly", monthly: "$178", yearly: "$2,136" },
+  { referrals: 10, plan: "Finotaur Yearly", monthly: "—", yearly: "$1,780" },
+  { referrals: 25, plan: "Mixed (monthly)", monthly: "$444", yearly: "$5,340" },
+  { referrals: 50, plan: "Mixed plans", monthly: "$900+", yearly: "$10,800+" },
+  { referrals: 100, plan: "Mixed plans", monthly: "$1,800+", yearly: "$21,600+" },
 ];
 
 const benefits = [
-  "10% commission on all plans — monthly and yearly",
-  "Commissions paid for the first 12 months per referral",
-  "Your referrals get 10% off with your coupon code",
+  `${COMMISSION_RATE_PCT}% commission on all plans — monthly and yearly`,
+  `Commissions paid for the first ${COMMISSION_DURATION_MONTHS} months per referral`,
+  `Your referrals save ${FRIEND_DISCOUNT_PCT}% for their first ${FRIEND_DISCOUNT_MONTHS} months with your coupon code`,
   "Real-time dashboard to track clicks, signups & earnings",
-  "30-day cookie window — they don't need to buy immediately",
-  "Monthly payouts via PayPal or bank transfer",
+  `${ATTRIBUTION_WINDOW_DAYS}-day cookie window — they don't need to buy immediately`,
+  `Monthly payouts via PayPal — $${MIN_PAYOUT_USD} minimum payout`,
   "Marketing assets, banners & email templates provided",
   "No cap on earnings — the more you refer, the more you earn",
 ];
@@ -74,7 +85,14 @@ const AffiliatePage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+    <div className="min-h-screen bg-base-900 text-white overflow-x-hidden">
+      <SEO
+        title="FINOTAUR Affiliate Program — Earn 20% for 12 Months"
+        titleAsIs
+        description="Refer traders to FINOTAUR and earn 20% recurring commission for 12 months. Your friends get 30% off their first 3 months. $50 minimum payout via PayPal."
+        path="/affiliate"
+        jsonLd={[softwareApplication()]}
+      />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
         .heading-serif { font-family: 'Playfair Display', Georgia, serif; }
@@ -86,8 +104,8 @@ const AffiliatePage = () => {
 
       {/* ========== HERO ========== */}
       <section className="pt-28 pb-20 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#1A1713] to-[#0a0a0a]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-[#C9A646]/[0.12] rounded-full blur-[180px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#1A1713] to-base-900" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-gold-primary/[0.12] rounded-full blur-[180px]" />
 
         <div className="max-w-4xl mx-auto relative z-10 text-center">
           <motion.div
@@ -95,44 +113,39 @@ const AffiliatePage = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-full mb-6">
-              <Percent className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] font-semibold text-sm">Affiliate Program</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-primary/10 border border-gold-primary/30 rounded-full mb-6">
+              <Percent className="w-4 h-4 text-gold-primary" />
+              <span className="text-gold-primary font-semibold text-sm">Affiliate Program</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-5 leading-tight">
               <span className="text-white">Earn </span>
-              <span className="text-[#C9A646]">10% commission</span>
+              <span className="text-gold-primary">{COMMISSION_RATE_PCT}% commission</span>
               <br />
               <span className="text-white">for every trader you refer.</span>
             </h1>
 
             <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
-              Share Finotaur with your audience. They get <span className="text-white font-semibold">10% off</span> with your
-              coupon code. You earn <span className="text-white font-semibold">10% on every payment</span> — monthly or yearly — for the first 12 months per referral.
+              Share Finotaur with your audience. They get <span className="text-white font-semibold">{FRIEND_DISCOUNT_PCT}% off for {FRIEND_DISCOUNT_MONTHS} months</span> with your
+              coupon code. You earn <span className="text-white font-semibold">{COMMISSION_RATE_PCT}% on every payment</span> — monthly or yearly — for the first {COMMISSION_DURATION_MONTHS} months per referral.
             </p>
 
-            <button
+            <Button
+              variant="gold"
+              size="xl"
               onClick={() => navigate('/auth/register?affiliate=true')}
-              className="group inline-flex items-center gap-2 px-10 py-4 text-base font-bold rounded-xl transition-all hover:scale-105"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                color: '#000',
-                boxShadow: '0 8px 40px rgba(201,166,70,0.35)',
-              }}
             >
               Join the Affiliate Program — Free
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </Button>
           </motion.div>
         </div>
       </section>
 
       {/* ========== STATS BAR ========== */}
       <section className="py-10 px-4 relative">
-        <div className="absolute inset-0 bg-[#0a0a0a]" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+        <div className="absolute inset-0 bg-base-900" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
 
         <div className="max-w-4xl mx-auto relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -151,7 +164,7 @@ const AffiliatePage = () => {
                     border: '1px solid rgba(201,166,70,0.12)',
                   }}
                 >
-                  <Icon className="w-5 h-5 text-[#C9A646] mx-auto mb-2" />
+                  <Icon className="w-5 h-5 text-gold-primary mx-auto mb-2" />
                   <div className="text-2xl font-bold text-white">{stat.value}</div>
                   <div className="text-slate-500 text-xs">{stat.label}</div>
                 </motion.div>
@@ -163,8 +176,8 @@ const AffiliatePage = () => {
 
       {/* ========== HOW IT WORKS ========== */}
       <section className="py-20 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#110d08] to-[#0a0a0a]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#C9A646]/[0.06] rounded-full blur-[140px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#110d08] to-base-900" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gold-primary/[0.06] rounded-full blur-[140px]" />
 
         <div className="max-w-4xl mx-auto relative z-10">
           <motion.div
@@ -175,7 +188,7 @@ const AffiliatePage = () => {
           >
             <h2 className="text-3xl md:text-4xl font-bold mb-3">
               <span className="text-white">How it </span>
-              <span className="text-[#C9A646]">works</span>
+              <span className="text-gold-primary">works</span>
             </h2>
             <p className="text-sm text-slate-400">Three steps to start earning.</p>
           </motion.div>
@@ -196,7 +209,7 @@ const AffiliatePage = () => {
                     border: '1px solid rgba(201,166,70,0.15)',
                   }}
                 >
-                  <div className="text-[#C9A646]/20 text-4xl font-bold absolute top-4 right-5">{item.step}</div>
+                  <div className="text-gold-primary/20 text-4xl font-bold absolute top-4 right-5">{item.step}</div>
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4"
                     style={{
@@ -204,7 +217,7 @@ const AffiliatePage = () => {
                       border: '1px solid rgba(201,166,70,0.3)',
                     }}
                   >
-                    <Icon className="w-6 h-6 text-[#C9A646]" />
+                    <Icon className="w-6 h-6 text-gold-primary" />
                   </div>
                   <h3 className="text-white font-bold text-base mb-2">{item.title}</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">{item.description}</p>
@@ -215,11 +228,11 @@ const AffiliatePage = () => {
         </div>
       </section>
 
-      {/* ========== THE DEAL — 10% + 10% ========== */}
+      {/* ========== THE DEAL — you earn 20% · they save 30% ========== */}
       <section className="py-16 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#1A1713] to-[#0a0a0a]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#C9A646]/[0.10] rounded-full blur-[150px]" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#1A1713] to-base-900" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-gold-primary/[0.10] rounded-full blur-[150px]" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/40 to-transparent" />
 
         <div className="max-w-3xl mx-auto relative z-10">
           <motion.div
@@ -230,7 +243,7 @@ const AffiliatePage = () => {
           >
             <h2 className="text-3xl md:text-4xl font-bold mb-3">
               <span className="text-white">Everyone </span>
-              <span className="text-[#C9A646]">wins.</span>
+              <span className="text-gold-primary">wins.</span>
             </h2>
           </motion.div>
 
@@ -251,15 +264,15 @@ const AffiliatePage = () => {
                   className="w-10 h-10 rounded-lg flex items-center justify-center"
                   style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}
                 >
-                  <DollarSign className="w-5 h-5 text-[#C9A646]" />
+                  <DollarSign className="w-5 h-5 text-gold-primary" />
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-lg">You Earn</h3>
-                  <span className="text-[#C9A646] text-sm font-semibold">10% · All Plans · 12 Months</span>
+                  <span className="text-gold-primary text-sm font-semibold">{COMMISSION_RATE_PCT}% · All Plans · {COMMISSION_DURATION_MONTHS} Months</span>
                 </div>
               </div>
               <p className="text-slate-400 text-sm leading-relaxed">
-                For every subscriber who signs up through your referral link, you earn <span className="text-white font-semibold">10% of every payment</span> — monthly or yearly — for the first 12 months of their subscription.
+                For every subscriber who signs up through your referral link, you earn <span className="text-white font-semibold">{COMMISSION_RATE_PCT}% of every payment</span> — monthly or yearly — for the first {COMMISSION_DURATION_MONTHS} months of their subscription.
               </p>
             </motion.div>
 
@@ -283,11 +296,11 @@ const AffiliatePage = () => {
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-lg">They Save</h3>
-                  <span className="text-emerald-400 text-sm font-semibold">10% Off with Your Coupon</span>
+                  <span className="text-emerald-400 text-sm font-semibold">{FRIEND_DISCOUNT_PCT}% Off for {FRIEND_DISCOUNT_MONTHS} Months</span>
                 </div>
               </div>
               <p className="text-slate-400 text-sm leading-relaxed">
-                Every affiliate gets a unique coupon code. When someone uses your code at checkout, they get <span className="text-white font-semibold">10% off their subscription</span>. It's an easy sell — everybody loves a discount.
+                Every affiliate gets a unique coupon code. When someone uses your code at checkout, they get <span className="text-white font-semibold">{FRIEND_DISCOUNT_PCT}% off their subscription</span> for their first {FRIEND_DISCOUNT_MONTHS} months. It's an easy sell — everybody loves a discount.
               </p>
             </motion.div>
           </div>
@@ -296,8 +309,8 @@ const AffiliatePage = () => {
 
       {/* ========== EARNINGS CALCULATOR ========== */}
       <section className="py-16 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[#0a0a0a]" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+        <div className="absolute inset-0 bg-base-900" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
 
         <div className="max-w-3xl mx-auto relative z-10">
           <motion.div
@@ -308,9 +321,9 @@ const AffiliatePage = () => {
           >
             <h2 className="text-3xl md:text-4xl font-bold mb-3">
               <span className="text-white">Earning </span>
-              <span className="text-[#C9A646]">potential</span>
+              <span className="text-gold-primary">potential</span>
             </h2>
-            <p className="text-sm text-slate-400">10% on all plans · First 12 months per referral.</p>
+            <p className="text-sm text-slate-400">{COMMISSION_RATE_PCT}% on all plans · First {COMMISSION_DURATION_MONTHS} months per referral.</p>
           </motion.div>
 
           <div
@@ -322,7 +335,7 @@ const AffiliatePage = () => {
               className="grid grid-cols-4 gap-0 px-5 py-3 text-xs font-semibold"
               style={{ background: 'rgba(201,166,70,0.08)' }}
             >
-              <span className="text-[#C9A646]">Referrals</span>
+              <span className="text-gold-primary">Referrals</span>
               <span className="text-slate-400">Plan</span>
               <span className="text-slate-400 text-right">Monthly</span>
               <span className="text-slate-400 text-right">Yearly</span>
@@ -337,7 +350,7 @@ const AffiliatePage = () => {
                 <span className="text-white font-bold">{row.referrals}</span>
                 <span className="text-slate-400 text-xs">{row.plan}</span>
                 <span className="text-emerald-400 font-semibold text-right">{row.monthly}</span>
-                <span className="text-[#C9A646] font-bold text-right">{row.yearly}</span>
+                <span className="text-gold-primary font-bold text-right">{row.yearly}</span>
               </div>
             ))}
           </div>
@@ -346,8 +359,8 @@ const AffiliatePage = () => {
 
       {/* ========== ALL BENEFITS ========== */}
       <section className="py-16 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#110d08] to-[#0a0a0a]" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#110d08] to-base-900" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
 
         <div className="max-w-2xl mx-auto relative z-10">
           <motion.div
@@ -358,7 +371,7 @@ const AffiliatePage = () => {
           >
             <h2 className="text-3xl md:text-4xl font-bold">
               <span className="text-white">Why affiliates </span>
-              <span className="text-[#C9A646]">love us</span>
+              <span className="text-gold-primary">love us</span>
             </h2>
           </motion.div>
 
@@ -376,7 +389,7 @@ const AffiliatePage = () => {
                   border: '1px solid rgba(201,166,70,0.08)',
                 }}
               >
-                <CheckCircle className="w-4 h-4 text-[#C9A646] shrink-0 mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-gold-primary shrink-0 mt-0.5" />
                 <span className="text-slate-300 text-sm">{benefit}</span>
               </motion.div>
             ))}
@@ -386,9 +399,9 @@ const AffiliatePage = () => {
 
       {/* ========== FINAL CTA ========== */}
       <section className="py-16 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#1A1713] to-[#0a0a0a]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#C9A646]/[0.15] rounded-full blur-[150px]" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#1A1713] to-base-900" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-gold-primary/[0.15] rounded-full blur-[150px]" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-primary/40 to-transparent" />
 
         <div className="max-w-2xl mx-auto relative z-10 text-center">
           <motion.div
@@ -405,22 +418,19 @@ const AffiliatePage = () => {
             <p className="text-slate-400 text-sm mb-8">
               Free to join. No minimum requirements. Start sharing and earning in minutes.
             </p>
-            <button
+            <Button
+              variant="gold"
+              size="xl"
               onClick={() => navigate('/auth/register?affiliate=true')}
-              className="group inline-flex items-center gap-2 px-10 py-4 text-base font-bold rounded-xl transition-all hover:scale-105"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                color: '#000',
-                boxShadow: '0 8px 40px rgba(201,166,70,0.35)',
-              }}
             >
               Join the Affiliate Program
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </Button>
             <p className="text-slate-600 text-xs mt-3">No credit card · No obligations · Start in 30 seconds</p>
           </motion.div>
         </div>
       </section>
+
+      <Footer />
     </div>
   );
 };
