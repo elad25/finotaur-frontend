@@ -23,6 +23,7 @@ import { Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { cn } from '@/lib/utils';
 import type { ReportSlide } from '@/lib/reports/reportTypes';
+import finoBullWatermark from '@/assets/brand/fino-bull-watermark.png';
 
 // ---------------------------------------------------------------------------
 // ReportShell — outer chrome
@@ -200,6 +201,8 @@ export interface ReportSlideFrameProps {
   pill: string;
   title: string;
   subtitle?: string;
+  /** When true, renders the faint golden-bull brand watermark behind the card. */
+  watermark?: boolean;
   children: ReactNode;
   /** Rendered below content when unlocked — pass a <KeyTakeaway />. */
   takeaway?: ReactNode;
@@ -211,27 +214,39 @@ export function ReportSlideFrame({
   pill,
   title,
   subtitle,
+  watermark = false,
   children,
   takeaway,
   locked = false,
   lockedOverlay,
 }: ReportSlideFrameProps) {
   return (
-    <div className="relative space-y-ds-5 rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-6">
-      <div>
-        <Eyebrow>{pill}</Eyebrow>
-        <h2 className="mt-2 text-2xl font-semibold text-ink-primary">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-ink-secondary">{subtitle}</p>}
-      </div>
+    <div className="relative overflow-hidden rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-6">
+      {watermark && (
+        <img
+          src={finoBullWatermark}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-6 -left-8 z-0 w-[min(46%,320px)] select-none opacity-[0.05]"
+        />
+      )}
 
-      <div className={cn(locked && 'pointer-events-none select-none opacity-60 blur-sm')}>
-        {children}
-      </div>
+      <div className="relative z-10 space-y-ds-5">
+        <div>
+          <Eyebrow>{pill}</Eyebrow>
+          <h2 className="mt-2 text-2xl font-semibold text-ink-primary">{title}</h2>
+          {subtitle && <p className="mt-1 text-sm text-ink-secondary">{subtitle}</p>}
+        </div>
 
-      {!locked && takeaway}
+        <div className={cn(locked && 'pointer-events-none select-none opacity-60 blur-sm')}>
+          {children}
+        </div>
+
+        {!locked && takeaway}
+      </div>
 
       {locked && lockedOverlay && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-surface-base/50 backdrop-blur-[1px]">
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-surface-base/50 backdrop-blur-[1px]">
           {lockedOverlay}
         </div>
       )}
