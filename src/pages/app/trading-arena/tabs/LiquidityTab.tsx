@@ -25,7 +25,11 @@
  * see FLOOR_OPTIONS / computeAutoFloor / intervalMs below, copied not
  * imported, so MarketScanner.tsx itself is completely untouched).
  *
- * No PaperTradeRail on this tab — matches MarketScanner, which has none either.
+ * Crypto layout mirrors ChartTab.tsx's right rail: a resizable (280-560px,
+ * persisted to localStorage under its own key) PaperTradeRail, fed by this
+ * tab's existing useBinanceOrderBook(symbol) instance (same book — no new
+ * socket). The futures (NT8) branch does not get a rail in this pass — see
+ * FuturesLiquidityBody, unchanged.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -56,6 +60,7 @@ import {
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
 import { LiquiditySettingsMenu } from '../components/LiquiditySettingsMenu';
+import { PaperTradeRail } from '../components/PaperTradeRail';
 
 interface LiquidityTabProps {
   symbol: string;
@@ -129,9 +134,9 @@ const VISIBLE_BARS = 120;
 // tier (5s vs 1m) — same conservative constant MarketScanner uses.
 const APPROX_BAR_SPACING_PX = 8;
 
-// Depth-slice history is far sparser than candle history — the server's
-// own per-request span cap for 1m resolution is 48h (MAX_SPAN_1M in
-// useDepthSlices.ts), and the crypto_depth_slices tables are UNLOGGED
+// Depth-slice history is far sparser than candle history — historical
+// requests are chunked into 960-row pages via chunked fetch in
+// useDepthSlices.ts (CHUNK_SPAN_1M), and the crypto_depth_slices tables are UNLOGGED
 // (wiped on every DB restart), so depth data older than ~48h realistically
 // never exists. The candle lookback, however, is 600 bars — up to 6.25
 // DAYS at 15m. Feeding that full candle window straight into useDepthSlices
@@ -145,6 +150,36 @@ const MAX_DEPTH_WINDOW_SEC = 48 * 60 * 60; // 48h
 // Re-slide the candle window every 30s so the chart keeps up with "now"
 // (same cadence MarketScanner uses).
 const SLIDE_INTERVAL_MS = 30_000;
+
+// ── Resizable right rail — same convention as ChartTab.tsx's PaperTradeRail
+// rail (280-560px, dragged from the left edge, persisted to localStorage),
+// mirrored here rather than extracted into a shared hook (ChartTab.tsx
+// itself implements this inline, not via a reusable hook/component — see
+// the task's own note). Own storage key so this tab's width doesn't fight
+// the Chart tab's.
+const RAIL_MIN_WIDTH = 280;
+const RAIL_MAX_WIDTH = 560;
+const RAIL_DEFAULT_WIDTH = 320;
+const RAIL_WIDTH_STORAGE_KEY = 'arena-liquidity-rail-width';
+
+function clampRailWidth(width: number): number {
+  return Math.min(RAIL_MAX_WIDTH, Math.max(RAIL_MIN_WIDTH, width));
+}
+
+// Lazy initializer — localStorage access is guarded since it can throw
+// (privacy mode, disabled storage, etc.).
+function readStoredRailWidth(): number {
+  try {
+    const stored = localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!Number.isNaN(parsed)) return clampRailWidth(parsed);
+    }
+  } catch {
+    // localStorage unavailable — fall back to the default width.
+  }
+  return RAIL_DEFAULT_WIDTH;
+}
 
 export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: LiquidityTabProps) {
   if (assetClass === 'crypto') {
@@ -371,6 +406,72 @@ interface LiquidityBodyProps {
 
 function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   const book = useBinanceOrderBook(symbol);
+
+  // Best bid/ask for PaperTradeRail's "Buy Bid" / "Sell Ask" limit orders —
+  // same derivation ChartTab.tsx/DomTab.tsx use, reading the top of book from
+  // this tab's existing useBinanceOrderBook(symbol) instance (no new socket).
+  const { bid, ask } = useMemo(() => {
+    const { bids, asks } = book.getBook();
+    let bestBid: number | null = null;
+    for (const p of bids.keys()) {
+      if (bestBid === null || p > bestBid) bestBid = p;
+    }
+    let bestAsk: number | null = null;
+    for (const p of asks.keys()) {
+      if (bestAsk === null || p < bestAsk) bestAsk = p;
+    }
+    return { bid: bestBid, ask: bestAsk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.getBook, book.lastPrice]);
+
+  // ── Resizable right rail (mirrors ChartTab.tsx) ────────────────────────
+  const [railWidth, setRailWidth] = useState<number>(readStoredRailWidth);
+  const [isDraggingRail, setIsDraggingRail] = useState(false);
+  const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const railWidthRef = useRef(railWidth);
+  railWidthRef.current = railWidth;
+
+  const handleRailHandleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      dragStartRef.current = { startX: e.clientX, startWidth: railWidth };
+      setIsDraggingRail(true);
+    },
+    [railWidth],
+  );
+
+  useEffect(() => {
+    if (!isDraggingRail) return;
+
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      // Rail is on the right — dragging the handle LEFT (clientX decreases)
+      // should INCREASE the rail width.
+      const next = clampRailWidth(start.startWidth + (start.startX - e.clientX));
+      setRailWidth(next);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingRail(false);
+      try {
+        localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(railWidthRef.current));
+      } catch {
+        // localStorage unavailable — width just won't persist across reloads.
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingRail]);
 
   // Persisted per-symbol (PR 3, task K.1) — floorMode/sizeFilterPct survive
   // a tab-switch or reload for THIS symbol; a different symbol starts back
@@ -682,37 +783,70 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
         </span>
       </div>
 
-      <div className="flex-1 min-h-0">
-        <FinotaurChart
-          symbol={symbol}
-          interval={candleInterval}
-          from={from}
-          to={to}
-          dataSource={candleDataSource}
-          theme="dark"
-          height="100%"
-          focusRange={focusRange}
-          timeFitToken={timeFitToken}
-          wallRenderMode="matrix"
-          depthMatrixColumns={depthMatrix.columns}
-          depthMatrixBinSize={depthMatrix.binSize}
-          depthMatrixSizeFilterPct={sizeFilterPct}
-          depthMatrixFloorUsd={floorUsd}
-          depthMatrixCandleIntervalMs={intervalMs(interval)}
-          depthMatrixPalette={preferences.palette}
-          depthMatrixSmoothing={preferences.smoothing}
-          volumeBubbles={{
-            store: flowStoreRef.current,
-            visible: preferences.bubbles,
-            thresholdSetting: preferences.bubbleThreshold,
-          }}
-          depthProfile={{
-            bids: restingBookSnapshot.bids,
-            asks: restingBookSnapshot.asks,
-            binSize: depthMatrix.binSize,
-            visible: preferences.sideProfile,
-          }}
+      <div className="flex flex-1 min-h-0 w-full">
+        {/* Chart pane */}
+        <div className="relative flex flex-1 min-w-0 flex-col">
+          <div className="relative flex-1 min-h-0">
+            <FinotaurChart
+              symbol={symbol}
+              interval={candleInterval}
+              from={from}
+              to={to}
+              dataSource={candleDataSource}
+              theme="dark"
+              height="100%"
+              focusRange={focusRange}
+              timeFitToken={timeFitToken}
+              wallRenderMode="matrix"
+              depthMatrixColumns={depthMatrix.columns}
+              depthMatrixBinSize={depthMatrix.binSize}
+              depthMatrixSizeFilterPct={sizeFilterPct}
+              depthMatrixFloorUsd={floorUsd}
+              depthMatrixCandleIntervalMs={intervalMs(interval)}
+              depthMatrixPalette={preferences.palette}
+              depthMatrixSmoothing={preferences.smoothing}
+              volumeBubbles={{
+                store: flowStoreRef.current,
+                visible: preferences.bubbles,
+                thresholdSetting: preferences.bubbleThreshold,
+              }}
+              depthProfile={{
+                bids: restingBookSnapshot.bids,
+                asks: restingBookSnapshot.asks,
+                binSize: depthMatrix.binSize,
+                visible: preferences.sideProfile,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Paper-trading rail — same resizable drag-handle pattern as
+            ChartTab.tsx's crypto-only rail. This tab's crypto branch always
+            has a live Binance book (see the `book.status === 'error'` early
+            return above), so the rail is unconditional here. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          onMouseDown={handleRailHandleMouseDown}
+          className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+            isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+          }`}
         />
+
+        <div
+          className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
+          style={{ width: railWidth }}
+        >
+          <PaperTradeRail
+            key={symbol}
+            symbol={symbol}
+            livePrice={book.lastPrice}
+            bid={bid}
+            ask={ask}
+            enabled
+          />
+        </div>
       </div>
     </div>
   );

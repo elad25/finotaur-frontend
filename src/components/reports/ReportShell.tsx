@@ -102,7 +102,8 @@ export function ReportShell({ slides, children, onClose, title, subtitle, locked
           src={finoBullWatermark}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 z-0 w-[82vw] max-w-[1150px] -translate-x-1/2 -translate-y-1/2 select-none opacity-[0.07]"
+          className="pointer-events-none absolute z-0 select-none"
+          style={{ right: 'calc(50vw + 277px)', bottom: 0, height: '90vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
         />
       )}
 
