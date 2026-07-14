@@ -51,6 +51,7 @@ import { ArenaToolbar } from './components/ArenaToolbar';
 import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { ArenaWorkspaceTabs } from './components/ArenaWorkspaceTabs';
 import { AccountSelector } from './components/AccountSelector';
+import { ArenaBrokerConnect } from './components/ArenaBrokerConnect';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
@@ -326,8 +327,9 @@ export default function TradingArena() {
           />
         </div>
 
-        {/* Right: real-account selector (display/context only — see accountId comment above) */}
-        <div className="ml-auto flex-shrink-0">
+        {/* Right: broker connect entry point + real-account selector (display/context only — see accountId comment above) */}
+        <div className="ml-auto flex flex-shrink-0 items-center gap-2">
+          <ArenaBrokerConnect />
           <AccountSelector value={accountId} onChange={setAccountId} />
         </div>
       </header>

@@ -53,6 +53,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Info } from 'lucide-react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import {
   pickDataSource,
@@ -128,6 +129,79 @@ function readStoredRailWidth(): number {
     // localStorage unavailable — fall back to the default width.
   }
   return RAIL_DEFAULT_WIDTH;
+}
+
+// ── "Delayed data" badge (non-crypto only) ──────────────────────────────
+// Clickable badge that opens a small anchored info popover explaining the
+// delayed-data model and how to get real-time data (NT8 desktop bridge,
+// DOM/Footprint tabs → Connect). Outside-click/Escape idiom mirrors
+// LiquiditySettingsMenu.tsx / ToolbarTrigger.tsx elsewhere in the Arena — no
+// new deps, no portal.
+function DelayedDataBadge() {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="absolute left-2 top-2 z-30">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors"
+        style={{
+          color: '#C9A646',
+          background: 'rgba(201,166,70,0.12)',
+          border: '1px solid rgba(201,166,70,0.28)',
+        }}
+      >
+        Delayed data
+        <Info className="h-2.5 w-2.5" aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          className="absolute left-0 top-[calc(100%+6px)] w-[320px] rounded-lg p-3 text-[11px] leading-relaxed text-[#C0C0C0] shadow-lg"
+          style={{ background: '#0D0D0F', border: '1px solid rgba(201,166,70,0.25)' }}
+        >
+          <p className="mb-1.5 text-[12px] font-semibold text-[#E8E8E8]">Delayed market data</p>
+          <p className="mb-2">
+            FINOTAUR futures charts use delayed exchange data (intraday via a delayed continuous
+            feed; full history up to the prior session).
+          </p>
+          <p className="mb-1.5 font-semibold text-[#E8E8E8]">Want real-time?</p>
+          <p className="mb-2">
+            Real-time futures data requires your own market-data subscription — exchanges bill this
+            per user, so it can&apos;t be included in the platform.
+          </p>
+          <ul className="list-disc space-y-1 pl-4">
+            <li>
+              Connect your NinjaTrader desktop feed (DOM &amp; Footprint tabs → Connect) — your data
+              stays on your machine.
+            </li>
+            <li>Make sure a live market-data subscription is active in your broker account.</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfileEnabled }: ChartTabProps) {
@@ -296,19 +370,7 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
       {/* Chart pane */}
       <div className="relative flex flex-1 min-w-0 flex-col">
         <div className="relative flex-1 min-h-0">
-          {!isCrypto && (
-            <div
-              className="absolute left-2 top-2 z-30 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
-              style={{
-                color: '#C9A646',
-                background: 'rgba(201,166,70,0.12)',
-                border: '1px solid rgba(201,166,70,0.28)',
-              }}
-              title="This symbol's data comes from a cached/delayed feed, not a live tick stream."
-            >
-              Delayed data
-            </div>
-          )}
+          {!isCrypto && <DelayedDataBadge />}
           {footprintOnZoomActive ? (
             <ChartTabFootprintOnZoomBody
               chartSymbol={chartSymbol}
