@@ -64,16 +64,22 @@ const corsHeaders = {
 // intentionally excluded to avoid stacking discounts on the already-discounted
 // annual price (protects LTGP / price integrity). Trader + Investor + Finotaur + the
 // hidden Welcome-Offer intro plan (checkout overrides the code with FINOTAUR50 there).
+// Plain renewal plans (initial_price = 0 in Whop) ONLY. The intro/Welcome-Offer
+// plan (plan_u6VqqKZlb0axR) is deliberately EXCLUDED: it has a separate initial
+// charge (initial_price = 44.99), so number_of_intervals counts the RENEWALS after
+// the initial — 3 intervals there would discount 4 months, not 3. Checkout never
+// applies an affiliate code on that plan anyway (it forces FINOTAUR50), so excluding
+// it costs nothing and keeps every applicable plan initial_price = 0 → intervals == months.
 const PROMO_APPLICABLE_PLAN_IDS = [
-  'plan_N33S1p5Y3dHrK', // Trader (Premium) monthly $44.99
-  'plan_icd76C8REp0LQ', // Investor (Top Secret) monthly
-  'plan_AgWVNrqc0eSMK', // Finotaur (platform) monthly $89
-  'plan_u6VqqKZlb0axR', // Trader — Welcome Offer (intro / popup)
+  'plan_N33S1p5Y3dHrK', // Trader (Premium) monthly $44.99 — initial_price 0
+  'plan_icd76C8REp0LQ', // Investor (Top Secret) monthly — initial_price 0
+  'plan_AgWVNrqc0eSMK', // Finotaur (platform) monthly $89 — initial_price 0
 ]
 
-// Number of billing cycles (months, since all applicable plans are monthly) the
-// referral discount applies for = 30% off for 3 months. Matches
-// affiliate_config.member_referral.friend_discount_cycles — keep in sync.
+// Billing cycles the referral discount applies for. Every applicable plan above is
+// initial_price = 0 (no separate initial charge), so the signup charge is renewal #1
+// and number_of_intervals == discounted months: 3 = 30% off for 3 months (months 1-3),
+// full price from month 4. Matches affiliate_config.member_referral.friend_discount_cycles.
 const FRIEND_DISCOUNT_CYCLES = 3
 
 // Reserved codes a member may not self-select as their personal referral
@@ -111,11 +117,14 @@ interface CreatePromoRequest {
   discount_percent?: number   // Any integer 1-100
   affiliate_name?: string     // Affiliate display name (optional, for metadata)
   // Member path (new, Phase 1)
-  mode?: 'member' | 'reprovision'
+  mode?: 'member' | 'reprovision' | 'inspect'
   user_id?: string             // Only honored on the service-role auth path
   requested_code?: string      // Member path only — optional self-chosen code (v3.1.0)
   // Reprovision path (new, v3.2.0) — service-role only. Either affiliate_id
   // or coupon_code identifies the affiliate row to delete+recreate the promo for.
+  // Inspect path (new, read-only diagnostics) — service-role/admin-key only.
+  promo_id?: string             // Whop promo_codes id to fetch
+  plan_ids_to_inspect?: string[] // Whop plan ids to fetch
 }
 
 interface WhopPromoResponse {
@@ -557,6 +566,73 @@ async function handleReprovision(
 }
 
 // ============================================
+// INSPECT HANDLER (service-role / admin-key only, read-only)
+// ============================================
+// Diagnostic-only: fetches a promo code and/or one or more plans straight
+// from Whop so their billing structure (number_of_intervals, initial_price,
+// renewal_price, billing_period, base_currency, etc.) can be inspected.
+// GET requests only — no mutation of Whop or the DB.
+
+async function handleInspect(
+  req: Request,
+  body: CreatePromoRequest
+): Promise<Response> {
+  const jsonResponse = (respBody: unknown, status: number) =>
+    new Response(JSON.stringify(respBody), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status,
+    })
+
+  const whopApiKey = Deno.env.get('WHOP_API_KEY')
+
+  if (!whopApiKey) {
+    return jsonResponse({ error: 'whop_credentials_not_configured' }, 500)
+  }
+
+  try {
+    let promo: unknown = null
+    if (body.promo_id) {
+      const promoResponse = await fetch(`https://api.whop.com/api/v2/promo_codes/${body.promo_id}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${whopApiKey}` },
+      })
+      const promoText = await promoResponse.text()
+      if (!promoResponse.ok) {
+        return jsonResponse({
+          success: false,
+          error: `Whop promo fetch failed: ${promoResponse.status} ${promoText}`,
+        }, 502)
+      }
+      promo = JSON.parse(promoText)
+    }
+
+    const plans: unknown[] = []
+    if (Array.isArray(body.plan_ids_to_inspect)) {
+      for (const planId of body.plan_ids_to_inspect) {
+        const planResponse = await fetch(`https://api.whop.com/api/v2/plans/${planId}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${whopApiKey}` },
+        })
+        const planText = await planResponse.text()
+        if (!planResponse.ok) {
+          return jsonResponse({
+            success: false,
+            error: `Whop plan fetch failed for ${planId}: ${planResponse.status} ${planText}`,
+          }, 502)
+        }
+        plans.push(JSON.parse(planText))
+      }
+    }
+
+    return jsonResponse({ success: true, promo, plans }, 200)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[create-whop-promo] inspect: unexpected error:', message)
+    return jsonResponse({ success: false, error: message }, 502)
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -601,6 +677,26 @@ serve(async (req) => {
         )
       }
       return await handleReprovision(supabase, body)
+    }
+
+    // ============================================
+    // AUTH PATH I — Inspect (read-only diagnostics): fetches promo/plan
+    // structure straight from Whop. Admin-only, same gate as reprovision —
+    // callable by the service-role bearer OR the dedicated REPROVISION_KEY
+    // admin header. Never callable by a normal user JWT.
+    // ============================================
+    if (body.mode === 'inspect') {
+      const reprovisionKey = Deno.env.get('REPROVISION_KEY') || ''
+      const providedKey = req.headers.get('x-reprovision-key') || ''
+      const isServiceRole = !!supabaseServiceKey && timingSafeEqual(token, supabaseServiceKey)
+      const isAdminToken = reprovisionKey.length > 0 && providedKey.length > 0 && timingSafeEqual(providedKey, reprovisionKey)
+      if (!isServiceRole && !isAdminToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized: service-role or reprovision key required' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        )
+      }
+      return await handleInspect(req, body)
     }
 
     // ============================================
