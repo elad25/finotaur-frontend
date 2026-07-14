@@ -72,6 +72,30 @@ describe('clusterByOverlap — a copier micro+mini fan-out is ONE decision', () 
     ];
     expect(clusterByOverlap(withLater)).toHaveLength(2);
   });
+
+  // Regression (2026-07-14): an earlier still-OPEN (close_at null) position must
+  // NOT swallow a genuinely separate same-side decision opened later. Before this
+  // fix an open row counted as close=+∞, collapsing a whole day (e.g. Elad's 8
+  // phantom-open MNQU6 rows absorbing the 18:06 + 18:10 round-trips) down to a
+  // handful of "decisions" in both TRADER and All-Accounts.
+  it('does not let an earlier OPEN position swallow a later same-side decision', () => {
+    const rows: Row[] = [
+      { id: 'open-early', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-13T08:01:00.000Z', close_at: null, pnl: null, quantity: 5, entry_price: 29583, stop_price: null, multiplier: 2, partial_entries: [{ price: 29583, quantity: 5 }], portfolio_id: 'acct-A' },
+      { id: 'later-roundtrip', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-13T18:06:00.000Z', close_at: '2026-07-13T18:09:00.000Z', pnl: -168, quantity: 3, entry_price: 29533, stop_price: 29496, multiplier: 2, partial_entries: [{ price: 29533, quantity: 3 }], portfolio_id: 'acct-A' },
+    ];
+    expect(clusterByOverlap(rows)).toHaveLength(2);
+  });
+
+  // The open-window tolerance must still merge a copier fan-out whose copies are
+  // ALL still open (open within ~0.4s, none closed yet) into one decision.
+  it('still merges simultaneously-opened copier copies that are all still open', () => {
+    const rows: Row[] = [
+      { id: 'open-a', symbol: 'NQU6',  side: 'SHORT', open_at: '2026-06-30T14:00:41.923Z', close_at: null, pnl: null, quantity: 1, entry_price: 30325.5,  stop_price: 30356.75, multiplier: 20, partial_entries: [{ price: 30325.5,  quantity: 1 }], portfolio_id: 'acct-A' },
+      { id: 'open-b', symbol: 'MNQU6', side: 'SHORT', open_at: '2026-06-30T14:00:42.271Z', close_at: null, pnl: null, quantity: 4, entry_price: 30325.25, stop_price: 30356.75, multiplier: 2,  partial_entries: [{ price: 30325.25, quantity: 4 }], portfolio_id: 'acct-B' },
+      { id: 'open-c', symbol: 'MNQU6', side: 'SHORT', open_at: '2026-06-30T14:00:42.276Z', close_at: null, pnl: null, quantity: 4, entry_price: 30324,    stop_price: 30356.75, multiplier: 2,  partial_entries: [{ price: 30324,    quantity: 4 }], portfolio_id: 'acct-C' },
+    ];
+    expect(clusterByOverlap(rows)).toHaveLength(1);
+  });
 });
 
 describe('aggregateCopiedTrades — ALL ACCOUNTS shows one row per decision', () => {

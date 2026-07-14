@@ -134,9 +134,19 @@ export function summedInitialRisk(cluster: Record<string, any>[]): number | null
 /**
  * Net-flat clustering: per (contract root, side), merge rows whose
  * [open_at, close_at] intervals overlap (single-linkage). A row with no/invalid
- * close is treated as still-open (close = +∞). Rows with an invalid open_at
- * never merge.
+ * close is still-open: its merge window extends only OPEN_ROW_OVERLAP_MS past its
+ * own open (NOT to +∞) — long enough to absorb a copier fan-out (copies of one
+ * decision open within ~0.4s) but short enough that a stale/phantom open row can
+ * NOT swallow a genuinely separate same-side decision opened minutes/hours later.
+ * Rows with an invalid open_at never merge.
  */
+// A still-open row (close_at null) previously counted as close=+∞, so a single
+// unclosed/phantom-open position absorbed EVERY later same-(root,side) trade into
+// one giant "decision" — collapsing a whole day of trades to a handful of rows in
+// both the TRADER and All-Accounts scopes. Bounding the open window to a few
+// seconds keeps simultaneous copier copies merged while separating real re-entries.
+const OPEN_ROW_OVERLAP_MS = 5000;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function clusterByOverlap<T extends Record<string, any>>(trades: T[]): T[][] {
   const partitions = new Map<string, T[]>();
@@ -163,7 +173,11 @@ export function clusterByOverlap<T extends Record<string, any>>(trades: T[]): T[
     for (const t of sorted) {
       const openMs = timeMs(t.open_at);
       const closeRaw = timeMs(t.close_at);
-      const closeMs = Number.isFinite(closeRaw) ? closeRaw : Infinity;
+      const closeMs = Number.isFinite(closeRaw)
+        ? closeRaw
+        : Number.isFinite(openMs)
+          ? openMs + OPEN_ROW_OVERLAP_MS
+          : Infinity;
       if (cluster.length === 0) {
         cluster = [t];
         clusterMaxClose = closeMs;
