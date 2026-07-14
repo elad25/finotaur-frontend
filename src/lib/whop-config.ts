@@ -94,9 +94,10 @@ export const WHOP_PLAN_IDS = {
   premium_monthly: 'plan_N33S1p5Y3dHrK', // $44.99/mo (was plan_v7QKxkvKIZooe)
   premium_yearly: 'plan_WrjUcvrRhwWPL',  // $409/yr (was plan_gBG436aeJxaHU)
 
-  // Intro Offer — hidden one-time Trader plan (30% off first month, then $44.99/mo).
-  // Placeholder plan ID — real Whop plan not created yet. Find/replace when it exists.
-  premium_intro_monthly: 'plan_u6VqqKZlb0axR',
+  // Welcome Offer — Trader plan with a 14-day FREE TRIAL then $44.99/mo, NO initial fee.
+  // (Replaced 2026-07-14: old plan plan_u6VqqKZlb0axR had a $44.99 initial fee, which broke
+  // the affiliate 3-month math on this plan. New plan is initial_price=0 like the regular plans.)
+  premium_intro_monthly: 'plan_Bud5AtSREdawA',
 
   // Platform - Finotaur ($89/month, 14-day trial). Repriced 2026-07: new Whop plans, new IDs.
   platform_finotaur_monthly: 'plan_AgWVNrqc0eSMK',
@@ -192,7 +193,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_WrjUcvrRhwWPL': 'premium_yearly',  // current $409/yr (2026-06-17)
   'plan_gBG436aeJxaHU': 'premium_yearly',  // legacy — kept for in-flight refs
 
-  // Intro Offer — placeholder plan ID, hygiene entry only (not purchasable via PLANS/pricing UI).
+  // Welcome Offer — current plan (14-day trial, no initial fee, 2026-07-14) + legacy plan (had initial fee).
+  'plan_Bud5AtSREdawA': 'premium_intro_monthly',
   'plan_u6VqqKZlb0axR': 'premium_intro_monthly',
 
   // Platform - Finotaur
