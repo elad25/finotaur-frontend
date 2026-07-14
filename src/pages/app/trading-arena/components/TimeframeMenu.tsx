@@ -1,15 +1,14 @@
 /**
  * Trading Arena — TradingView-style timeframe menu.
  *
- * Renders TWO things as one unit (mirrors TradingView's own toolbar):
- *   1. A fixed strip of quick-access interval buttons (simple switching,
- *      no pinning/favorites — always the same set).
- *   2. A "Timeframe ▾" dropdown trigger — grouped SECONDS/MINUTES/HOURS/DAYS
- *      rows plus a "Custom…" row that opens a small dialog (number + unit)
- *      for arbitrary timeframes not in the fixed grid.
+ * Renders a single "Timeframe ▾" dropdown trigger (its caption always shows
+ * the current interval) — grouped SECONDS/MINUTES/HOURS/DAYS rows plus a
+ * "Custom…" row that opens a small dialog (number + unit) for arbitrary
+ * timeframes not in the fixed grid.
  *
- * Selecting any interval (preset row, quick-access button, or custom) just
- * switches the active interval — there is no favoriting/pinning mechanism.
+ * Selecting any interval (preset row or custom) just switches the active
+ * interval — there is no favoriting/pinning mechanism and no separate
+ * quick-access strip.
  *
  * Visual language matches ArenaToolbar's local ToolbarTrigger (dark panel,
  * gold accents, no Radix Popover — same intentional scope choice). The
@@ -52,9 +51,6 @@ const UNIT_OPTIONS: { value: CustomIntervalUnit; label: string }[] = [
   { value: 'hours',   label: 'Hours' },
   { value: 'days',    label: 'Days' },
 ];
-
-/** Fixed quick-access strip — always the same set, no pinning/favorites. */
-const QUICK_ACCESS_INTERVALS: ArenaInterval[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
 
 export function TimeframeMenu({ value, onChange, capability }: TimeframeMenuProps) {
   const [open, setOpen] = useState(false);
@@ -100,23 +96,6 @@ export function TimeframeMenu({ value, onChange, capability }: TimeframeMenuProp
 
   return (
     <div ref={containerRef} className="flex items-center gap-1">
-      {/* Quick-access strip — fixed set, simple switching only */}
-      {QUICK_ACCESS_INTERVALS.map((iv) => (
-        <button
-          key={iv}
-          type="button"
-          onClick={() => selectInterval(iv)}
-          className={cn(
-            'flex items-center h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
-            iv === value
-              ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-              : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
-          )}
-        >
-          {formatIntervalShort(iv)}
-        </button>
-      ))}
-
       {/* Dropdown trigger */}
       <div className="relative flex-shrink-0">
         <button
