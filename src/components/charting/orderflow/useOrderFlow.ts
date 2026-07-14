@@ -70,13 +70,52 @@ const CACHE_STALE_MS = 10 * 60 * 1000;
 // loaded. Deliberately small vs. the initial-load budgets above — a single
 // pan gesture should feel responsive, not trigger a 90-request storm; a
 // user panning further just fires more of these, progressively extending
-// coverage rather than front-loading it all at once.
-const INCREMENTAL_BACKFILL_MAX_REQUESTS = 30;
+// coverage rather than front-loading it all at once. Raised 30->40: with
+// auto-continue (below) now driving repeated walks toward full coverage on
+// its own, a slightly larger per-walk budget means fewer round trips to
+// converge without weakening BACKFILL_REQUEST_SPACING_MS or the 429/418
+// graceful-stop inside BinanceTradeSource.backfill().
+const INCREMENTAL_BACKFILL_MAX_REQUESTS = 40;
 // Minimum spacing between incremental backfill REST walks — a fast series of
 // pan events (mouse-drag, momentum scroll) collapses to at most one request
 // per this window; the latest/earliest requested edge wins (see
 // pendingHistoryFromMsRef in the hook body).
 const HISTORY_REQUEST_MIN_INTERVAL_MS = 1500;
+
+// ── Auto-continue contract ───────────────────────────────────────────────
+// On high-volume symbols a single INCREMENTAL_BACKFILL_MAX_REQUESTS-capped
+// walk (or even the initial two-phase walk) often can't reach the requested
+// edge in one pass — it exhausts its request budget minutes-to-an-hour into
+// the visible window and just stops, leaving older visible candles empty.
+// Auto-continue closes that gap without the caller (FootprintLayer's pan
+// handler, or the initial mount) needing to keep re-requesting by hand:
+//   1. `historyTargetFromMs` (declared in the hook body) tracks the
+//      earliest `fromMs` ANY caller has ever asked for — the outstanding
+//      coverage target, not just the most recent single request.
+//   2. Every incremental walk's completion (see runIncrementalHistoryBackfill)
+//      compares its resulting coverage against that target. If still short
+//      AND the walk made real progress (coveredFromMs actually moved
+//      earlier vs. before the walk), it re-queues the SAME target through
+//      requestHistoryImpl — i.e. through the normal debounce/single-flight
+//      path above, so auto-continued walks stay spaced
+//      HISTORY_REQUEST_MIN_INTERVAL_MS apart and never race a concurrent
+//      walk, exactly like organic pan-triggered ones.
+//   3. A walk that makes NO progress (rate-limited/banned/genuinely out of
+//      history) sets `historyStalled` and does NOT re-queue itself — it
+//      stops silently rather than hammering the venue. The flag clears the
+//      next time requestHistoryImpl runs (a fresh user pan), so a later
+//      manual retry isn't permanently blocked by an earlier stall.
+//   4. `autoContinueRequestsUsed` is a conservative (upper-bound-per-walk)
+//      counter checked against MAX_AUTO_CONTINUE_REQUESTS so a pathological
+//      symbol/window can't auto-continue forever — once the ceiling hits,
+//      auto-continue stops (the "history limited" UI note, already driven
+//      by backfillCoveredFromSec, naturally stays visible).
+//   5. After the initial two-phase mount walk settles, if its coverage
+//      still falls short of the default window it targeted, that edge is
+//      fed into the exact same chase (see the `walk().finally()` handler)
+//      so the initially-visible window fills in the background without the
+//      user ever needing to pan.
+const MAX_AUTO_CONTINUE_REQUESTS = 600;
 
 export interface UseOrderFlowOptions extends FlowBinStoreConfig {
   symbol: string;
@@ -212,10 +251,40 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     // or while debounced/single-flighted. Always the MIN of whatever's
     // pending — a later, less-deep request never overwrites an earlier one.
     let pendingHistoryFromMs: number | null = null;
+    // Whether ANY of the request(s) coalesced into pendingHistoryFromMs was
+    // an auto-continue-triggered one (vs. a genuine pan) — OR'd together so
+    // a mix of "real" and "auto" requests landing in the same debounce
+    // window still counts toward MAX_AUTO_CONTINUE_REQUESTS. See the
+    // auto-continue contract comment above the constants.
+    let pendingHistoryIsAutoContinue = false;
     let historyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const queuePendingHistory = (fromMs: number) => {
+    // ── Auto-continue state (see the contract comment above the constants) ──
+    // Earliest fromMs ANY caller (pan or auto-continue) has ever asked for —
+    // the outstanding coverage target the auto-continue loop chases, as
+    // opposed to pendingHistoryFromMs which is just "what's queued right
+    // now". Never moves forward, only earlier.
+    let historyTargetFromMs: number | null = null;
+    // Set when the most recent auto-continue-eligible walk made zero
+    // progress (rate-limited/banned/no more history) — stops further
+    // auto-continue re-queuing until the next real requestHistoryImpl call
+    // clears it (see requestHistoryImpl).
+    let historyStalled = false;
+    // Conservative (upper-bound-per-walk) running total of requests spent
+    // by auto-continue-triggered walks this mount/symbol — hard-capped at
+    // MAX_AUTO_CONTINUE_REQUESTS so a pathological window can't chase
+    // coverage forever.
+    let autoContinueRequestsUsed = 0;
+    // fromMs the initial two-phase walk (below) actually targeted — set so
+    // its completion handler can compare final coverage against it and,
+    // if short, fold that edge into the auto-continue chase (see
+    // walk().finally()). Stays null on a cache-hit mount (that path has its
+    // own small gap-fill and isn't part of this chase).
+    let initialWindowFromMs: number | null = null;
+
+    const queuePendingHistory = (fromMs: number, isAutoContinue: boolean) => {
       pendingHistoryFromMs = pendingHistoryFromMs === null ? fromMs : Math.min(pendingHistoryFromMs, fromMs);
+      pendingHistoryIsAutoContinue = pendingHistoryIsAutoContinue || isAutoContinue;
     };
 
     /** Extends coveredFromMs backward (never forward) and mirrors it into the exposed backfillCoveredFromSec state. */
@@ -300,16 +369,31 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     // again, progressively extending coverage. On completion (success OR
     // failure — best-effort, same posture as the initial walk), re-checks
     // pendingHistoryFromMs so a request that arrived while this one was
-    // in flight gets served immediately after, not dropped.
+    // in flight gets served immediately after, not dropped; otherwise runs
+    // the auto-continue check (see the contract comment above the
+    // constants) so coverage keeps chasing historyTargetFromMs on its own.
+    //
+    // `isAutoContinue` — true when THIS walk was itself queued by the
+    // auto-continue mechanism (vs. an organic pan) — only affects the
+    // MAX_AUTO_CONTINUE_REQUESTS accounting below; the walk/backfill logic
+    // itself is identical either way.
     //
     // Declared as a hoisted `function` (not `const ... = () => {}`) because
     // this and requestHistoryImpl below are mutually recursive (each calls
     // the other) — hoisting avoids a use-before-define lint warning that a
     // const/arrow pair would otherwise trigger regardless of which one is
     // declared first.
-    function runIncrementalHistoryBackfill(fromMsToRun: number, toMsToRun: number) {
+    function runIncrementalHistoryBackfill(fromMsToRun: number, toMsToRun: number, isAutoContinue: boolean) {
       historyInFlight = true;
       lastHistoryRequestAt = Date.now();
+      const coveredBeforeWalk = coveredFromMs;
+      if (isAutoContinue) {
+        // Conservative upper-bound accounting: the walk may resolve using
+        // fewer than INCREMENTAL_BACKFILL_MAX_REQUESTS internally, but
+        // counting the max keeps the ceiling a hard, predictable stop
+        // rather than an estimate that could undercount.
+        autoContinueRequestsUsed += INCREMENTAL_BACKFILL_MAX_REQUESTS;
+      }
       runBackfill(fromMsToRun, toMsToRun, INCREMENTAL_BACKFILL_MAX_REQUESTS)
         .then((result) => {
           if (controller.signal.aborted) return;
@@ -323,9 +407,43 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
           if (controller.signal.aborted) return;
           historyInFlight = false;
           const nextPending = pendingHistoryFromMs;
+          const nextPendingIsAutoContinue = pendingHistoryIsAutoContinue;
           if (nextPending !== null) {
             pendingHistoryFromMs = null;
-            requestHistoryImpl(nextPending);
+            pendingHistoryIsAutoContinue = false;
+            requestHistoryImpl(nextPending, nextPendingIsAutoContinue);
+            return;
+          }
+
+          // ── Auto-continue decision (no explicit request was queued while
+          // this walk ran) — see the contract comment above the constants.
+          // Defensive guard: requestHistoryImpl always clears historyStalled
+          // before starting a walk, so it can never be true here in
+          // practice — but a future caller that reaches this block through
+          // some other path should still respect an existing stall rather
+          // than immediately re-triggering another REST round trip.
+          if (historyStalled) return;
+          if (historyTargetFromMs === null) return;
+          const madeProgress = coveredFromMs !== null && (coveredBeforeWalk === null || coveredFromMs < coveredBeforeWalk);
+          if (!madeProgress) {
+            // Rate-limited/banned/genuinely out of history — stop chasing
+            // until a fresh requestHistoryImpl call (real user pan) clears
+            // historyStalled.
+            historyStalled = true;
+            return;
+          }
+          if (autoContinueRequestsUsed >= MAX_AUTO_CONTINUE_REQUESTS) {
+            // Hard ceiling hit — stop even though progress is still
+            // possible; the "history limited" UI note (backfillCoveredFromSec-
+            // driven) stays visible as-is.
+            return;
+          }
+          if (coveredFromMs !== null && coveredFromMs > historyTargetFromMs + intervalSec * 1000) {
+            // Still short of the outstanding target — re-queue it through
+            // requestHistoryImpl so it goes through the normal debounce/
+            // single-flight path (walks stay spaced
+            // HISTORY_REQUEST_MIN_INTERVAL_MS apart).
+            requestHistoryImpl(historyTargetFromMs, true);
           }
         });
     }
@@ -336,8 +454,27 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     // UseOrderFlowResult.requestHistory's doc comment for the contract.
     // Hoisted `function` — see runIncrementalHistoryBackfill's doc comment
     // above for why (mutual recursion with that function).
-    function requestHistoryImpl(fromMs: number) {
+    //
+    // `isAutoContinue` (default false) — true only when this call originates
+    // from the auto-continue re-queue inside runIncrementalHistoryBackfill's
+    // completion handler (or a debounced/pending re-fire of one). Every
+    // other caller (the exposed `requestHistory`, FootprintLayer's pans,
+    // maybeHonorPendingHistory) leaves it false. See the auto-continue
+    // contract comment above the constants.
+    function requestHistoryImpl(fromMs: number, isAutoContinue = false) {
       if (controller.signal.aborted) return;
+
+      // A fresh call reaching here always clears a prior stall. This is
+      // safe even for isAutoContinue=true calls: auto-continue only ever
+      // re-enters requestHistoryImpl from the "madeProgress" branch (see
+      // runIncrementalHistoryBackfill), never from the "no progress" branch
+      // that sets historyStalled — so there is never a live stall to mask.
+      historyStalled = false;
+
+      // Track the outstanding coverage target — the earliest fromMs ANY
+      // caller has ever asked for, not just this call's — so the
+      // auto-continue loop keeps chasing it across multiple walks.
+      historyTargetFromMs = historyTargetFromMs === null ? fromMs : Math.min(historyTargetFromMs, fromMs);
 
       // Captured into a local const (rather than reading the outer `let`
       // twice) so the null-check below narrows cleanly for
@@ -348,7 +485,7 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
         // (may not have even started, e.g. no live trade seen yet). Stash
         // for the initial window to fold in (widens its target) and/or for
         // maybeHonorPendingHistory to serve once that walk completes.
-        queuePendingHistory(fromMs);
+        queuePendingHistory(fromMs, isAutoContinue);
         return;
       }
 
@@ -358,7 +495,7 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
       if (historyInFlight) {
         // Single-flight — queue the earliest pending target for right after
         // the in-flight run finishes.
-        queuePendingHistory(fromMs);
+        queuePendingHistory(fromMs, isAutoContinue);
         return;
       }
 
@@ -368,21 +505,23 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
         // Debounced — queue and let the trailing timer fire once the window
         // elapses, re-evaluating coverage at fire time (more may have landed
         // by then via another path, e.g. the initial walk still finishing).
-        queuePendingHistory(fromMs);
+        queuePendingHistory(fromMs, isAutoContinue);
         if (historyDebounceTimer === null) {
           historyDebounceTimer = setTimeout(() => {
             historyDebounceTimer = null;
             const queued = pendingHistoryFromMs;
+            const queuedIsAutoContinue = pendingHistoryIsAutoContinue;
             if (queued !== null) {
               pendingHistoryFromMs = null;
-              requestHistoryImpl(queued);
+              pendingHistoryIsAutoContinue = false;
+              requestHistoryImpl(queued, queuedIsAutoContinue);
             }
           }, HISTORY_REQUEST_MIN_INTERVAL_MS - elapsed);
         }
         return;
       }
 
-      runIncrementalHistoryBackfill(range.fromMs, range.toMs);
+      runIncrementalHistoryBackfill(range.fromMs, range.toMs, isAutoContinue);
     }
     requestHistoryImplRef.current = requestHistoryImpl;
 
@@ -390,8 +529,10 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
     function maybeHonorPendingHistory() {
       const pending = pendingHistoryFromMs;
       if (pending === null) return;
+      const pendingIsAutoContinue = pendingHistoryIsAutoContinue;
       pendingHistoryFromMs = null;
-      requestHistoryImpl(pending);
+      pendingHistoryIsAutoContinue = false;
+      requestHistoryImpl(pending, pendingIsAutoContinue);
     }
 
     const onTrades = (trades: FlowTrade[]) => {
@@ -462,6 +603,10 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
           // it in case the request budget didn't actually reach it.
           const defaultFromMs = firstLiveTime - backfillBars * intervalSec * 1000;
           const fromMs = pendingHistoryFromMs !== null ? Math.min(defaultFromMs, pendingHistoryFromMs) : defaultFromMs;
+          // Remembered for the auto-continue fold-in below (see
+          // walk().finally()) — the edge this walk actually targeted, so its
+          // completion handler can tell whether it fell short.
+          initialWindowFromMs = fromMs;
 
           const ownWalk = (async () => {
             const phase1 = await runBackfill(fromMs, firstLiveTime, PHASE1_MAX_REQUESTS);
@@ -499,6 +644,21 @@ export function useOrderFlow(options: UseOrderFlowOptions): UseOrderFlowResult {
               // that widened `fromMs` above but whose target the request
               // budget didn't actually reach.
               maybeHonorPendingHistory();
+
+              // ── Initial-window auto-continue (see the contract comment
+              // above the constants) — if the two-phase walk's request
+              // budget didn't actually reach the window it targeted, feed
+              // that edge into the same chase requestHistoryImpl/
+              // runIncrementalHistoryBackfill use for pan-triggered
+              // requests, so the initially-visible window keeps filling in
+              // the background without the user needing to pan first.
+              if (
+                initialWindowFromMs !== null &&
+                coveredFromMs !== null &&
+                coveredFromMs > initialWindowFromMs + intervalSec * 1000
+              ) {
+                requestHistoryImpl(initialWindowFromMs, true);
+              }
             }
           });
       }
