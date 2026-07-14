@@ -115,6 +115,32 @@ describe('normalizeTraderTrades — TRADER shows one row per decision', () => {
     expect(Number(rows[0].pnl)).toBeCloseTo(SHORT_SUM_PNL / SHORT_ACCOUNTS, 6); // -409
     expect(rows[0].group_trade_ids).toHaveLength(4);
   });
+
+  // Regression (2026-07-14): the merged row's Win/Loss badge must reflect the
+  // DECISION's net P&L, not the outcome inherited from the earliest copier copy.
+  // Elad saw a green "Win" on a decision that netted a loss across his accounts.
+  it('sets outcome from the decision net P&L, not the representative copy', () => {
+    const mixed: Row[] = [
+      // earliest-open copy WON (+50, outcome WIN) …
+      { id: 'win-rep', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-14T07:04:00.000Z', close_at: '2026-07-14T07:22:00.000Z', pnl: 50, quantity: 2, entry_price: 29581, stop_price: 29562, multiplier: 2, outcome: 'WIN', partial_entries: [{ price: 29581, quantity: 2 }], portfolio_id: 'acct-A' },
+      // … but the decision nets a LOSS once the bigger copy is included.
+      { id: 'lose-big', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-14T07:04:00.100Z', close_at: '2026-07-14T07:22:00.000Z', pnl: -114, quantity: 6, entry_price: 29591, stop_price: 29562, multiplier: 2, outcome: 'LOSS', partial_entries: [{ price: 29591, quantity: 6 }], portfolio_id: 'acct-B' },
+    ];
+    const rows = normalizeTraderTrades(mixed, 'per-account');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('LOSS'); // net -64, NOT the representative's WIN
+    expect(Number(rows[0].pnl)).toBeLessThan(0);
+  });
+
+  it('keeps outcome OPEN when any leg of the decision is still open', () => {
+    const withOpen: Row[] = [
+      { id: 'closed', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-14T07:04:00.000Z', close_at: '2026-07-14T07:10:00.000Z', pnl: 20, quantity: 2, entry_price: 29581, stop_price: 29562, multiplier: 2, outcome: 'WIN', partial_entries: [{ price: 29581, quantity: 2 }], portfolio_id: 'acct-A' },
+      { id: 'still-open', symbol: 'MNQU6', side: 'LONG', open_at: '2026-07-14T07:04:00.100Z', close_at: null, pnl: null, quantity: 3, entry_price: 29583, stop_price: 29562, multiplier: 2, outcome: 'OPEN', partial_entries: [{ price: 29583, quantity: 3 }], portfolio_id: 'acct-B' },
+    ];
+    const rows = normalizeTraderTrades(withOpen, 'per-account');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('OPEN');
+  });
 });
 
 describe('displaySymbol — uniform MICRO label for micro+mini decisions', () => {

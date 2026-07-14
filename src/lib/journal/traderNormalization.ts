@@ -47,7 +47,19 @@ interface NormalizableTrade {
   actual_user_r?: number | null;
   actual_r?: number | null;
   rr?: number | null;
+  outcome?: string | null;
   group_trade_ids?: string[];
+}
+
+// A merged/normalized decision must show a WIN/LOSS/BE that matches its OWN net
+// P&L — not the outcome inherited from the first copier copy. Before this, a
+// decision that netted a loss across accounts could still show a green "Win"
+// badge because the representative account happened to win (Elad, 2026-07-14).
+function decisionOutcome(anyOpen: boolean, netPnl: number): string {
+  if (anyOpen) return 'OPEN'; // any un-closed leg → the whole decision is still open
+  if (netPnl > 0) return 'WIN';
+  if (netPnl < 0) return 'LOSS';
+  return 'BE';
 }
 
 function accountId(trade: NormalizableTrade): string {
@@ -86,6 +98,7 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
         pnl: normPnl,
         quantity: 1,
         actual_r: singleR,
+        outcome: decisionOutcome(!representative.close_at, rawPnl),
         group_trade_ids: [representative.id],
       } as T);
       continue;
@@ -104,6 +117,7 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
     const mergedActualR =
       unifiedRisk && unifiedRisk > 0 ? computeActualR(totalPnl, unifiedRisk) : null;
 
+    const anyOpen = sorted.some((t) => !t.close_at);
     result.push({
       ...representative,
       // Uniform micro label when a decision mixes micro+mini (else rep's own symbol).
@@ -113,6 +127,7 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
       actual_r: mergedActualR,
       actual_user_r: null,
       rr: null,
+      outcome: decisionOutcome(anyOpen, totalPnl),
       group_trade_ids: sorted.map((t) => t.id),
     } as T);
   }
