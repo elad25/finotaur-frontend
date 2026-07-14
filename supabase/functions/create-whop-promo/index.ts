@@ -60,9 +60,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Hidden Trader plan — member personal referral codes are restricted to
-// this plan ONLY (v3.1.0). Must match the frontend's shared constant.
-const MEMBER_REFERRAL_PLAN_ID = 'plan_u6VqqKZlb0axR'
+// Plans a referral/affiliate promo applies to. MONTHLY tiers only — yearly is
+// intentionally excluded to avoid stacking discounts on the already-discounted
+// annual price (protects LTGP / price integrity). Trader + Investor + Finotaur + the
+// hidden Welcome-Offer intro plan (checkout overrides the code with FINOTAUR50 there).
+const PROMO_APPLICABLE_PLAN_IDS = [
+  'plan_N33S1p5Y3dHrK', // Trader (Premium) monthly $44.99
+  'plan_icd76C8REp0LQ', // Investor (Top Secret) monthly
+  'plan_AgWVNrqc0eSMK', // Finotaur (platform) monthly $89
+  'plan_u6VqqKZlb0axR', // Trader — Welcome Offer (intro / popup)
+]
 
 // Reserved codes a member may not self-select as their personal referral
 // code — mirrors the frontend/DB copy of this list (keep all three in sync).
@@ -99,9 +106,11 @@ interface CreatePromoRequest {
   discount_percent?: number   // Any integer 1-100
   affiliate_name?: string     // Affiliate display name (optional, for metadata)
   // Member path (new, Phase 1)
-  mode?: 'member'
+  mode?: 'member' | 'reprovision'
   user_id?: string             // Only honored on the service-role auth path
   requested_code?: string      // Member path only — optional self-chosen code (v3.1.0)
+  // Reprovision path (new, v3.2.0) — service-role only. Either affiliate_id
+  // or coupon_code identifies the affiliate row to delete+recreate the promo for.
 }
 
 interface WhopPromoResponse {
@@ -138,8 +147,11 @@ interface CreateWhopPromoOptions {
   // semantics as WELCOME). Member path (v3.1.0) uses 2, which combined with
   // the initial-fee discount yields 3 discounted months.
   numberOfIntervals?: number
-  // Optional plan restriction. Admin promos are unrestricted (undefined).
-  // Member personal codes (v3.1.0) are restricted to the hidden Trader plan.
+  // Optional plan restriction override. Defaults to PROMO_APPLICABLE_PLAN_IDS
+  // (v3.2.0 — every created promo is scoped to the paid monthly plans + the
+  // hidden Welcome-Offer plan; previously admin promos set no plan_ids at all,
+  // which made Whop silently scope them to a single default plan). Member
+  // personal codes (v3.1.0) override this to the hidden Trader plan only.
   planIds?: string[]
 }
 
@@ -167,6 +179,7 @@ async function createWhopPromoCode(
     stock: 999999,                      // 🔥 FIX: High number instead of 0!
     unlimited_stock: true,              // unlimited usage
     number_of_intervals: numberOfIntervals,
+    plan_ids: PROMO_APPLICABLE_PLAN_IDS, // 🔥 v3.2.0 FIX: default plan scope — without this Whop scoped the promo to a single default plan (coupons only worked on the popup/Welcome-Offer product)
   };
 
   if (planIds && planIds.length > 0) {
@@ -335,7 +348,7 @@ async function handleMemberPromo(
       discountPercent,
       affiliateRow.id,
       affiliateRow.display_name,
-      { numberOfIntervals: 2, planIds: [MEMBER_REFERRAL_PLAN_ID] }
+      { numberOfIntervals: 2, planIds: PROMO_APPLICABLE_PLAN_IDS }
     )
 
     const { error: updateError } = await supabase
@@ -380,6 +393,163 @@ async function handleMemberPromo(
 }
 
 // ============================================
+// REPROVISION HANDLER (service-role only, v3.2.0)
+// ============================================
+// Whop has no endpoint to update a promo's plan_ids in place, so fixing an
+// already-created coupon (e.g. one provisioned before PROMO_APPLICABLE_PLAN_IDS
+// existed) means: delete the old Whop promo, then create a fresh one with the
+// same coupon_code so any already-shared link keeps working.
+
+async function handleReprovision(
+  supabase: SupabaseClient,
+  body: CreatePromoRequest
+): Promise<Response> {
+  const jsonResponse = (respBody: unknown, status: number) =>
+    new Response(JSON.stringify(respBody), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status,
+    })
+
+  try {
+    const { affiliate_id, coupon_code, discount_percent } = body
+
+    if (!affiliate_id && !coupon_code) {
+      return jsonResponse({ success: false, error: 'Missing required field: affiliate_id or coupon_code' }, 400)
+    }
+
+    // ============================================
+    // 1. LOAD THE AFFILIATE ROW
+    // ============================================
+    const affiliateQuery = supabase
+      .from('affiliates')
+      .select('id, coupon_code, whop_promo_id, affiliate_type')
+
+    const { data: affiliate, error: affiliateError } = affiliate_id
+      ? await affiliateQuery.eq('id', affiliate_id).single()
+      : await affiliateQuery.eq('coupon_code', coupon_code).single()
+
+    if (affiliateError || !affiliate) {
+      return jsonResponse({ success: false, error: 'Affiliate not found' }, 404)
+    }
+
+    // ============================================
+    // 2. WHOP CREDENTIALS
+    // ============================================
+    const whopApiKey = Deno.env.get('WHOP_API_KEY')
+    const whopCompanyId = Deno.env.get('WHOP_COMPANY_ID')
+
+    if (!whopApiKey || !whopCompanyId) {
+      return jsonResponse({ success: false, error: 'Whop API credentials not configured' }, 500)
+    }
+
+    const oldPromoId: string | null = affiliate.whop_promo_id ?? null
+
+    // ============================================
+    // 3. DELETE THE OLD PROMO (if one exists)
+    // ============================================
+    if (oldPromoId) {
+      const deleteResponse = await fetch(`https://api.whop.com/api/v2/promo_codes/${oldPromoId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${whopApiKey}` },
+      })
+
+      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        const deleteErrorText = await deleteResponse.text()
+        console.error('[create-whop-promo] reprovision: Whop delete failed:', deleteErrorText)
+        return jsonResponse({
+          success: false,
+          error: `Whop delete failed: ${deleteResponse.status} ${deleteErrorText}`,
+        }, 502)
+      }
+      // 404 on delete = promo already gone in Whop — treat as OK, proceed to recreate.
+    }
+
+    // ============================================
+    // 4. DETERMINE DISCOUNT PERCENT
+    // ============================================
+    let discountPercent: number
+    if (Number.isInteger(discount_percent) && (discount_percent as number) >= 1 && (discount_percent as number) <= 100) {
+      discountPercent = discount_percent as number
+    } else {
+      const { data: configRow } = await supabase
+        .from('affiliate_config')
+        .select('config_value')
+        .eq('config_key', 'member_referral')
+        .single()
+
+      const config = (configRow?.config_value ?? {}) as { friend_discount_percent?: number }
+      discountPercent = Number.isInteger(config.friend_discount_percent)
+        ? (config.friend_discount_percent as number)
+        : 30
+    }
+
+    // ============================================
+    // 5. CREATE THE NEW PROMO (same code, now scoped via PROMO_APPLICABLE_PLAN_IDS
+    // from Change 1 — no planIds override passed, so createWhopPromoCode uses
+    // its default plan scope)
+    // ============================================
+    let newPromoId: string
+    try {
+      const whopPromo = await createWhopPromoCode(
+        whopApiKey,
+        whopCompanyId,
+        affiliate.coupon_code,
+        discountPercent,
+        affiliate.id
+      )
+      newPromoId = whopPromo.id
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : String(createError)
+      console.error('[create-whop-promo] reprovision: Whop create failed after delete:', message)
+
+      // The old promo is gone from Whop but the new one failed — never leave
+      // the DB pointing at a deleted promo. Null it out and record the error.
+      await supabase
+        .from('affiliates')
+        .update({
+          whop_promo_id: null,
+          promo_provision_error: message,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', affiliate.id)
+
+      return jsonResponse({ success: false, error: `Whop create failed after delete: ${message}` }, 502)
+    }
+
+    // ============================================
+    // 6. UPDATE THE AFFILIATE RECORD
+    // ============================================
+    const { error: updateError } = await supabase
+      .from('affiliates')
+      .update({
+        whop_promo_id: newPromoId,
+        promo_provision_error: null,
+        promo_provision_attempts: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', affiliate.id)
+
+    if (updateError) {
+      console.error('[create-whop-promo] reprovision: Warning: Failed to update affiliate record:', updateError)
+      // Don't fail the request — the new promo was created successfully in Whop.
+    }
+
+    return jsonResponse({
+      success: true,
+      affiliate_id: affiliate.id,
+      code: affiliate.coupon_code,
+      old_promo_id: oldPromoId,
+      new_promo_id: newPromoId,
+      plan_ids: PROMO_APPLICABLE_PLAN_IDS,
+    }, 200)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[create-whop-promo] reprovision: unexpected error:', message)
+    return jsonResponse({ success: false, error: message }, 500)
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -405,6 +575,26 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '')
     const body: CreatePromoRequest = await req.json()
+
+    // ============================================
+    // AUTH PATH R — Reprovision (v3.2.0): delete + recreate an existing promo so it
+    // picks up the current plan scope. Admin-only: callable by the service-role bearer
+    // OR a dedicated REPROVISION_KEY admin header. Never callable by a normal user JWT —
+    // checked BEFORE the other modes.
+    // ============================================
+    if (body.mode === 'reprovision') {
+      const reprovisionKey = Deno.env.get('REPROVISION_KEY') || ''
+      const providedKey = req.headers.get('x-reprovision-key') || ''
+      const isServiceRole = !!supabaseServiceKey && timingSafeEqual(token, supabaseServiceKey)
+      const isAdminToken = reprovisionKey.length > 0 && providedKey.length > 0 && timingSafeEqual(providedKey, reprovisionKey)
+      if (!isServiceRole && !isAdminToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized: service-role or reprovision key required' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        )
+      }
+      return await handleReprovision(supabase, body)
+    }
 
     // ============================================
     // AUTH PATH A — Service role (whop-webhook -> this function, mode='member')
