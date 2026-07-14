@@ -71,6 +71,11 @@ const PROMO_APPLICABLE_PLAN_IDS = [
   'plan_u6VqqKZlb0axR', // Trader — Welcome Offer (intro / popup)
 ]
 
+// Number of billing cycles (months, since all applicable plans are monthly) the
+// referral discount applies for = 30% off for 3 months. Matches
+// affiliate_config.member_referral.friend_discount_cycles — keep in sync.
+const FRIEND_DISCOUNT_CYCLES = 3
+
 // Reserved codes a member may not self-select as their personal referral
 // code — mirrors the frontend/DB copy of this list (keep all three in sync).
 const RESERVED_CODES = new Set([
@@ -348,7 +353,7 @@ async function handleMemberPromo(
       discountPercent,
       affiliateRow.id,
       affiliateRow.display_name,
-      { numberOfIntervals: 2, planIds: PROMO_APPLICABLE_PLAN_IDS }
+      { numberOfIntervals: FRIEND_DISCOUNT_CYCLES, planIds: PROMO_APPLICABLE_PLAN_IDS }
     )
 
     const { error: updateError } = await supabase
@@ -495,7 +500,9 @@ async function handleReprovision(
         whopCompanyId,
         affiliate.coupon_code,
         discountPercent,
-        affiliate.id
+        affiliate.id,
+        undefined,
+        { numberOfIntervals: FRIEND_DISCOUNT_CYCLES }
       )
       newPromoId = whopPromo.id
     } catch (createError) {
