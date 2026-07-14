@@ -117,7 +117,7 @@ interface CreatePromoRequest {
   discount_percent?: number   // Any integer 1-100
   affiliate_name?: string     // Affiliate display name (optional, for metadata)
   // Member path (new, Phase 1)
-  mode?: 'member' | 'reprovision' | 'inspect'
+  mode?: 'member' | 'reprovision' | 'inspect' | 'create_offer_promo'
   user_id?: string             // Only honored on the service-role auth path
   requested_code?: string      // Member path only — optional self-chosen code (v3.1.0)
   // Reprovision path (new, v3.2.0) — service-role only. Either affiliate_id
@@ -125,6 +125,11 @@ interface CreatePromoRequest {
   // Inspect path (new, read-only diagnostics) — service-role/admin-key only.
   promo_id?: string             // Whop promo_codes id to fetch
   plan_ids_to_inspect?: string[] // Whop plan ids to fetch
+  // create_offer_promo path (new) — service-role/admin-key only. Creates a
+  // standalone offer promo code, NOT tied to any affiliate row.
+  offer_code?: string           // Code to create in Whop
+  intervals?: number            // number_of_intervals for the offer promo
+  offer_plan_ids?: string[]     // Whop plan ids the offer promo is scoped to
 }
 
 interface WhopPromoResponse {
@@ -220,7 +225,9 @@ async function createWhopPromoCode(
     let errorMessage = `Whop API Error: ${response.status}`
     try {
       const errorData = JSON.parse(responseText)
-      errorMessage = errorData.message || errorData.error || errorMessage
+      const msg = (typeof errorData.message === 'string' && errorData.message)
+        || (typeof errorData.error === 'string' && errorData.error)
+      errorMessage = msg || responseText || errorMessage
     } catch {
       errorMessage = responseText || errorMessage
     }
@@ -633,6 +640,163 @@ async function handleInspect(
 }
 
 // ============================================
+// HELPER: find a Whop promo code's id by its code (case-insensitive).
+// Used by handleCreateOfferPromo to recover from Whop's 400 "already been
+// taken" conflict — Whop's list endpoint has no code= filter, so this walks
+// pages until the code is found or pages are exhausted.
+// ============================================
+
+async function findWhopPromoIdByCode(apiKey: string, code: string): Promise<string | null> {
+  const targetCode = code.toUpperCase()
+  let page = 1
+  let totalPages = 1
+
+  do {
+    const response = await fetch(`https://api.whop.com/api/v2/promo_codes?page=${page}&per=50`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    })
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new Error(`Whop promo list failed: ${response.status} ${responseText}`)
+    }
+
+    const parsed = JSON.parse(responseText) as {
+      data?: Array<{ id: string; code: string }>
+      pagination?: { total_page?: number }
+    }
+
+    const match = (parsed.data ?? []).find((p) => p.code?.toUpperCase() === targetCode)
+    if (match) {
+      return match.id
+    }
+
+    totalPages = parsed.pagination?.total_page ?? 1
+    page += 1
+  } while (page <= totalPages)
+
+  return null
+}
+
+// ============================================
+// CREATE OFFER PROMO HANDLER (service-role / admin-key only)
+// ============================================
+// Creates a STANDALONE offer promo code in Whop — NOT tied to any affiliate
+// row. Read-only on our DB (no affiliates table writes).
+//
+// Idempotent (v3.3.0): if the requested code already exists in Whop, the
+// existing promo is deleted and recreated with the requested config, so the
+// offer code always ends up scoped/configured exactly as requested instead
+// of failing with "This code has already been taken by another promo code."
+
+async function handleCreateOfferPromo(body: CreatePromoRequest): Promise<Response> {
+  const jsonResponse = (respBody: unknown, status: number) =>
+    new Response(JSON.stringify(respBody), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status,
+    })
+
+  const whopApiKey = Deno.env.get('WHOP_API_KEY')
+  const whopCompanyId = Deno.env.get('WHOP_COMPANY_ID')
+
+  if (!whopApiKey || !whopCompanyId) {
+    return jsonResponse({ error: 'whop_credentials_not_configured' }, 500)
+  }
+
+  const { offer_code, discount_percent, intervals, offer_plan_ids } = body
+
+  if (typeof offer_code !== 'string' || offer_code.trim().length === 0) {
+    return jsonResponse({ error: 'Missing or invalid required field: offer_code' }, 400)
+  }
+
+  if (!Number.isInteger(discount_percent) || (discount_percent as number) < 1 || (discount_percent as number) > 100) {
+    return jsonResponse({ error: 'Missing or invalid required field: discount_percent (must be an integer 1-100)' }, 400)
+  }
+
+  if (!Number.isInteger(intervals) || (intervals as number) < 1) {
+    return jsonResponse({ error: 'Missing or invalid required field: intervals (must be an integer >= 1)' }, 400)
+  }
+
+  if (!Array.isArray(offer_plan_ids) || offer_plan_ids.length === 0 || !offer_plan_ids.every((id) => typeof id === 'string' && id.length > 0)) {
+    return jsonResponse({ error: 'Missing or invalid required field: offer_plan_ids (must be a non-empty string array)' }, 400)
+  }
+
+  const attemptCreate = () =>
+    createWhopPromoCode(
+      whopApiKey,
+      whopCompanyId,
+      offer_code,
+      discount_percent as number,
+      `offer:${offer_code}`,
+      offer_code,
+      { numberOfIntervals: intervals as number, planIds: offer_plan_ids }
+    )
+
+  let oldPromoId: string | null = null
+
+  try {
+    let whopPromo: WhopPromoResponse
+    try {
+      whopPromo = await attemptCreate()
+    } catch (createError) {
+      const createMessage = createError instanceof Error ? createError.message : String(createError)
+
+      if (!createMessage.toLowerCase().includes('already been taken')) {
+        throw createError
+      }
+
+      // Idempotency (v3.3.0): the code already exists in Whop — delete it
+      // and recreate with the requested config so the offer always ends up
+      // scoped/configured exactly as requested.
+      console.log(`[create-whop-promo] create_offer_promo: code "${offer_code}" already exists in Whop — locating it to replace`)
+      const existingId = await findWhopPromoIdByCode(whopApiKey, offer_code)
+
+      if (!existingId) {
+        return jsonResponse({
+          success: false,
+          error: `Whop reports code "${offer_code}" is already taken but it could not be located to replace it`,
+        }, 502)
+      }
+
+      oldPromoId = existingId
+
+      const deleteResponse = await fetch(`https://api.whop.com/api/v2/promo_codes/${existingId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${whopApiKey}` },
+      })
+
+      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        const deleteErrorText = await deleteResponse.text()
+        console.error('[create-whop-promo] create_offer_promo: Whop delete failed:', deleteErrorText)
+        return jsonResponse({
+          success: false,
+          error: `Whop delete failed: ${deleteResponse.status} ${deleteErrorText}`,
+        }, 502)
+      }
+      // 404 on delete = promo already gone in Whop — treat as OK, proceed to recreate.
+
+      whopPromo = await attemptCreate()
+    }
+
+    return jsonResponse({
+      success: true,
+      offer_code,
+      promo_id: whopPromo.id,
+      plan_ids: offer_plan_ids,
+      intervals,
+      discount_percent,
+      replaced: oldPromoId !== null,
+      old_promo_id: oldPromoId,
+    }, 200)
+  } catch (whopError) {
+    const message = whopError instanceof Error ? whopError.message : String(whopError)
+    console.error('[create-whop-promo] create_offer_promo: Whop API failure:', message)
+    return jsonResponse({ success: false, error: message }, 502)
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -697,6 +861,27 @@ serve(async (req) => {
         )
       }
       return await handleInspect(req, body)
+    }
+
+    // ============================================
+    // AUTH PATH O — Create Offer Promo: creates a standalone offer promo code
+    // in Whop, not tied to any affiliate row. Admin-only, same gate as
+    // reprovision/inspect — callable by the service-role bearer OR the
+    // dedicated REPROVISION_KEY admin header. Never callable by a normal
+    // user JWT.
+    // ============================================
+    if (body.mode === 'create_offer_promo') {
+      const reprovisionKey = Deno.env.get('REPROVISION_KEY') || ''
+      const providedKey = req.headers.get('x-reprovision-key') || ''
+      const isServiceRole = !!supabaseServiceKey && timingSafeEqual(token, supabaseServiceKey)
+      const isAdminToken = reprovisionKey.length > 0 && providedKey.length > 0 && timingSafeEqual(providedKey, reprovisionKey)
+      if (!isServiceRole && !isAdminToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized: service-role or reprovision key required' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        )
+      }
+      return await handleCreateOfferPromo(body)
     }
 
     // ============================================
