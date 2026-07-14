@@ -5,7 +5,11 @@
  *   Left  — FinotaurChart, routed through the shared data-source router
  *            (`pickDataSource` in src/components/charting/dataSources) —
  *            crypto → BinanceSource, our 14 cached futures roots →
- *            DatabentoCacheSource, everything else (stocks/forex/uncached
+ *            DatabentoCacheSource wrapped in DatabentoYahooFallbackSource
+ *            (the cache never covers the last ~24-30h under the CME
+ *            license, and this tab always requests a rolling now-24h→now
+ *            window — the wrapper falls back to Yahoo for that gap, same
+ *            as TradeChart.tsx), everything else (stocks/forex/uncached
  *            futures) → YahooFinanceSource. Indicators come from the
  *            `indicators` prop — a single source of truth held in
  *            TradingArena.tsx (ArenaToolbar's Indicators ▾ picker), shared
@@ -57,6 +61,7 @@ import {
   toBinanceSymbol,
   toDatabentoCacheSymbol,
   toYahooSymbol,
+  DatabentoYahooFallbackSource,
 } from '@/components/charting/dataSources';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { ChartDataSource, Indicator, Interval } from '@/components/charting/types';
@@ -169,18 +174,31 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
   // idempotent passthroughs in that case and only do real work for symbols
   // that arrive in a raw/contract-code form.
   const { chartDataSource, chartSymbol, chartInterval } = useMemo(() => {
-    const source = pickDataSource(symbol);
     let resolvedSymbol: string;
     let kind: CandleSourceKind;
+    let source: ChartDataSource;
     if (isCryptoSymbol(symbol)) {
       resolvedSymbol = toBinanceSymbol(symbol) ?? symbol;
       kind = 'binance';
+      source = pickDataSource(symbol);
     } else if (isDatabentoCachedSymbol(symbol)) {
       resolvedSymbol = toDatabentoCacheSymbol(symbol) ?? symbol;
       kind = 'databento';
+      // Databento's CME license only ever serves bars whose end is >=24h old
+      // (daily ingest can lag further), so this tab's rolling "now-24h → now"
+      // window NEVER has cache coverage for the newest bars — the RPC would
+      // return [] and the chart would show "No bars in window". Wrap in the
+      // same Yahoo fallback TradeChart.tsx uses so recent bars still render
+      // via Yahoo's near-real-time continuous-front feed; historical/covered
+      // ranges keep using the Databento cache transparently.
+      const yahooFallback = toYahooSymbol(symbol, assetClass);
+      source = yahooFallback
+        ? new DatabentoYahooFallbackSource(yahooFallback, Math.floor(Date.now() / 1000))
+        : pickDataSource(symbol);
     } else {
       resolvedSymbol = toYahooSymbol(symbol, assetClass) ?? symbol;
       kind = 'yahoo';
+      source = pickDataSource(symbol);
     }
 
     // Native-vs-aggregate resolution (see utils/intervals.ts) — arbitrary
