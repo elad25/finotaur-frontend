@@ -64,14 +64,14 @@ const corsHeaders = {
 // intentionally excluded to avoid stacking discounts on the already-discounted
 // annual price (protects LTGP / price integrity). Trader + Investor + Finotaur + the
 // hidden Welcome-Offer intro plan (checkout overrides the code with FINOTAUR50 there).
-// Plain renewal plans (initial_price = 0 in Whop) ONLY. The intro/Welcome-Offer
-// plan (plan_u6VqqKZlb0axR) is deliberately EXCLUDED: it has a separate initial
-// charge (initial_price = 44.99), so number_of_intervals counts the RENEWALS after
-// the initial — 3 intervals there would discount 4 months, not 3. Checkout never
-// applies an affiliate code on that plan anyway (it forces FINOTAUR50), so excluding
-// it costs nothing and keeps every applicable plan initial_price = 0 → intervals == months.
+// Plain renewal plans (initial_price = 0 in Whop) ONLY, so number_of_intervals == months.
+// Includes BOTH Trader products: the regular Trader AND the Welcome-Offer Trader
+// (plan_Bud5AtSREdawA — 14-day trial, no initial fee, replaced the old plan_u6VqqKZlb0axR
+// which had a $44.99 initial fee that made 3 intervals = 4 months). The old Welcome-Offer
+// plan is NOT included. Affiliate = 30% for exactly 3 months on every plan here.
 const PROMO_APPLICABLE_PLAN_IDS = [
   'plan_N33S1p5Y3dHrK', // Trader (Premium) monthly $44.99 — initial_price 0
+  'plan_Bud5AtSREdawA', // Trader — Welcome Offer (14-day trial, $44.99/mo) — initial_price 0
   'plan_icd76C8REp0LQ', // Investor (Top Secret) monthly — initial_price 0
   'plan_AgWVNrqc0eSMK', // Finotaur (platform) monthly $89 — initial_price 0
 ]
