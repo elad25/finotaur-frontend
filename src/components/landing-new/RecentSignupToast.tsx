@@ -14,7 +14,7 @@ type RecentSignupsResponse = {
 };
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
-const BULL_IMAGE = '/assets/Bull-WarZone.png';
+const SIGNUP_PROOF_LOGO = '/assets/signup-proof-logo.png';
 const ROTATION_MS = 3 * 60 * 1000;
 
 function publicApiUrl(path: string) {
@@ -92,9 +92,9 @@ const RecentSignupToast = memo(function RecentSignupToast() {
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#C9A646]/30 bg-black/50">
         <img
-          src={BULL_IMAGE}
-          alt="Finotaur bull"
-          className="h-11 w-11 object-contain"
+          src={SIGNUP_PROOF_LOGO}
+          alt="Finotaur logo"
+          className="h-11 w-11 object-contain p-1"
           loading="lazy"
         />
       </div>

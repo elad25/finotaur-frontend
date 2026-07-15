@@ -212,8 +212,8 @@ const RecentSignupToast = memo(function RecentSignupToast() {
         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#C9A646]/30 bg-black/40">
           <img
             src={CONFIG.BULL_IMAGE}
-            alt="Finotaur bull"
-            className="h-11 w-11 object-contain"
+            alt="Finotaur logo"
+            className="h-11 w-11 object-contain p-1"
             loading="lazy"
           />
         </div>
