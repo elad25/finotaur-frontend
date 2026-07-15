@@ -19,6 +19,7 @@ import RiskReversal from '@/components/landing-new/RiskReversal';
 import FAQ from '@/components/landing-new/FAQ';
 import NinjaTraderCompliance from '@/components/landing-new/NinjaTraderCompliance';
 import Footer from '@/components/landing-new/Footer';
+import RecentSignupToast from '@/components/landing-new/RecentSignupToast';
 import { SEO } from '@/components/seo/SEO';
 import { softwareApplication, faqPage } from '@/components/seo/jsonLd';
 import { useEffect } from 'react';
@@ -138,6 +139,7 @@ const LandingPage = () => {
       <FAQ />
       <NinjaTraderCompliance />
       <Footer />
+      <RecentSignupToast />
     </div>
   );
 };
