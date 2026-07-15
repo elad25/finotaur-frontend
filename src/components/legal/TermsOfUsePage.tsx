@@ -103,21 +103,28 @@ const TermsOfUsePage = () => {
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">12. Modifications to Terms</h2>
+          <h2 className="text-2xl font-semibold mb-4">12. Recent Signup Display</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            When you create an account, you agree that Finotaur may display only your first name in a recent-signup notice on public pages for up to 24 hours after signup. We do not display your last name, email address, account details, trading data, or payment information in this notice.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">13. Modifications to Terms</h2>
           <p className="text-muted-foreground leading-relaxed">
             We reserve the right to modify these Terms of Use at any time. We will notify users of material changes via email or through the Service. Your continued use of the Service after such modifications constitutes acceptance of the updated terms.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">13. Governing Law</h2>
+          <h2 className="text-2xl font-semibold mb-4">14. Governing Law</h2>
           <p className="text-muted-foreground leading-relaxed">
             These Terms shall be governed by and construed in accordance with the laws of [Your Jurisdiction], without regard to its conflict of law provisions.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">14. Contact Information</h2>
+          <h2 className="text-2xl font-semibold mb-4">15. Contact Information</h2>
           <p className="text-muted-foreground leading-relaxed">
             If you have any questions about these Terms of Use, please contact us at legal@finotaur.com
           </p>

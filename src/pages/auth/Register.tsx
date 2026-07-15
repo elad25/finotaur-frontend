@@ -20,7 +20,7 @@ import { track } from '@/lib/analytics';
 import { getFirstTouch, getTouches, getTouchSummary } from '@/lib/analytics/attribution';
 
 // Current terms version - update when terms change
-const CURRENT_TERMS_VERSION = '2025.11';
+const CURRENT_TERMS_VERSION = '2026.07';
 
 // Email validation helper
 const validateEmail = (email: string) => {
@@ -555,7 +555,7 @@ export default function Register() {
                         <FileText className="h-3 w-3" />
                         Terms & Conditions
                       </button>
-                      {' '}including Terms of Use, Privacy Policy, Risk Disclosure, and Refund Policy.
+                      {' '}including Terms of Use, Privacy Policy, Risk Disclosure, Refund Policy, and permission to show only your first name as a recent signup for up to 24 hours.
                     </label>
                     {termsError && (
                       <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">

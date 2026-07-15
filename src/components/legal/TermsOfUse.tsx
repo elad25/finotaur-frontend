@@ -71,7 +71,12 @@ const TermsOfUse = () => {
             These Terms are governed by the laws of Israel. Any dispute shall be subject to the exclusive jurisdiction of the courts in Tel Aviv, Israel.
           </p>
 
-          <h2 className="text-2xl font-semibold mt-12 mb-4">9. Updates</h2>
+          <h2 className="text-2xl font-semibold mt-12 mb-4">9. Recent Signup Display</h2>
+          <p>
+            When you create an account, you agree that Finotaur may display only your first name in a recent-signup notice on public pages for up to 24 hours after signup. We do not display your last name, email address, account details, trading data, or payment information in this notice.
+          </p>
+
+          <h2 className="text-2xl font-semibold mt-12 mb-4">10. Updates</h2>
           <p>
             We may update these Terms from time to time. Continued use of the platform constitutes acceptance of the latest version.
           </p>

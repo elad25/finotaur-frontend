@@ -282,7 +282,14 @@ const TermsAndConditionsModal = ({
                   </div>
 
                   <div>
-                    <h3 className="text-base font-semibold text-white mb-2">9. Updates</h3>
+                    <h3 className="text-base font-semibold text-white mb-2">9. Recent Signup Display</h3>
+                    <p className="text-zinc-400">
+                      When you create an account, you agree that Finotaur may display only your first name in a recent-signup notice on public pages for up to 24 hours after signup. We do not display your last name, email address, account details, trading data, or payment information in this notice.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-semibold text-white mb-2">10. Updates</h3>
                     <p className="text-zinc-400">
                       We may update these Terms from time to time. Continued use of the platform constitutes acceptance of the latest version.
                     </p>
