@@ -47,7 +47,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -551,6 +551,161 @@ const buildTradeSummaries = (
     .sort((a, b) => b.key.localeCompare(a.key));
 };
 
+// 🎯 Small presentational donut for the Win Rate StatsCard.
+// Pure SVG, reads only the already-computed win-rate percent — no data logic here.
+const WinRateDonut = ({ percent }: { percent: number }) => {
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const size = 72;
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (safePercent / 100) * circumference;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="-rotate-90 shrink-0"
+      aria-hidden="true"
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        className="text-white/10"
+        stroke="currentColor"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        className="text-gold-primary"
+        stroke="currentColor"
+      />
+    </svg>
+  );
+};
+
+// 🎯 Small presentational sparkline for the Net P&L StatsCard.
+// Pure SVG, reads an already-computed cumulative-equity series enriched with
+// per-trade P&L + a short date label so it can show a hover tooltip.
+const PnlSparkline = ({ data }: { data: { label: string; pnl: number; cum: number }[] }) => {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  if (data.length < 2) return null;
+
+  const width = 100;
+  const height = 44;
+  const padding = 2;
+  const values = data.map(d => d.cum);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const n = data.length;
+
+  const points = values.map((value, index) => {
+    const x = (index / (n - 1)) * width;
+    const y = padding + (1 - (value - min) / range) * (height - padding * 2);
+    return [x, y] as const;
+  });
+
+  const linePoints = points.map(([x, y]) => `${x},${y}`).join(' ');
+  const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    setHoverIndex(Math.round(ratio * (n - 1)));
+  };
+
+  const handleMouseLeave = () => setHoverIndex(null);
+
+  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
+  const hoverXPercent = hoverIndex !== null ? (hoverIndex / (n - 1)) * 100 : null;
+  const hoverYPercent = hoverIndex !== null ? (points[hoverIndex][1] / height) * 100 : null;
+  const tooltipXPercent = hoverXPercent !== null ? Math.min(88, Math.max(12, hoverXPercent)) : null;
+
+  return (
+    <div
+      className="relative"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      <svg
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="block"
+        style={{ width: '100%' }}
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="pnlSparkFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.25} className="text-emerald-400" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} className="text-emerald-400" />
+          </linearGradient>
+        </defs>
+        <polygon points={areaPoints} fill="url(#pnlSparkFill)" stroke="none" />
+        <polyline
+          points={linePoints}
+          fill="none"
+          className="stroke-emerald-400"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {hovered && hoverXPercent !== null && hoverYPercent !== null && tooltipXPercent !== null && (
+        <>
+          <div
+            className="absolute w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 pointer-events-none"
+            style={{
+              left: `${hoverXPercent}%`,
+              top: `${hoverYPercent}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+          <div
+            className="absolute z-10 rounded-md border border-border-ds-subtle bg-[#111] px-2 py-1 text-[11px] pointer-events-none whitespace-nowrap"
+            style={{
+              left: `${tooltipXPercent}%`,
+              top: `${hoverYPercent}%`,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+            }}
+          >
+            <div className="text-ink-secondary">{hovered.label}</div>
+            <div className={hovered.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              {formatSignedCurrency(hovered.pnl)}
+            </div>
+            <div className="text-ink-secondary">
+              Total: {hovered.cum < 0 ? '−' : ''}${Math.abs(hovered.cum).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// 🎯 Tiny text-glyph "icon" for the Avg R card — renders the letter R gold
+// inside the same circular chip the other cards use. Accepts (and ignores)
+// the same className/strokeWidth-shaped props StatsCard passes to <Icon>.
+const RGlyph = ({ className, ...rest }: { className?: string; [key: string]: any }) => (
+  <span className={`text-sm font-bold leading-none ${className || ''}`}>R</span>
+);
+
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
 const StatsCard = memo(({
   icon: Icon,
@@ -560,68 +715,98 @@ const StatsCard = memo(({
   color,
   valueColor,
   loading,
+  donutPercent,
+  sparklineData,
+  help,
+  inlineValue,
 }: {
   icon: any;
   title: string;
   value: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   color: string;
   valueColor?: string;
   loading?: boolean;
+  donutPercent?: number;
+  sparklineData?: { label: string; pnl: number; cum: number }[];
+  help?: string;
+  inlineValue?: boolean;
 }) => (
-  <div 
-    className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02]"
-    style={{
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      boxShadow: `0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`,
-      backdropFilter: 'blur(12px)',
-    }}
-  >
-    {/* Top glow from icon color */}
-    <div 
-      className="absolute -top-10 -left-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-30 transition-opacity duration-300"
-      style={{ background: color.replace('0.1', '0.8'), filter: 'blur(32px)' }}
-    />
-
-    <div className="relative p-5">
+  <div className="relative rounded-[12px] border border-border-ds-subtle bg-surface-1 px-ds-5 pt-ds-4 pb-ds-3 transition-colors duration-base hover:border-border-ds-default">
+    <div className="flex items-center justify-between mb-ds-3">
       {/* Title row */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.15em]">
-          {title}
+      <div className="flex items-center justify-between flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="text-[10px] font-semibold text-ink-secondary uppercase tracking-[0.15em] truncate">
+            {title}
+          </div>
+          {help && (
+            <span title={help} className="inline-flex shrink-0 text-ink-secondary/50 hover:text-ink-secondary cursor-help">
+              <HelpCircle className="w-3 h-3" strokeWidth={1.8} />
+            </span>
+          )}
+          {/* Inline value — Net P&L card renders its value in the title row
+              instead of the big value block below (inlineValue prop). */}
+          {inlineValue && !loading && (
+            <div className={`text-xl font-bold tracking-tight ${valueColor || 'text-ink-primary'}`}>
+              {value}
+            </div>
+          )}
         </div>
-        <div 
-          className="inline-flex items-center justify-center w-8 h-8 rounded-xl transition-transform duration-300 group-hover:scale-110"
-          style={{
-            background: color.replace('0.1', '0.15'),
-            border: `1px solid ${color.replace('0.1', '0.3')}`,
-          }}
-        >
-          <Icon className="w-4 h-4" style={{ color: color.replace('0.1', '1') }} strokeWidth={1.8} />
-        </div>
+        {/* Uniform gold-tinted icon chip — circular. The Win Rate card has no
+            chip: its donut (rendered below, absolutely positioned) takes the
+            right-side slot instead. */}
+        {donutPercent === undefined && (
+          <div
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full shrink-0"
+            style={{
+              background: 'rgba(201,166,70,0.12)',
+              border: '1px solid rgba(201,166,70,0.3)',
+            }}
+          >
+            <Icon className="w-4 h-4 text-gold-primary" strokeWidth={1.8} />
+          </div>
+        )}
       </div>
+    </div>
 
-      {/* Value — large and dominant */}
+    <div className={`min-w-0 ${donutPercent !== undefined ? 'pr-20' : ''}`}>
+      {/* Value — large and dominant. Skipped when inlineValue renders it in
+          the title row instead. */}
       {loading ? (
         <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
       ) : (
-        <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
-          {value}
-        </div>
+        !inlineValue && (
+          <div className="mb-2">
+            <div className={`text-3xl font-bold tracking-tight leading-none ${valueColor || 'text-ink-primary'}`}>
+              {value}
+            </div>
+          </div>
+        )
       )}
 
       {!loading && subtitle && (
-        <div className="text-xs text-zinc-600 font-medium">
+        <div className="text-xs text-ink-secondary font-medium">
           {subtitle}
+        </div>
+      )}
+
+      {/* Mini equity chart (Net P&L) — spans the card's full inner width,
+          rendered below the value+subtitle block, not inline with the number. */}
+      {!loading && sparklineData && sparklineData.length > 0 && (
+        <div className="mt-2 -mb-1">
+          <PnlSparkline data={sparklineData} />
         </div>
       )}
     </div>
 
-    {/* Subtle bottom border glow */}
-    <div 
-      className="absolute bottom-0 left-4 right-4 h-px opacity-40"
-      style={{ background: `linear-gradient(90deg, transparent, ${color.replace('0.1', '0.8')}, transparent)` }}
-    />
+    {/* Win Rate donut — vertically centered on the card's right edge,
+        replacing the icon chip entirely for this card. */}
+    {!loading && donutPercent !== undefined && (
+      <div className="absolute right-5 top-1/2 -translate-y-1/2">
+        <WinRateDonut percent={donutPercent} />
+      </div>
+    )}
   </div>
 ));
 
@@ -1507,6 +1692,35 @@ const stats = useMemo<Stats>(() => {
     };
   }, [displayTrades, oneR, rBasisMode]);
 
+  // 🎯 Cumulative-equity series for the Net P&L StatsCard sparkline (visual-only).
+  // Reuses the exact same source (closed trades from displayTrades) and pnl
+  // accessor (getTradeData(...).pnl) as the stats calc above — no new data logic.
+  // Enriched per-point with { label, pnl, cum } so the sparkline can show a
+  // hover tooltip with the individual trade's P&L, not just the running total.
+  const pnlSparklineData = useMemo(() => {
+    const closed = displayTrades.filter(t => {
+      if (t.input_mode === 'risk-only') {
+        return t.pnl !== null && t.pnl !== undefined;
+      }
+      return t.exit_price != null;
+    });
+
+    const chronological = [...closed].sort(
+      (a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime(),
+    );
+
+    let running = 0;
+    return chronological.map(trade => {
+      const { pnl } = getTradeData(trade, oneR, rBasisMode);
+      running += pnl;
+      const label = new Date(trade.close_at ?? trade.open_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      return { label, pnl, cum: running };
+    });
+  }, [displayTrades, oneR, rBasisMode]);
+
   // ✅ 5. 🚀 OPTIMIZED: Filtered trades - memoized
   const filteredTrades = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -1950,7 +2164,7 @@ const stats = useMemo<Stats>(() => {
 
       {/* 🔥 Admin Impersonation Indicator */}
       {isImpersonating && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-6 py-2">
+        <div className="mx-6 mt-4 rounded-[12px] border border-yellow-500/30 bg-yellow-500/10 p-ds-3">
           <div className="flex items-center gap-2 text-yellow-400 text-sm">
             <AlertTriangle className="w-4 h-4" />
             <span className="font-medium">Admin Mode: Viewing user's trades</span>
@@ -1963,12 +2177,19 @@ const stats = useMemo<Stats>(() => {
         <div className="px-6 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatsCard
-              icon={Target}
+              icon={BarChart3}
               title="Total Trades"
               value={stats.totalTrades.toString()}
-              subtitle={stats.totalTrades > 0 ? `${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE` : undefined}
+              subtitle={
+                stats.totalTrades > 0 ? (
+                  <>
+                    {stats.wins}W / <span className="text-red-400">{stats.losses}L</span> / {stats.breakeven}BE
+                  </>
+                ) : undefined
+              }
               color="rgba(59, 130, 246, 0.1)"
               loading={isStatsLoading}
+              help="All trades in the selected period"
             />
 
             <StatsCard
@@ -1978,6 +2199,8 @@ const stats = useMemo<Stats>(() => {
               subtitle={stats.closedCount > 0 ? `${stats.wins} / ${stats.closedCount} trades` : undefined}
               color="rgba(16, 185, 129, 0.1)"
               loading={isStatsLoading}
+              donutPercent={stats.winRate}
+              help="Winning share of closed trades"
             />
 
             <StatsCard
@@ -1988,16 +2211,20 @@ const stats = useMemo<Stats>(() => {
               color="rgba(234, 179, 8, 0.1)"
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
               loading={isStatsLoading}
+              sparklineData={pnlSparklineData}
+              help="Total realized profit and loss"
+              inlineValue
             />
 
             <StatsCard
-              icon={Award}
+              icon={RGlyph}
               title="Avg R"
               value={`${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
               subtitle="Per trade"
               color="rgba(168, 85, 247, 0.1)"
               valueColor={stats.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}
               loading={isStatsLoading}
+              help="Average R multiple per closed trade"
             />
           </div>
         </div>
@@ -2013,12 +2240,14 @@ const stats = useMemo<Stats>(() => {
                 placeholder="Search symbol, strategy, session..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-zinc-900/50 border-zinc-800"
+                className="pl-10 h-9 rounded-md border-border-ds-subtle bg-black/40 text-sm text-ink-primary placeholder:text-ink-secondary/60 focus-visible:border-gold-primary/60"
               />
             </div>
+            {/* Segmented view-mode chip. Kept as <Select> (existing component/logic —
+                not converted to Tabs); trigger restyled to the mock's chip look. */}
             <Select value={viewMode} onValueChange={(value) => setViewMode(value as "trades" | "days")}>
-              <SelectTrigger className="h-11 w-40 rounded-[12px] border-gold-primary/70 bg-surface-base text-ink-primary shadow-glow-gold-active">
-                <CalendarDays className="mr-ds-2 h-4 w-4 text-gold-primary" />
+              <SelectTrigger className="h-9 w-auto min-w-[128px] gap-ds-2 rounded-md border-border-ds-subtle bg-transparent px-3 text-xs font-medium text-ink-secondary duration-base hover:border-gold-primary/50 hover:text-ink-primary data-[state=open]:border-gold-primary data-[state=open]:text-gold-primary">
+                <CalendarDays className="h-3.5 w-3.5 text-gold-primary" />
                 <SelectValue placeholder="View" />
               </SelectTrigger>
               <SelectContent className="border-border-ds-subtle bg-surface-base text-ink-primary">
@@ -2036,7 +2265,7 @@ const stats = useMemo<Stats>(() => {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="border-zinc-800 bg-zinc-900/50"
+                      className="h-9 w-9 rounded-md border-border-ds-subtle bg-transparent text-ink-secondary duration-base hover:border-gold-primary hover:text-gold-primary"
                       onClick={handleAutoLink}
                       disabled={autoLinkLoading}
                       title="Link unlinked trades to strategies whose match rules fit them."
@@ -2054,7 +2283,7 @@ const stats = useMemo<Stats>(() => {
                   <Button
                     variant="outline"
                     size="icon"
-                    className="border-zinc-800 bg-zinc-900/50"
+                    className="h-9 w-9 rounded-md border-border-ds-subtle bg-transparent text-ink-secondary duration-base hover:border-gold-primary hover:text-gold-primary"
                     onClick={exportTrades}
                   >
                     <Download className="w-4 h-4" />
@@ -2066,7 +2295,7 @@ const stats = useMemo<Stats>(() => {
             {!effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
+                className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Trade
@@ -2085,20 +2314,23 @@ const stats = useMemo<Stats>(() => {
             <div className="text-zinc-500">Loading trades...</div>
           </div>
         ) : filteredTrades.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center">
-              <Target className="w-8 h-8 text-zinc-600" />
+          <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-5">
+            <div
+              className="w-16 h-16 rounded-md flex items-center justify-center border"
+              style={{ backgroundColor: 'rgba(201,166,70,0.12)', borderColor: 'rgba(201,166,70,0.3)' }}
+            >
+              <Target className="w-8 h-8 text-gold-primary" />
             </div>
             <div className="text-center">
-              <div className="text-zinc-400 font-medium">No trades found</div>
-              <div className="text-zinc-600 text-sm mt-1">
+              <div className="text-ink-primary font-medium">No trades found</div>
+              <div className="text-ink-secondary text-sm mt-1">
                 {searchQuery ? "Try adjusting your search" : "Start by adding your first trade"}
               </div>
             </div>
             {!searchQuery && !effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium mt-2"
+                className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base mt-2"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Your First Trade
@@ -2136,13 +2368,13 @@ const stats = useMemo<Stats>(() => {
                 <div className="flex items-center gap-ds-2">
                   <button
                     type="button"
-                    className="inline-flex h-9 items-center rounded-[10px] border border-gold-primary/40 bg-black px-ds-4 text-sm font-semibold text-gold-primary transition-colors duration-base hover:border-gold-primary"
+                    className="inline-flex h-9 items-center rounded-md border border-border-ds-subtle bg-transparent px-ds-4 text-sm font-semibold text-gold-primary transition-colors duration-base hover:border-gold-primary"
                   >
                     Start my day
                   </button>
                   <button
                     type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-ds-default bg-surface-1 text-gold-primary transition-colors duration-base hover:border-gold-primary/50"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border border-border-ds-subtle bg-transparent text-gold-primary transition-colors duration-base hover:border-gold-primary hover:text-gold-primary"
                     aria-label="Daily view settings"
                   >
                     <Settings className="h-4 w-4" />
@@ -2269,11 +2501,11 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className="text-xl font-bold text-white">{selectedTrade.symbol}</div>
-                      <Badge 
+                      <Badge
                         variant={selectedTrade.side === "LONG" ? "outline" : "destructive"}
-                        className={selectedTrade.side === "LONG" 
-                          ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10 font-medium text-xs px-2 py-0.5" 
-                          : "bg-red-500/20 border-red-500/50 text-red-400 font-medium text-xs px-2 py-0.5"
+                        className={selectedTrade.side === "LONG"
+                          ? "rounded-sm px-2 py-0.5 text-xs font-medium border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+                          : "rounded-sm px-2 py-0.5 text-xs font-medium border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
                         }
                       >
                         {selectedTrade.side}
@@ -2289,9 +2521,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       )}
                     </div>
                     {outcome && (
-                      <Badge 
+                      <Badge
                         variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
-                        className={`font-semibold text-xs px-2 py-0.5 ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
+                        className={`rounded-sm px-2 py-0.5 text-xs font-medium ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
                       >
                         {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
                       </Badge>
@@ -2392,7 +2624,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                         <select
                           value={selectedTrade.exit_reason ?? ''}
                           onChange={(e) => handleSetExitReason(selectedTrade.id, e.target.value)}
-                          className="rounded-md bg-zinc-800 border border-zinc-700 text-white text-xs px-2 py-1 focus:outline-none focus:border-[#C9A646]"
+                          className="rounded-md border border-border-ds-subtle bg-black/40 text-sm text-ink-primary px-2 py-1 focus:outline-none focus:border-gold-primary/60"
                         >
                           <option value="">--</option>
                           <option value="target">Target</option>
@@ -2594,19 +2826,19 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                       value={stopInput}
                                       onChange={(e) => setStopInput(e.target.value)}
                                       placeholder="Stop price"
-                                      className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                      className="w-32 rounded-md border border-border-ds-subtle bg-black/40 px-2 py-1 text-sm text-ink-primary focus:border-gold-primary/60 focus:outline-none"
                                     />
                                     <button
                                       onClick={handleSetR}
                                       disabled={savingR}
-                                      className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                                      className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base px-3 py-1 text-sm disabled:opacity-50"
                                     >
                                       {savingR ? 'Saving…' : 'Save'}
                                     </button>
                                     <button
                                       onClick={() => { setIsSettingR(false); setStopInput(''); }}
                                       disabled={savingR}
-                                      className="rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                      className="rounded-md border border-border-ds-subtle px-3 py-1 text-sm text-ink-secondary hover:border-gold-primary/60 disabled:opacity-50"
                                     >
                                       Cancel
                                     </button>
@@ -2619,7 +2851,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                   </div>
                                   <button
                                     onClick={() => { setIsSettingR(true); setStopInput(''); }}
-                                    className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500"
+                                    className="bg-gradient-gold text-black font-semibold rounded-[12px] hover:opacity-90 transition-opacity duration-base px-3 py-1 text-sm"
                                   >
                                     Set R
                                   </button>
@@ -2668,7 +2900,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                                 <div>
                                   <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                                     Discipline Tax
-                                    <span title={taxTip} className="cursor-help text-zinc-600">ⓘ</span>
+                                    <span title={taxTip} className="cursor-help">
+                                      <HelpCircle className="w-3.5 h-3.5 text-ink-secondary" />
+                                    </span>
                                   </div>
                                   <div className={`text-sm font-semibold tabular-nums font-mono ${taxColor}`}>
                                     {disciplineTax >= 0 ? '+' : ''}{disciplineTax.toFixed(2)}R
