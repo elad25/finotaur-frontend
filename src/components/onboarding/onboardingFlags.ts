@@ -32,9 +32,14 @@ export const recordOnboardingCompletion = async (): Promise<void> => {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    const completedAt = new Date().toISOString();
     await supabase
       .from('profiles')
-      .update({ onboarding_completed_at: new Date().toISOString() })
+      .update({
+        onboarding_completed: true,
+        onboarding_completed_at: completedAt,
+        updated_at: completedAt,
+      })
       .eq('id', user.id);
   } catch (err) {
     console.warn('onboardingFlags: failed to record onboarding completion', err);
