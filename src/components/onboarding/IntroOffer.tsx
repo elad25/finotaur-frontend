@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 // =====================================================
 const OFFER_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 const CACHE_KEY = 'finotaur_intro_offer_state';
+const INTRO_OFFER_STARTED_EVENT = 'finotaur:intro-offer-started';
 
 // Legacy WelcomeOffer keys — read once to shim existing users into a
 // terminal intro_offer_state row so they never see the new popup twice.
@@ -129,6 +130,7 @@ export const startIntroOffer = async (): Promise<void> => {
     }
 
     writeCache({ status: 'active', expiresAt, autoOpened: false });
+    window.dispatchEvent(new CustomEvent(INTRO_OFFER_STARTED_EVENT));
   } catch (err) {
     console.warn('IntroOffer: startIntroOffer failed', err);
   }
@@ -162,6 +164,7 @@ export default function IntroOffer() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [pulseGift, setPulseGift] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [offerStartSignal, setOfferStartSignal] = useState(0);
   const [variant, setVariant] = useState<'organic' | 'referred'>('organic');
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referrerName, setReferrerName] = useState<string | null>(null);
@@ -212,6 +215,12 @@ export default function IntroOffer() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const handleOfferStarted = () => setOfferStartSignal((value) => value + 1);
+    window.addEventListener(INTRO_OFFER_STARTED_EVENT, handleOfferStarted);
+    return () => window.removeEventListener(INTRO_OFFER_STARTED_EVENT, handleOfferStarted);
   }, []);
 
   // ─── Load state on mount (and when the user resolves) ────────────────
@@ -326,7 +335,7 @@ export default function IntroOffer() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, offerStartSignal]);
 
   // ─── Track "shown" once, when the offer first becomes active ─────────
   useEffect(() => {
