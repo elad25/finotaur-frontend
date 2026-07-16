@@ -41,6 +41,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
+import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { Indicator, Interval } from '@/components/charting/types';
 import type { AssetClass } from '@/components/backtest/symbolUniverse';
@@ -75,6 +76,8 @@ import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { cn } from '@/lib/utils';
+import { PaperTradeRail } from '../components/PaperTradeRail';
+import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
 
 /** Which futures source is active — 'nt8' is the default for ALL users; 'databento' is an admin-only delayed dev preview (see FuturesFootprintBody's compliance note). */
 export type FuturesSourceMode = 'nt8' | 'databento';
@@ -99,6 +102,7 @@ interface FootprintTabProps {
 // geometry (row-merge factor, font size) still derives from actual on-screen
 // px — this initial framing is what keeps that geometry sane by default.
 const INITIAL_VISIBLE_BARS = 20;
+const RAIL_WIDTH = 320;
 
 function nowWindowCrypto(): { from: number; to: number } {
   const to = Math.floor(Date.now() / 1000);
@@ -209,7 +213,24 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
     );
   }
 
-  return <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />;
+  return (
+    <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-1 min-w-0">
+        <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />
+      </div>
+      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <PaperTradeRail
+          symbol={symbol}
+          livePrice={null}
+          bid={null}
+          ask={null}
+          enabled={false}
+          disabledTitle="Tick feed unavailable"
+          disabledDescription="Choose crypto or futures to enable this trading panel."
+        />
+      </div>
+    </div>
+  );
 }
 
 // ─── Shared futures source toggle (admin-only) ──────────────────────────────
@@ -551,6 +572,21 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
   const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
   const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
 
+  const book = useBinanceOrderBook(symbol);
+  const { bid, ask } = useMemo(() => {
+    const { bids, asks } = book.getBook();
+    let bestBid: number | null = null;
+    for (const p of bids.keys()) {
+      if (bestBid === null || p > bestBid) bestBid = p;
+    }
+    let bestAsk: number | null = null;
+    for (const p of asks.keys()) {
+      if (bestAsk === null || p < bestAsk) bestAsk = p;
+    }
+    return { bid: bestBid, ask: bestAsk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.getBook, book.lastPrice]);
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       <FootprintToolbarStrip
@@ -572,44 +608,59 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
         historyLimitedNote={historyLimitedNote}
       />
 
-      <div className="relative flex-1 min-h-0">
-        <FinotaurChart
-          symbol={symbol}
-          interval={candleInterval}
-          from={from}
-          to={to}
-          dataSource={candleDataSource}
-          indicators={indicators}
-          theme="dark"
-          height="100%"
-          focusRange={focusRange}
-          timeFitToken={timeFitToken}
-          chartStyle={chartStyle}
-          onBarsLoad={handleBarsLoad}
-          footprint={{
-            store,
-            config: {
-              ...footprintSettingsToConfig(settings),
-              forceFullDetail: true,
-            },
-            visible: true,
-            onStageChange: setFootprintStage,
-          }}
-          volumeProfile={{ store, visible: settings.showVolumeProfile }}
-          mutedCandles={mutedCandles}
-        />
-      </div>
+      <div className="flex flex-1 min-h-0 w-full">
+        <div className="flex flex-1 min-w-0 flex-col">
+          <div className="relative flex-1 min-h-0">
+            <FinotaurChart
+              symbol={symbol}
+              interval={candleInterval}
+              from={from}
+              to={to}
+              dataSource={candleDataSource}
+              indicators={indicators}
+              theme="dark"
+              height="100%"
+              showRefocusButton
+              focusRange={focusRange}
+              timeFitToken={timeFitToken}
+              chartStyle={chartStyle}
+              onBarsLoad={handleBarsLoad}
+              footprint={{
+                store,
+                config: {
+                  ...footprintSettingsToConfig(settings),
+                  forceFullDetail: true,
+                },
+                visible: true,
+                onStageChange: setFootprintStage,
+              }}
+              volumeProfile={{ store, visible: settings.showVolumeProfile }}
+              mutedCandles={mutedCandles}
+            />
+          </div>
 
-      {showSubPanes && klineDeltaInterval && (
-        <div className="flex-shrink-0 flex flex-col">
-          {settings.showCvd && (
-            <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!settings.showDelta} />
-          )}
-          {settings.showDelta && (
-            <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
+          {showSubPanes && klineDeltaInterval && (
+            <div className="flex-shrink-0 flex flex-col">
+              {settings.showCvd && (
+                <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!settings.showDelta} />
+              )}
+              {settings.showDelta && (
+                <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
+              )}
+            </div>
           )}
         </div>
-      )}
+
+        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+          <PaperTradeRail
+            symbol={symbol}
+            livePrice={book.lastPrice}
+            bid={bid}
+            ask={ask}
+            enabled
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -852,40 +903,55 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
         historyLimitedNote={historyLimitedNote}
       />
 
-      <div className="relative flex-1 min-h-0">
-        {feedUnavailable ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-sm font-semibold text-[#E8E8E8]">Futures feed unavailable</p>
-            <p className="text-[12px] text-[#707070] max-w-xs">
-              Data key not configured yet.
-            </p>
-          </div>
-        ) : (
-          <FinotaurChart
+      <div className="flex flex-1 min-h-0 w-full">
+        <div className="relative flex-1 min-w-0">
+          {feedUnavailable ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-sm font-semibold text-[#E8E8E8]">Futures feed unavailable</p>
+              <p className="text-[12px] text-[#707070] max-w-xs">
+                Data key not configured yet.
+              </p>
+            </div>
+          ) : (
+            <FinotaurChart
+              symbol={contractSymbol}
+              interval={DATABENTO_INTERVAL_PLACEHOLDER}
+              chartStyle={chartStyle}
+              from={from}
+              to={to}
+              dataSource={barsSource}
+              indicators={indicators}
+              theme="dark"
+              height="100%"
+              showRefocusButton
+              focusRange={focusRange}
+              refreshToken={barsRefreshToken}
+              onBarsLoad={handleBarsLoad}
+              footprint={{
+                store,
+                config: {
+                  ...footprintSettingsToConfig(settings),
+                  forceFullDetail: true,
+                },
+                visible: true,
+                onStageChange: setFootprintStage,
+              }}
+              mutedCandles={mutedCandles}
+            />
+          )}
+        </div>
+
+        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+          <PaperTradeRail
             symbol={contractSymbol}
-            interval={DATABENTO_INTERVAL_PLACEHOLDER}
-            chartStyle={chartStyle}
-            from={from}
-            to={to}
-            dataSource={barsSource}
-            indicators={indicators}
-            theme="dark"
-            height="100%"
-            focusRange={focusRange}
-            refreshToken={barsRefreshToken}
-            onBarsLoad={handleBarsLoad}
-            footprint={{
-              store,
-              config: {
-                ...footprintSettingsToConfig(settings),
-                forceFullDetail: true,
-              },
-              visible: true,
-              onStageChange: setFootprintStage,
-            }}
-            mutedCandles={mutedCandles}
+            livePrice={null}
+            bid={null}
+            ask={null}
+            enabled={!feedUnavailable}
+            disabledTitle="Futures feed unavailable"
+            disabledDescription="Order entry will enable when the futures feed is available."
           />
-        )}
+        </div>
       </div>
 
       {/* CVD/Delta sub-panes: SKIPPED for futures, same as FuturesChartTab.tsx —
@@ -1051,6 +1117,21 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
   const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
   const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
 
+  const book = useNt8OrderBook(nt8Symbol);
+  const { bid, ask } = useMemo(() => {
+    const { bids, asks } = book.getBook();
+    let bestBid: number | null = null;
+    for (const p of bids.keys()) {
+      if (bestBid === null || p > bestBid) bestBid = p;
+    }
+    let bestAsk: number | null = null;
+    for (const p of asks.keys()) {
+      if (bestAsk === null || p < bestAsk) bestAsk = p;
+    }
+    return { bid: bestBid, ask: bestAsk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.getBook, book.lastPrice]);
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       <div
@@ -1111,35 +1192,50 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
         />
       )}
 
-      <div className="relative flex-1 min-h-0">
-        {isLive ? (
-          <FinotaurChart
+      <div className="flex flex-1 min-h-0 w-full">
+        <div className="relative flex-1 min-w-0">
+          {isLive ? (
+            <FinotaurChart
+              symbol={nt8Symbol}
+              interval={DATABENTO_INTERVAL_PLACEHOLDER}
+              from={from}
+              to={to}
+              dataSource={barsSource}
+              chartStyle={chartStyle}
+              indicators={indicators}
+              theme="dark"
+              height="100%"
+              showRefocusButton
+              focusRange={focusRange}
+              refreshToken={barsRefreshToken}
+              onBarsLoad={handleBarsLoad}
+              footprint={{
+                store,
+                config: {
+                  ...footprintSettingsToConfig(settings),
+                  forceFullDetail: true,
+                },
+                visible: true,
+                onStageChange: setFootprintStage,
+              }}
+              mutedCandles={mutedCandles}
+            />
+          ) : (
+            <Nt8ConnectPanel variant="footprint" />
+          )}
+        </div>
+
+        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+          <PaperTradeRail
             symbol={nt8Symbol}
-            interval={DATABENTO_INTERVAL_PLACEHOLDER}
-            from={from}
-            to={to}
-            dataSource={barsSource}
-            chartStyle={chartStyle}
-            indicators={indicators}
-            theme="dark"
-            height="100%"
-            focusRange={focusRange}
-            refreshToken={barsRefreshToken}
-            onBarsLoad={handleBarsLoad}
-            footprint={{
-              store,
-              config: {
-                ...footprintSettingsToConfig(settings),
-                forceFullDetail: true,
-              },
-              visible: true,
-              onStageChange: setFootprintStage,
-            }}
-            mutedCandles={mutedCandles}
+            livePrice={book.lastPrice}
+            bid={bid}
+            ask={ask}
+            enabled={isLive}
+            disabledTitle="NinjaTrader not connected"
+            disabledDescription="Connect the desktop bridge to enable futures paper trading."
           />
-        ) : (
-          <Nt8ConnectPanel variant="footprint" />
-        )}
+        </div>
       </div>
     </div>
   );

@@ -30,7 +30,7 @@
  *   exactly to change later." Keep this object as the single seam.
  */
 
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
@@ -631,6 +631,8 @@ export interface FinotaurChartProps {
    * which is already handled by the bar-load effect).
    */
   timeFitToken?: number;
+  /** Shows a compact NinjaTrader-style "F" button that re-fits the visible chart area. */
+  showRefocusButton?: boolean;
   /**
    * Optional overlay price lines drawn on the candle series (e.g. order-book walls).
    * Diffed by `id` on every update — only changed lines are recreated, avoiding flicker.
@@ -842,6 +844,7 @@ export function FinotaurChart({
   onError,
   focusRange,
   timeFitToken,
+  showRefocusButton = false,
   priceLines,
   wallSegments,
   wallRenderMode = 'series',
@@ -1373,6 +1376,25 @@ export function FinotaurChart({
   // only when the token is explicitly bumped.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeFitToken]);
+
+  const refocusChart = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart) return;
+    try {
+      if (focusRange) {
+        chart.timeScale().setVisibleRange({
+          from: focusRange.from as never,
+          to:   focusRange.to   as never,
+        });
+      } else {
+        chart.timeScale().fitContent();
+      }
+      series?.priceScale().applyOptions({ autoScale: true });
+    } catch {
+      // Chart may be mid-teardown — ignore.
+    }
+  }, [focusRange]);
 
   // ─── Manual price-scale override detection ──────────────────
   // lw-charts v4 has no event for "user dragged the price axis". We detect it
@@ -2153,6 +2175,25 @@ export function FinotaurChart({
           <span className="mx-1.5 opacity-30">·</span>
           <span>{interval}</span>
         </div>
+      )}
+
+      {showRefocusButton && !loading && !error && barCount > 0 && (
+        <button
+          type="button"
+          onClick={refocusChart}
+          className="absolute top-2 z-30 flex h-6 w-6 items-center justify-center border text-[13px] font-bold leading-none transition-colors"
+          style={{
+            right: 10,
+            borderColor: theme === 'light' ? '#a8a8a8' : 'rgba(255,255,255,0.22)',
+            background: theme === 'light' ? '#6b6b6b' : 'rgba(63,63,70,0.92)',
+            color: '#ffffff',
+            boxShadow: theme === 'light' ? 'none' : '0 2px 8px rgba(0,0,0,0.35)',
+          }}
+          title="Refocus chart"
+          aria-label="Refocus chart"
+        >
+          F
+        </button>
       )}
 
       {loading && (
