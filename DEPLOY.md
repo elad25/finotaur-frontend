@@ -12,15 +12,17 @@
 cd finotaur-frontend
 git checkout main && git pull origin main   # ensure local main = origin/main
 npm ci                                       # only if dependencies changed
-npm run deploy:prod                          # validates Supabase key, builds, deploys dist/
+npm run deploy:prod                          # validates Supabase key, builds, deploys dist/, checks live assets
 ```
 
 Do not deploy with a hand-built `dist/` or call `wrangler pages deploy dist`
 directly. `npm run deploy:prod` is the only supported path: it validates the
 configured Supabase key before build, then `npm run build` validates the
-already-built bundle before upload. This blocks the exact failure mode where a
-stale local `.env.local` creates a production bundle that receives
-`Unregistered API key`.
+already-built bundle before upload, then `validate:deployed-assets` polls
+`www.finotaur.com` until every JS/CSS asset referenced by the live app is
+reachable. This blocks the two recurring failure modes: a stale local
+`.env.local` creating a bundle that receives `Unregistered API key`, and a
+Cloudflare edge serving an entry chunk before all dynamic chunks exist there.
 
 After deploy, smoke-verify:
 

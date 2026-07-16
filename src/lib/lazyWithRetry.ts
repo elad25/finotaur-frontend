@@ -27,7 +27,9 @@
 
 import { lazy as reactLazy, type ComponentType, type LazyExoticComponent } from 'react';
 
-const RELOAD_FLAG_KEY = '__finotaur_lazy_reload__';
+const RELOAD_STATE_KEY = '__finotaur_lazy_reload__';
+const RELOAD_WINDOW_MS = 2 * 60 * 1000;
+const RELOAD_MAX_ATTEMPTS = 3;
 
 type ModuleWithDefault<T> = { default: T };
 
@@ -67,28 +69,50 @@ async function evictPoisonedAssetCache(): Promise<void> {
   }
 }
 
-function safeSessionFlag(): { get: () => boolean; set: () => void; clear: () => void } {
+function safeSessionReloadState(): { canReload: () => boolean; markReload: () => void; clear: () => void } {
   // sessionStorage can throw in private-mode Safari and some embedded WebViews.
   // Fall back to an in-memory flag (best-effort) so the helper still works.
-  let memoryFlag = false;
+  let memoryState = { firstAt: 0, attempts: 0 };
+  const parse = (raw: string | null) => {
+    try {
+      const state = raw ? JSON.parse(raw) : null;
+      return {
+        firstAt: Number(state?.firstAt || 0),
+        attempts: Number(state?.attempts || 0),
+      };
+    } catch {
+      return { firstAt: 0, attempts: 0 };
+    }
+  };
+  const canReloadState = (state: { firstAt: number; attempts: number }) => (
+    Date.now() - state.firstAt > RELOAD_WINDOW_MS || state.attempts < RELOAD_MAX_ATTEMPTS
+  );
+  const nextState = (state: { firstAt: number; attempts: number }) => {
+    const now = Date.now();
+    if (now - state.firstAt > RELOAD_WINDOW_MS) return { firstAt: now, attempts: 1 };
+    return { firstAt: state.firstAt || now, attempts: state.attempts + 1 };
+  };
   try {
     if (typeof window === 'undefined' || !window.sessionStorage) {
       return {
-        get: () => memoryFlag,
-        set: () => { memoryFlag = true; },
-        clear: () => { memoryFlag = false; },
+        canReload: () => canReloadState(memoryState),
+        markReload: () => { memoryState = nextState(memoryState); },
+        clear: () => { memoryState = { firstAt: 0, attempts: 0 }; },
       };
     }
     return {
-      get: () => window.sessionStorage.getItem(RELOAD_FLAG_KEY) === '1',
-      set: () => window.sessionStorage.setItem(RELOAD_FLAG_KEY, '1'),
-      clear: () => window.sessionStorage.removeItem(RELOAD_FLAG_KEY),
+      canReload: () => canReloadState(parse(window.sessionStorage.getItem(RELOAD_STATE_KEY))),
+      markReload: () => {
+        const state = nextState(parse(window.sessionStorage.getItem(RELOAD_STATE_KEY)));
+        window.sessionStorage.setItem(RELOAD_STATE_KEY, JSON.stringify(state));
+      },
+      clear: () => window.sessionStorage.removeItem(RELOAD_STATE_KEY),
     };
   } catch {
     return {
-      get: () => memoryFlag,
-      set: () => { memoryFlag = true; },
-      clear: () => { memoryFlag = false; },
+      canReload: () => canReloadState(memoryState),
+      markReload: () => { memoryState = nextState(memoryState); },
+      clear: () => { memoryState = { firstAt: 0, attempts: 0 }; },
     };
   }
 }
@@ -97,7 +121,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
   factory: () => Promise<ModuleWithDefault<T>>,
 ): LazyExoticComponent<T> {
   return reactLazy(async () => {
-    const reloadFlag = safeSessionFlag();
+    const reloadState = safeSessionReloadState();
     const maxAttempts = 3;
     let lastError: unknown;
 
@@ -119,7 +143,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
             'propagation / poisoned cache). Failed to fetch dynamically imported module.',
           );
         }
-        reloadFlag.clear();
+        reloadState.clear();
         return mod;
       } catch (err) {
         lastError = err;
@@ -132,11 +156,12 @@ export function lazyWithRetry<T extends ComponentType<any>>(
 
     // All attempts failed. If this is a chunk-load error, the user likely has a
     // stale main bundle pointing at chunks that no longer exist on the CDN.
-    // Force one reload to pick up the new manifest. Guard with a sessionStorage
-    // flag so we don't loop if the new build is genuinely broken.
+    // Force a small number of reloads to pick up the new manifest. Cloudflare
+    // Pages can briefly serve a fresh entry chunk before every dynamic chunk is
+    // available on that edge; one reload is not always enough during that window.
     if (isChunkLoadError(lastError) && typeof window !== 'undefined') {
-      if (!reloadFlag.get()) {
-        reloadFlag.set();
+      if (reloadState.canReload()) {
+        reloadState.markReload();
         // Evict any poisoned immutable cache entry BEFORE reloading, otherwise
         // the reload re-reads the same text/html shell and the loop repeats.
         await evictPoisonedAssetCache();
