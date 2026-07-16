@@ -59,7 +59,7 @@ import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTick
 import { DatabentoBarsSource } from '@/components/charting/orderflow/DatabentoBarsSource';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
-import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTradeSource';
+import { warmOrderflowCache, getReviewAvailability } from '@/components/charting/orderflow/DatabentoTradeSource';
 import { refineNt8TickSize } from '@/components/charting/orderflow/Nt8TradeSource';
 import { connectNt8Bridge, onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
 import { fetchBridgeConfig, type Nt8BridgeDeviceConfig } from '@/components/charting/orderflow/fetchBridgeConfig';
@@ -1639,6 +1639,26 @@ function FuturesCustomerFootprintBody({
   // agent, so this doesn't need to wait on the async device fetch above).
   const [mode, setMode] = useState<LiveReviewMode>(() => (getNt8BridgeStatus() === 'live' ? 'live' : 'review'));
 
+  // Review availability probe (getReviewAvailability — DatabentoTradeSource.ts):
+  // the server's paid-tier Review gate can ship DISABLED behind an env flag
+  // (Databento licensing pending), in which case /api/orderflow/backfill
+  // returns 403 subscription_required even for an entitled paid user. Only
+  // fires for paid users; null = still probing (or not paid), treated the
+  // same as "not available yet" below so Review never flashes before it's
+  // confirmed live. One probe per page load — see getReviewAvailability's
+  // module-level cache.
+  const [reviewAvailable, setReviewAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!paidTier) return;
+    let cancelled = false;
+    getReviewAvailability(root).then((result) => {
+      if (!cancelled) setReviewAvailable(result === 'available');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [paidTier, root]);
+
   const bridgeAvailable = device != null;
 
   if (entitlementLoading) {
@@ -1651,6 +1671,26 @@ function FuturesCustomerFootprintBody({
 
   if (!paidTier) {
     // Free users — unchanged behavior (Nt8ConnectPanel's existing upsell).
+    return (
+      <FuturesNt8FootprintBody
+        interval={interval}
+        root={root}
+        onRootChange={onRootChange}
+        indicators={indicators}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+      />
+    );
+  }
+
+  if (reviewAvailable !== true) {
+    // Review gate not confirmed available yet (still probing) OR confirmed
+    // disabled server-side (403 subscription_required — Databento licensing
+    // pending). Either way: paid users must get EXACTLY the pre-Review
+    // experience — no toggle, no Review body, no banner. This already
+    // includes the new local-recording behavior (RecordedSessionBanner)
+    // since it lives inside FuturesNt8FootprintBody.
     return (
       <FuturesNt8FootprintBody
         interval={interval}

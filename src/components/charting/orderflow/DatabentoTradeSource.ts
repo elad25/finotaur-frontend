@@ -546,3 +546,69 @@ export function warmOrderflowCache(root: string): void {
     }
   });
 }
+
+// ── Session Review availability probe ───────────────────────────────────
+//
+// The server's paid-tier Review gate on /api/orderflow/backfill can ship
+// DISABLED behind an env flag (Databento licensing pending) — in that
+// state a paid non-admin caller gets 403 {error:'subscription_required'}
+// even though useMarketDataEntitled() says they're entitled. Callers that
+// want to offer the Review UI (FootprintTab.tsx's FuturesCustomerFootprintBody)
+// must probe first rather than assume 403 == "unavailable to this user".
+//
+// One probe per page load (module-level cache, not per symbol/root) — a
+// minimal 1-minute window comfortably in the past (48h back, well clear of
+// "now" so it can't collide with a degenerate/inverted window) is enough to
+// classify the endpoint's current gate state without pulling real data.
+
+export type ReviewAvailability = 'available' | 'unavailable';
+
+const PROBE_WINDOW_MS = 60_000; // 1 minute
+const PROBE_LOOKBACK_MS = 48 * 60 * 60 * 1000; // 48h back — arbitrary "clearly in the past" anchor
+
+async function probeReviewAvailability(root: string): Promise<ReviewAvailability> {
+  const bareRoot = extractRoot(root);
+  const toMs = Date.now() - PROBE_LOOKBACK_MS;
+  const fromMs = toMs - PROBE_WINDOW_MS;
+  const url = `${BACKFILL_ENDPOINT}?symbol=${encodeURIComponent(bareRoot)}&fromMs=${fromMs}&toMs=${toMs}`;
+
+  try {
+    const res = await authFetch(url);
+    // Only a confirmed 403 (subscription_required — the Review gate is
+    // disabled server-side) flips this to 'unavailable'. Everything else
+    // (2xx, 429 rate-limited, or any other status) is treated as
+    // 'available' — the existing poll/backfill error handling deals with
+    // transient failures later; this probe's only job is distinguishing
+    // "gate disabled" from "gate enabled".
+    if (res.status === 403) return 'unavailable';
+    return 'available';
+  } catch (err) {
+    // Network error — treat as available per spec; let the existing
+    // TradeSource error handling (reconnect/backoff → 'error' status)
+    // surface the real problem once the caller actually subscribes.
+    if (import.meta.env.DEV) {
+      console.debug('[DatabentoTradeSource] probeReviewAvailability network error (treated as available):', err);
+    }
+    return 'available';
+  }
+}
+
+let reviewAvailabilityCache: ReviewAvailability | null = null;
+let reviewAvailabilityInFlight: Promise<ReviewAvailability> | null = null;
+
+/**
+ * Resolves Session Review's current availability, probing the server at
+ * most ONCE per page load regardless of how many callers/roots ask —
+ * subsequent calls (even for a different root) return the cached result.
+ */
+export function getReviewAvailability(root: string): Promise<ReviewAvailability> {
+  if (reviewAvailabilityCache !== null) return Promise.resolve(reviewAvailabilityCache);
+  if (reviewAvailabilityInFlight) return reviewAvailabilityInFlight;
+
+  reviewAvailabilityInFlight = probeReviewAvailability(root).then((result) => {
+    reviewAvailabilityCache = result;
+    reviewAvailabilityInFlight = null;
+    return result;
+  });
+  return reviewAvailabilityInFlight;
+}
