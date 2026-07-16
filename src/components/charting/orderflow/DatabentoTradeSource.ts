@@ -1,6 +1,7 @@
 // src/components/charting/orderflow/DatabentoTradeSource.ts
 // TradeSource implementation backed by our server's Databento historical
-// trade proxy (GET /api/orderflow/backfill). Admin-only dev/trial surface.
+// trade proxy (GET /api/orderflow/backfill). Paid-tier Session Review
+// surface — delayed data only (plus the existing admin dev-preview toggle).
 //
 // 🔴 COMPLIANCE NOTE (2026-07-04): this file intentionally does NOT connect
 // to any Tradovate endpoint, WebSocket, or market-data token. NinjaTrader's
@@ -14,10 +15,10 @@
 // mdAccessToken concept.
 //
 // There is NO live feed here — Databento's historical API has its own
-// ingestion lag, so "live" for this admin-only dev surface means "polling
+// ingestion lag, so "live" for this delayed review surface means "polling
 // the same historical backfill endpoint every 15s and delivering whatever
-// new trades have landed since the last poll." This delay is ACCEPTED
-// (dev/trial use only, not customer-facing).
+// new trades have landed since the last poll." This delay is ACCEPTED and
+// disclosed to the user (Session Review — last closed session).
 
 import { authFetch } from '@/utils/authFetch';
 import { FUTURES_ROOTS } from './futuresContracts';

@@ -25,6 +25,40 @@ const MAX_PRICE_BINS = 2000;
 
 type ChangeListener = () => void;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Serialization (local session recording — flowStorePersistence.ts). Compact
+// on purpose: aggregated bins only, NOT the raw trade ring (which can hold
+// up to RAW_TRADE_RING_CAP entries) — keeps an IndexedDB snapshot small
+// enough to write every ~10s without perf concerns. A hydrated store can
+// still receive new live trades normally (they land in whatever candle/bin
+// already exists, or create a new one) — only re-binning via setConfig()
+// (which replays the raw ring) won't see pre-hydration history, an accepted
+// v1 limitation for recorded sessions.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface SerializedFlowBin {
+  binPrice: number;
+  buyVol: number;
+  sellVol: number;
+  trades: number;
+}
+
+export interface SerializedFlowCandle {
+  time: number;
+  bins: SerializedFlowBin[];
+  totalVol: number;
+  delta: number;
+  minDelta: number;
+  maxDelta: number;
+  poc: number | null;
+}
+
+/** Compact, JSON-able snapshot of a FlowBinStore's aggregated state — see the header comment above for what's deliberately excluded. */
+export interface SerializedFlowBinStore {
+  config: FlowBinStoreConfig;
+  candles: SerializedFlowCandle[];
+}
+
 /**
  * Aggregates a stream of FlowTrade into per-candle, per-price-bin buy/sell
  * volume. Re-binnable: changing intervalSec/rowSize replays the raw ring
@@ -208,6 +242,98 @@ export class FlowBinStore {
    */
   getRawTrades(): readonly FlowTrade[] {
     return this.drainRawInOrder();
+  }
+
+  /**
+   * Compact, JSON-able snapshot of the current aggregated state — see
+   * SerializedFlowBinStore's doc comment for what's included/excluded.
+   * Used by flowStorePersistence.ts to record a futures NT8 session into
+   * IndexedDB so it survives a bridge disconnect or a same-day tab reopen.
+   */
+  serialize(): SerializedFlowBinStore {
+    const candles: SerializedFlowCandle[] = [];
+    for (const time of this.sortedTimes) {
+      const candle = this.candles.get(time);
+      if (!candle) continue;
+      candles.push({
+        time: candle.time,
+        bins: Array.from(candle.bins.values()).map((bin) => ({ ...bin })),
+        totalVol: candle.totalVol,
+        delta: candle.delta,
+        minDelta: candle.minDelta,
+        maxDelta: candle.maxDelta,
+        poc: candle.poc,
+      });
+    }
+    return { config: this.config, candles };
+  }
+
+  /**
+   * Repopulates the store from a serialize() snapshot, REPLACING whatever
+   * candles/bins currently exist (raw ring is cleared — a hydrated store
+   * can't be re-binned via setConfig() until fresh live trades arrive; see
+   * the header comment above SerializedFlowBinStore). Live trades applied
+   * after hydrate() land normally (existing candle/bin lookups still work).
+   * Bumps tradesIngested by the recovered trade-print count so
+   * ingestion-count-gated consumers (e.g. a bars-refresh effect) notice the
+   * hydrated data, then notifies listeners once.
+   *
+   * Also repopulates the raw ring with a SMALL set of synthetic,
+   * representative trades derived from the bins (one buy print + one sell
+   * print per non-empty bin, at that bin's price) — purely so
+   * DatabentoBarsSource's tradesToBars() (which only ever reads
+   * getRawTrades(), never the aggregated candles) can still derive an OHLCV
+   * candlestick series to render/position the footprint over. These
+   * synthetic entries are NOT persisted (flowStorePersistence.ts only ever
+   * writes serialize()'s aggregated-bins-only output) and open/close are a
+   * best-effort approximation (bin insertion order, not true trade
+   * sequence) — acceptable for a recorded-session recap, not a precision
+   * OHLC source.
+   */
+  hydrate(data: SerializedFlowBinStore): void {
+    this.candles.clear();
+    this.sortedTimes = [];
+    this.sortedViewCache.clear();
+    this.dirtyCandles.clear();
+    this.rawRing = [];
+    this.rawRingHead = 0;
+    this.minPrice = Infinity;
+    this.maxPrice = -Infinity;
+    this.config = data.config;
+
+    let recoveredPrints = 0;
+    for (const c of data.candles) {
+      const bins = new Map<number, FlowBin>();
+      for (const bin of c.bins) {
+        bins.set(bin.binPrice, { ...bin });
+        this.minPrice = Math.min(this.minPrice, bin.binPrice);
+        this.maxPrice = Math.max(this.maxPrice, bin.binPrice + this.config.rowSize);
+        recoveredPrints += bin.trades;
+
+        // Synthetic raw trades — see the doc comment above for why. Recorded
+        // WITHOUT going through pushRaw's ring-cap accounting concerns
+        // beyond the cap itself (still respected via pushRaw).
+        if (bin.buyVol > 0) {
+          this.pushRaw({ time: c.time * 1000, price: bin.binPrice, qty: bin.buyVol, buyerAggressor: true });
+        }
+        if (bin.sellVol > 0) {
+          this.pushRaw({ time: c.time * 1000, price: bin.binPrice, qty: bin.sellVol, buyerAggressor: false });
+        }
+      }
+      this.candles.set(c.time, {
+        time: c.time,
+        bins,
+        totalVol: c.totalVol,
+        delta: c.delta,
+        minDelta: c.minDelta,
+        maxDelta: c.maxDelta,
+        poc: c.poc,
+      });
+      insertSorted(this.sortedTimes, c.time);
+    }
+
+    if (recoveredPrints > 0) this.tradesIngested += recoveredPrints;
+    this.notify();
   }
 
   /**

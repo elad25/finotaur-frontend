@@ -14,7 +14,7 @@
 
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useMarketDataEntitled } from '@/lib/marketDataEntitlement';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -25,7 +25,7 @@ interface MarketDataGateProps {
 
 export function MarketDataGate({ children }: MarketDataGateProps) {
   const navigate = useNavigate();
-  const { isFreeJournal, isPlatformPaid, isPlatformActive, isLoading } = useSubscription();
+  const { entitled, isLoading } = useMarketDataEntitled();
 
   // Loading — reuse the same fallback other gated routes use so the
   // transition never flashes an unstyled/blank frame.
@@ -33,11 +33,7 @@ export function MarketDataGate({ children }: MarketDataGateProps) {
     return <RouteSkeleton />;
   }
 
-  const hasPaidJournal = !isFreeJournal;
-  const hasPaidPlatformPlan = isPlatformPaid && isPlatformActive;
-  const allowed = hasPaidJournal || hasPaidPlatformPlan;
-
-  if (allowed) {
+  if (entitled) {
     return <>{children}</>;
   }
 

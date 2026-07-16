@@ -17,13 +17,16 @@
  * open at a time.
  *
  * Futures compliance note (see FuturesChartTab.tsx's file header for the full
- * explanation): the Databento futures preview is admin-only, never
- * customer-facing. That gate is preserved here via the `isAdmin` prop — a
- * non-admin on a futures symbol sees the same "no live feed" placeholder as
- * stocks/forex, never the Databento contract selector.
+ * explanation): the Databento futures path is delayed historical data only.
+ * Admins get an always-on dev-preview toggle (`isAdmin` prop). Paid
+ * customers without a live NT8 bridge get the same Databento body as a
+ * "Session Review — last closed session" surface (see
+ * FuturesCustomerFootprintBody / useMarketDataEntitled), clearly labeled as
+ * delayed. Free users still see the plain "connect NinjaTrader" placeholder,
+ * unchanged.
  *
- * Stocks/forex (and futures for non-admins) → a plain English placeholder;
- * no live trades feed exists for those instruments today.
+ * Stocks/forex → a plain English placeholder; no live trades feed exists for
+ * those instruments today.
  *
  * Includes the same right-side PaperTradeRail workflow used by the regular
  * chart, including a draggable width handle.
@@ -58,7 +61,10 @@ import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import { warmOrderflowCache } from '@/components/charting/orderflow/DatabentoTradeSource';
 import { refineNt8TickSize } from '@/components/charting/orderflow/Nt8TradeSource';
-import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
+import { connectNt8Bridge, onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
+import { fetchBridgeConfig, type Nt8BridgeDeviceConfig } from '@/components/charting/orderflow/fetchBridgeConfig';
+import { saveSnapshot, loadSnapshot } from '@/components/charting/orderflow/flowStorePersistence';
+import { useMarketDataEntitled } from '@/lib/marketDataEntitlement';
 import type { TradeSourceStatus } from '@/components/charting/orderflow/types';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import {
@@ -242,6 +248,11 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
   const isCrypto = assetClass === 'crypto';
   const isFutures = assetClass === 'futures';
 
+  // Market-data entitlement (paid Journal OR paid+active platform plan) —
+  // same rule MarketDataGate.tsx enforces for /app/trading-arena/connect-data.
+  // Only consulted on the futures branch below; admins bypass it entirely.
+  const { entitled: paidTier, isLoading: entitlementLoading } = useMarketDataEntitled();
+
   // Chart-style ("Chart" tab of the new Footprint Settings dialog) — a
   // SEPARATE useChartStylePreferences() instance from ArenaToolbar's own
   // (TradingArena.tsx), reading/writing the same global localStorage key
@@ -270,16 +281,31 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
   }
 
   if (isFutures) {
-    const sourceToggle = isAdmin ? { mode: futuresSourceMode, onChange: setFuturesSourceMode } : undefined;
+    if (isAdmin) {
+      const sourceToggle = { mode: futuresSourceMode, onChange: setFuturesSourceMode };
 
-    if (isAdmin && futuresSourceMode === 'databento') {
+      if (futuresSourceMode === 'databento') {
+        return (
+          <FuturesFootprintBody
+            interval={interval}
+            root={futuresRoot}
+            onRootChange={setFuturesRoot}
+            indicators={indicators}
+            isAdmin={isAdmin}
+            sourceToggle={sourceToggle}
+            chartStyle={chartStyle}
+            onChartStyleChange={updateChartStyle}
+            onChartStyleReset={resetChartStyle}
+          />
+        );
+      }
+
       return (
-        <FuturesFootprintBody
+        <FuturesNt8FootprintBody
           interval={interval}
           root={futuresRoot}
           onRootChange={setFuturesRoot}
           indicators={indicators}
-          isAdmin={isAdmin}
           sourceToggle={sourceToggle}
           chartStyle={chartStyle}
           onChartStyleChange={updateChartStyle}
@@ -288,13 +314,18 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
       );
     }
 
+    // Non-admin: paid users (Journal OR platform paid+active) get a
+    // Live/Review switcher — Live is the unchanged NT8 flow, Review is the
+    // Databento "Session Review" body. Free users fall through unchanged
+    // (Nt8ConnectPanel's existing upsell) — see FuturesCustomerFootprintBody.
     return (
-      <FuturesNt8FootprintBody
+      <FuturesCustomerFootprintBody
         interval={interval}
         root={futuresRoot}
         onRootChange={setFuturesRoot}
         indicators={indicators}
-        sourceToggle={sourceToggle}
+        paidTier={paidTier}
+        entitlementLoading={entitlementLoading}
         chartStyle={chartStyle}
         onChartStyleChange={updateChartStyle}
         onChartStyleReset={resetChartStyle}
@@ -357,6 +388,55 @@ function FuturesSourceToggle({ mode, onChange }: FuturesSourceToggleProps) {
         title="Admin-only delayed dev preview — polls historical Databento data every 15s"
       >
         Databento (delayed)
+      </button>
+    </div>
+  );
+}
+
+// ─── Customer Live/Review switcher (paid, non-admin futures) ───────────────
+//
+// Distinct from FuturesSourceToggle above (that one is admin-only NT8 vs
+// Databento-dev-preview). This is the paid-customer-facing equivalent:
+// Live = the existing NT8 bridge flow (incl. Nt8ConnectPanel when not yet
+// connected), Review = the Databento "Session Review" body. Only rendered
+// by FuturesCustomerFootprintBody when a bridge device is actually paired
+// (see that component) — otherwise there's nothing to switch "Live" to yet.
+
+type LiveReviewMode = 'live' | 'review';
+
+interface LiveReviewToggleProps {
+  mode: LiveReviewMode;
+  onChange: (mode: LiveReviewMode) => void;
+}
+
+function LiveReviewToggle({ mode, onChange }: LiveReviewToggleProps) {
+  return (
+    <div className="flex items-center gap-0.5" role="group" aria-label="Select Live or Session Review">
+      <button
+        type="button"
+        onClick={() => onChange('live')}
+        className={cn(
+          'h-6 rounded px-2 text-[10px] font-semibold transition-all duration-150 border',
+          mode === 'live'
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+        title="Live data streamed from your own NinjaTrader via the FINOTAUR desktop agent"
+      >
+        Live
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('review')}
+        className={cn(
+          'h-6 rounded px-2 text-[10px] font-semibold transition-all duration-150 border',
+          mode === 'review'
+            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
+            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+        )}
+        title="Last closed session, delayed historical data"
+      >
+        Review
       </button>
     </div>
   );
@@ -752,9 +832,18 @@ interface FuturesFootprintBodyProps {
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
   indicators: Indicator[];
-  /** Gates the Databento futures source — this body only ever mounts when true (see FootprintTab's isFutures check), but resolveTradeSource still requires it explicitly. */
+  /** Gates the Databento futures source for the admin dev-preview toggle. See `paidTier` for the paid-customer path. */
   isAdmin: boolean;
-  /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
+  /** True when a non-admin caller has market-data entitlement (useMarketDataEntitled) — unlocks this body as the customer "Session Review" surface. Ignored when isAdmin is true. */
+  paidTier?: boolean;
+  /**
+   * True when this body is being rendered for a paid customer (Session
+   * Review), not the admin dev-preview. Swaps the "development preview" pill
+   * + admin NT8/Databento toggle for the customer review banner + "Connect
+   * live data" link. Defaults to false (unchanged admin rendering).
+   */
+  customerReview?: boolean;
+  /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. Ignored when customerReview is true. */
   sourceToggle?: FuturesSourceToggleProps;
   /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
   chartStyle: ChartStyleSettings;
@@ -762,22 +851,31 @@ interface FuturesFootprintBodyProps {
   onChartStyleReset: () => void;
 }
 
-function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesFootprintBodyProps) {
-  // Server-side cache warm-up (H5, admin-only — this body only ever mounts
-  // when isFutures = assetClass==='futures' && isAdmin, per FootprintTab's
-  // own gate above). Fire-and-forget: pre-populates the server's durable
-  // orderflow trade-window repo for this root so the tab's own backfill is
-  // more likely to hit a warm cache instead of a cold Databento call.
+// The Databento "Session Review" server route only serves continuous roots
+// for these 4 contracts (same set NT8/admin already support) — see
+// orderflowRouter.js's /api/orderflow/backfill. FUTURES_ROOTS is currently
+// exactly this set too, so this is defensive (currently unreachable given
+// `root: FuturesRoot`) rather than live-tested — kept so a future NT8-side
+// root addition can't silently imply Review coverage it doesn't have.
+const REVIEW_SUPPORTED_ROOTS: readonly FuturesRoot[] = FUTURES_ROOTS;
+
+function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, paidTier, customerReview, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesFootprintBodyProps) {
+  // Server-side cache warm-up (H5). Originally admin-only; now also fires
+  // for the paid-customer Session Review path (same warm-up target root,
+  // same fire-and-forget contract) since both paths poll the same backfill
+  // endpoint.
   useEffect(() => {
     warmOrderflowCache(root);
   }, [root]);
 
   const contractSymbol = useMemo(() => frontMonthContract(root), [root]);
-  // resolveTradeSource('futures', root, ...) only returns null when !isAdmin
-  // or `root` isn't a known FuturesRoot — neither can happen here (this body
-  // only mounts when isFutures = assetClass==='futures' && isAdmin, and
-  // `root` is always a FUTURES_ROOTS member from FootprintTab's own state).
-  const { source: tradeSource, tickSize } = resolveTradeSource('futures', root, { isAdmin })!;
+  // resolveTradeSource('futures', root, { isAdmin, paidTier }) only returns
+  // null when neither isAdmin nor paidTier is true, or `root` isn't a known
+  // FuturesRoot — neither can happen here: this body only mounts (a) for
+  // admins via FootprintTab's admin dev-preview toggle, or (b) for paid
+  // customers via FuturesCustomerFootprintBody, which only renders this body
+  // once paidTier is confirmed true. `root` is always a FUTURES_ROOTS member.
+  const { source: tradeSource, tickSize } = resolveTradeSource('futures', root, { isAdmin, paidTier })!;
 
   // Persistence key is the CONTRACT ROOT ('NQ'), not the rotating front-month
   // contract code — settings (and any future per-root rowSize override)
@@ -887,6 +985,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
   }
 
   const feedUnavailable = status === 'error';
+  const reviewUnsupportedSymbol = customerReview && !REVIEW_SUPPORTED_ROOTS.includes(root);
 
   // Candle dimming — same forceFullDetail rationale as CryptoFootprintBody above.
   const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
@@ -922,19 +1021,41 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
 
         <span className="text-[11px] text-[#707070] font-mono">{contractSymbol}</span>
 
-        <span
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
-          style={{
-            color: '#C9A646',
-            background: 'rgba(201,166,70,0.12)',
-            border: '1px solid rgba(201,166,70,0.28)',
-          }}
-          title="This admin-only preview polls historical data every 15s — it is not a real-time feed."
-        >
-          Delayed data — development preview
-        </span>
+        {customerReview ? (
+          <>
+            <span
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                color: '#C9A646',
+                background: 'rgba(201,166,70,0.12)',
+                border: '1px solid rgba(201,166,70,0.28)',
+              }}
+              title="Delayed historical data from your last closed NinjaTrader session — polls every 15s, not real-time."
+            >
+              Session Review — last closed session · delayed data
+            </span>
+            <a
+              href="/app/trading-arena/connect-data"
+              className="text-[11px] font-semibold text-[#707070] transition-colors duration-150 hover:text-[#C9A646]"
+            >
+              Connect live data →
+            </a>
+          </>
+        ) : (
+          <span
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            style={{
+              color: '#C9A646',
+              background: 'rgba(201,166,70,0.12)',
+              border: '1px solid rgba(201,166,70,0.28)',
+            }}
+            title="This admin-only preview polls historical data every 15s — it is not a real-time feed."
+          >
+            Delayed data — development preview
+          </span>
+        )}
 
-        {sourceToggle && <FuturesSourceToggle {...sourceToggle} />}
+        {!customerReview && sourceToggle && <FuturesSourceToggle {...sourceToggle} />}
 
         <span
           className={cn(
@@ -977,11 +1098,20 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
 
       <div className="flex flex-1 min-h-0 w-full">
         <div className="relative flex-1 min-w-0">
-          {feedUnavailable ? (
+          {reviewUnsupportedSymbol ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-sm font-semibold text-[#E8E8E8]">Symbol not available for Review</p>
+              <p className="text-[12px] text-[#707070] max-w-xs">
+                Review is available for NQ, ES, MNQ and MES.
+              </p>
+            </div>
+          ) : feedUnavailable ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
               <p className="text-sm font-semibold text-[#E8E8E8]">Futures feed unavailable</p>
               <p className="text-[12px] text-[#707070] max-w-xs">
-                Data key not configured yet.
+                {customerReview
+                  ? 'Session Review is temporarily unavailable. Try again shortly.'
+                  : 'Data key not configured yet.'}
               </p>
             </div>
           ) : (
@@ -1019,7 +1149,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
             livePrice={null}
             bid={null}
             ask={null}
-            enabled={!feedUnavailable}
+            enabled={!feedUnavailable && !reviewUnsupportedSymbol}
             disabledTitle="Futures feed unavailable"
             disabledDescription="Order entry will enable when the futures feed is available."
           />
@@ -1050,6 +1180,50 @@ interface FuturesNt8FootprintBodyProps {
   onChartStyleReset: () => void;
 }
 
+// How often the live NT8 session is flushed to IndexedDB — see
+// flowStorePersistence.ts's header comment for why this recording exists.
+const SESSION_RECORD_INTERVAL_MS = 10_000;
+
+/**
+ * Gold-muted banner shown in place of Nt8ConnectPanel when the bridge is
+ * offline but a recorded session for today+symbol exists (see
+ * flowStorePersistence.ts). Lets the user keep reading their own session's
+ * footprint after closing NinjaTrader instead of losing the chart outright.
+ */
+function RecordedSessionBanner({ lastTradeMs, onReconnect, reconnecting }: {
+  lastTradeMs: number;
+  onReconnect: () => void;
+  reconnecting: boolean;
+}) {
+  const timeLabel = useMemo(
+    () => new Date(lastTradeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    [lastTradeMs],
+  );
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 border-b flex-shrink-0"
+      style={{ background: 'rgba(201,166,70,0.08)', borderColor: 'rgba(201,166,70,0.18)' }}
+    >
+      <span className="text-[11px] font-medium" style={{ color: '#C9A646' }}>
+        Agent offline — showing today's recorded session (up to {timeLabel})
+      </span>
+      <button
+        type="button"
+        onClick={onReconnect}
+        disabled={reconnecting}
+        className={cn(
+          'ml-auto h-6 rounded px-2.5 text-[10px] font-semibold transition-all duration-150 border',
+          'text-[#C9A646] border-[rgba(201,166,70,0.4)] hover:bg-[rgba(201,166,70,0.12)]',
+          reconnecting && 'opacity-60',
+        )}
+        style={{ background: 'rgba(201,166,70,0.10)' }}
+      >
+        {reconnecting ? 'Reconnecting…' : 'Reconnect'}
+      </button>
+    </div>
+  );
+}
+
 /**
  * NT8 bridge (nt8Bridge.ts) equivalent of FuturesFootprintBody, available to
  * ALL users (no isAdmin gate). While the bridge isn't 'live' the chart body
@@ -1057,6 +1231,13 @@ interface FuturesNt8FootprintBodyProps {
  * useOrderFlow → Nt8TradeSource) stays mounted regardless, so it activates
  * automatically the moment the bridge connects/reconnects (see
  * nt8Bridge.ts's resubscribe-on-welcome design) without remounting hooks.
+ *
+ * Local Session Recording (flowStorePersistence.ts): while `isLive`, the
+ * store's aggregated bins are flushed to IndexedDB roughly every 10s (plus
+ * a final flush on tab-hide/unload/bridge-drop). When the bridge is NOT
+ * live, today's recording (if any) for this symbol is loaded and hydrated
+ * into the SAME store, so the chart shows the recorded session instead of
+ * falling straight back to Nt8ConnectPanel — see RecordedSessionBanner.
  */
 function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesNt8FootprintBodyProps) {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
@@ -1133,6 +1314,73 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
   useEffect(() => {
     setRowSizeClamped(store.wasRowSizeClamped());
   }, [store, rowSize]);
+
+  // ── Local Session Recording (futures NT8 only) ──────────────────────────
+  // While the bridge is live, flush the store's aggregated bins to
+  // IndexedDB roughly every 10s, plus a final flush whenever this effect
+  // tears down (bridge drop, symbol change, or unmount) and whenever the
+  // tab is hidden/closed — see flowStorePersistence.ts's header comment.
+  useEffect(() => {
+    if (!isLive) return;
+
+    const flush = () => {
+      const raw = store.getRawTrades();
+      if (raw.length === 0) return; // nothing recorded yet this mount
+      const lastTradeMs = raw[raw.length - 1].time; // getRawTrades() is ascending by time
+      void saveSnapshot(nt8Symbol, store.serialize(), lastTradeMs);
+    };
+
+    const intervalId = setInterval(flush, SESSION_RECORD_INTERVAL_MS);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', flush);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', flush);
+      flush(); // final flush — captures the freshest data on bridge drop too
+    };
+  }, [isLive, store, nt8Symbol]);
+
+  // While NOT live, check for a recorded session for today+symbol and
+  // hydrate the store from it so the chart shows what was captured instead
+  // of falling straight back to Nt8ConnectPanel. Re-runs whenever `isLive`
+  // flips to false (bridge just dropped — picks up the flush above almost
+  // immediately) or the symbol changes.
+  const [recordedUpToMs, setRecordedUpToMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (isLive) {
+      setRecordedUpToMs(null);
+      return;
+    }
+    let cancelled = false;
+    loadSnapshot(nt8Symbol).then((snapshot) => {
+      if (cancelled || !snapshot) return;
+      store.hydrate(snapshot.bins);
+      setRecordedUpToMs(snapshot.lastTradeMs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, nt8Symbol, store]);
+
+  const [reconnecting, setReconnecting] = useState(false);
+  const handleReconnect = useCallback(async () => {
+    setReconnecting(true);
+    try {
+      const device = await fetchBridgeConfig();
+      if (device) {
+        await connectNt8Bridge({ port: device.port, token: device.token });
+      }
+    } finally {
+      setReconnecting(false);
+    }
+  }, []);
+
+  const showRecordedSession = !isLive && recordedUpToMs !== null;
 
   // Bars are derived straight from the store's raw trades — same mechanism
   // FuturesFootprintBody uses (DatabentoBarsSource is venue-agnostic despite
@@ -1236,14 +1484,26 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
         {sourceToggle && <FuturesSourceToggle {...sourceToggle} />}
 
         <span
-          className={cn('flex items-center gap-1 text-[10px] font-medium ml-auto', isLive ? 'text-emerald-400' : 'text-[#707070]')}
+          className={cn(
+            'flex items-center gap-1 text-[10px] font-medium ml-auto',
+            isLive ? 'text-emerald-400' : showRecordedSession ? 'text-[#C9A646]' : 'text-[#707070]',
+          )}
         >
-          <span className={cn('h-1.5 w-1.5 rounded-full', isLive ? 'bg-emerald-400' : 'bg-[#707070]')} />
-          {isLive ? 'NinjaTrader — live' : 'Not connected'}
+          <span
+            className={cn(
+              'h-1.5 w-1.5 rounded-full',
+              isLive ? 'bg-emerald-400' : showRecordedSession ? 'bg-[#C9A646]' : 'bg-[#707070]',
+            )}
+          />
+          {isLive ? 'NinjaTrader — live' : showRecordedSession ? 'Recorded session' : 'Not connected'}
         </span>
       </div>
 
-      {isLive && (
+      {showRecordedSession && recordedUpToMs !== null && (
+        <RecordedSessionBanner lastTradeMs={recordedUpToMs} onReconnect={handleReconnect} reconnecting={reconnecting} />
+      )}
+
+      {(isLive || showRecordedSession) && (
         <FootprintToolbarStrip
           settings={settings}
           onSettingsChange={updateSettings}
@@ -1264,7 +1524,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
 
       <div className="flex flex-1 min-h-0 w-full">
         <div className="relative flex-1 min-w-0">
-          {isLive ? (
+          {isLive || showRecordedSession ? (
             <FinotaurChart
               symbol={nt8Symbol}
               interval={DATABENTO_INTERVAL_PLACEHOLDER}
@@ -1303,9 +1563,150 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
             ask={ask}
             enabled={isLive}
             disabledTitle="NinjaTrader not connected"
-            disabledDescription="Connect the desktop bridge to enable futures paper trading."
+            disabledDescription={
+              showRecordedSession
+                ? 'Reconnect NinjaTrader to enable futures paper trading.'
+                : 'Connect the desktop bridge to enable futures paper trading.'
+            }
           />
         </ResizablePaperRail>
+      </div>
+    </div>
+  );
+}
+
+// ─── Futures mode (non-admin router: Live NT8 vs Session Review) ───────────
+
+interface FuturesCustomerFootprintBodyProps {
+  interval: ArenaInterval;
+  root: FuturesRoot;
+  onRootChange: (root: FuturesRoot) => void;
+  indicators: Indicator[];
+  /** From useMarketDataEntitled() — paid Journal OR paid+active platform plan. */
+  paidTier: boolean;
+  /** True while useMarketDataEntitled()'s underlying useSubscription() query is still resolving. */
+  entitlementLoading: boolean;
+  /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
+  chartStyle: ChartStyleSettings;
+  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
+  onChartStyleReset: () => void;
+}
+
+/**
+ * Non-admin futures router. Free users get the unchanged NT8-only
+ * experience (FuturesNt8FootprintBody, incl. its Nt8ConnectPanel upsell).
+ * Paid users (Journal or platform, per useMarketDataEntitled) get a
+ * Live/Review switcher:
+ *   - Live  → exactly FuturesNt8FootprintBody, unmodified — the bridge
+ *     chart when connected, Nt8ConnectPanel when not.
+ *   - Review → FuturesFootprintBody in `customerReview` mode — the same
+ *     Databento body the admin dev-preview uses, with a customer-facing
+ *     "Session Review" banner instead of the admin pill/toggle.
+ * The switcher itself is only shown once a bridge device is actually
+ * paired (fetchBridgeConfig() resolves non-null) — otherwise there's
+ * nothing live to switch to yet, so Review is shown directly (its banner's
+ * "Connect live data →" link is the path to pairing).
+ */
+function FuturesCustomerFootprintBody({
+  interval,
+  root,
+  onRootChange,
+  indicators,
+  paidTier,
+  entitlementLoading,
+  chartStyle,
+  onChartStyleChange,
+  onChartStyleReset,
+}: FuturesCustomerFootprintBodyProps) {
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
+  useEffect(() => onNt8BridgeStatus(setBridgeStatus), []);
+
+  // undefined = still resolving; null = no paired NT8 device found.
+  const [device, setDevice] = useState<Nt8BridgeDeviceConfig | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetchBridgeConfig().then((cfg) => {
+      if (!cancelled) setDevice(cfg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Default: Live when the bridge is already live at mount, Review
+  // otherwise — computed once from the synchronous bridge-status snapshot
+  // (a 'live' status can only happen for an already-paired, already-running
+  // agent, so this doesn't need to wait on the async device fetch above).
+  const [mode, setMode] = useState<LiveReviewMode>(() => (getNt8BridgeStatus() === 'live' ? 'live' : 'review'));
+
+  const bridgeAvailable = device != null;
+
+  if (entitlementLoading) {
+    return (
+      <div className="flex flex-1 min-h-0 w-full items-center justify-center">
+        <p className="text-[12px] text-[#707070]">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!paidTier) {
+    // Free users — unchanged behavior (Nt8ConnectPanel's existing upsell).
+    return (
+      <FuturesNt8FootprintBody
+        interval={interval}
+        root={root}
+        onRootChange={onRootChange}
+        indicators={indicators}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-1 min-h-0 w-full flex-col">
+      {bridgeAvailable && (
+        <div
+          className="flex items-center gap-2 px-3 py-1 border-b flex-shrink-0"
+          style={{ borderColor: 'rgba(201,166,70,0.10)' }}
+        >
+          <LiveReviewToggle mode={mode} onChange={setMode} />
+          <span className="text-[10px] text-[#5A5A5A]">
+            {mode === 'live'
+              ? bridgeStatus === 'live'
+                ? 'Streaming live from your NinjaTrader agent'
+                : 'Live selected — connect your agent below'
+              : 'Showing the last closed session (delayed)'}
+          </span>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 w-full">
+        {mode === 'live' ? (
+          <FuturesNt8FootprintBody
+            interval={interval}
+            root={root}
+            onRootChange={onRootChange}
+            indicators={indicators}
+            chartStyle={chartStyle}
+            onChartStyleChange={onChartStyleChange}
+            onChartStyleReset={onChartStyleReset}
+          />
+        ) : (
+          <FuturesFootprintBody
+            interval={interval}
+            root={root}
+            onRootChange={onRootChange}
+            indicators={indicators}
+            isAdmin={false}
+            paidTier={paidTier}
+            customerReview
+            chartStyle={chartStyle}
+            onChartStyleChange={onChartStyleChange}
+            onChartStyleReset={onChartStyleReset}
+          />
+        )}
       </div>
     </div>
   );
