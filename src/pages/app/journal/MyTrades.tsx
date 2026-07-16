@@ -40,6 +40,7 @@ import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategies";
 import { resolvePlanned1R, detectBehavior } from '@/utils/rResolver';
 import { Button } from "@/components/ui/button";
+import { Button as DsButton } from "@/components/ds/Button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -2085,13 +2086,15 @@ const stats = useMemo<Stats>(() => {
               </Tooltip>
             </TooltipProvider>
             {!effectiveReadOnly && (
-              <Button
+              <DsButton
+                variant="gold"
+                size="compact"
+                showArrow={false}
                 onClick={() => setShareTodayOpen(true)}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
               >
-                <Share2 className="w-4 h-4 mr-2" />
+                <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Share Today PnL
-              </Button>
+              </DsButton>
             )}
           </div>
         </div>
