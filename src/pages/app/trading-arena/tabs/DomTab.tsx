@@ -58,7 +58,24 @@ export function DomTab({ symbol, interval: _interval, assetClass, onSelectSymbol
     return <FuturesDomBody />;
   }
 
-  return <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />;
+  return (
+    <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-1 min-w-0">
+        <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />
+      </div>
+      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <PaperTradeRail
+          symbol={symbol}
+          livePrice={null}
+          bid={null}
+          ask={null}
+          enabled={false}
+          disabledTitle="Depth feed unavailable"
+          disabledDescription="Choose crypto or futures to enable this trading panel."
+        />
+      </div>
+    </div>
+  );
 }
 
 // ─── Crypto mode ─────────────────────────────────────────────────────────
@@ -260,7 +277,24 @@ function FuturesDomBody() {
             </div>
           </>
         ) : (
-          <Nt8ConnectPanel variant="depth" />
+          <>
+            <div className="flex-1 min-w-0">
+              <Nt8ConnectPanel variant="depth" />
+            </div>
+
+            <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+              <PaperTradeRail
+                symbol={nt8Symbol}
+                livePrice={book.lastPrice}
+                bid={bid}
+                ask={ask}
+                enabled={false}
+                disabledTitle="NinjaTrader not connected"
+                disabledDescription="Connect the desktop bridge to enable futures paper trading."
+                session={session}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

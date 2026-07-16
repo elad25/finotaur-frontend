@@ -392,44 +392,39 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
               indicators={indicators}
               theme="dark"
               height="100%"
+              showRefocusButton
               sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
             />
           )}
         </div>
       </div>
 
-      {/* Paper-trading rail (crypto only — driven by useBinanceOrderBook's
-          live tick price, which has nothing to feed for non-crypto symbols).
-          Non-crypto renders the chart pane full-width instead — no broken
-          placeholder rail. */}
-      {isCrypto && (
-        <>
-          {/* Drag handle — resizes the paper-trading rail (280-560 px). */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize panel"
-            onMouseDown={handleRailHandleMouseDown}
-            className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
-              isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
-            }`}
-          />
+      {/* Drag handle — keeps the paper-trading rail visible in every symbol mode. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        onMouseDown={handleRailHandleMouseDown}
+        className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+          isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+        }`}
+      />
 
-          <div
-            className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
-            style={{ width: railWidth }}
-          >
-            <PaperTradeRail
-              key={symbol}
-              symbol={symbol}
-              livePrice={livePrice}
-              bid={bid}
-              ask={ask}
-              enabled={isCrypto}
-            />
-          </div>
-        </>
-      )}
+      <div
+        className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
+        style={{ width: railWidth }}
+      >
+        <PaperTradeRail
+          key={symbol}
+          symbol={symbol}
+          livePrice={livePrice}
+          bid={bid}
+          ask={ask}
+          enabled={isCrypto}
+          disabledTitle="Live order entry unavailable"
+          disabledDescription="Switch to a crypto symbol to enable paper trading on the chart."
+        />
+      </div>
     </div>
   );
 }
@@ -527,6 +522,7 @@ function ChartTabFootprintOnZoomBody({
       indicators={indicators}
       theme="dark"
       height="100%"
+      showRefocusButton
       footprint={{
         store,
         config: CHART_TAB_FOOTPRINT_ON_ZOOM_CONFIG,

@@ -196,7 +196,24 @@ export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: L
     return <FuturesLiquidityBody interval={interval} />;
   }
 
-  return <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />;
+  return (
+    <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-1 min-w-0">
+        <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />
+      </div>
+      <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+        <PaperTradeRail
+          symbol={symbol}
+          livePrice={null}
+          bid={null}
+          ask={null}
+          enabled={false}
+          disabledTitle="Depth feed unavailable"
+          disabledDescription="Choose crypto or futures to enable this trading panel."
+        />
+      </div>
+    </div>
+  );
 }
 
 // ─── Futures mode (NT8 desktop-agent bridge) ────────────────────────────────
@@ -280,6 +297,20 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
     notionalMultiplier: pointValue,
   });
 
+  const { bid, ask } = useMemo(() => {
+    const { bids, asks } = book.getBook();
+    let bestBid: number | null = null;
+    for (const p of bids.keys()) {
+      if (bestBid === null || p > bestBid) bestBid = p;
+    }
+    let bestAsk: number | null = null;
+    for (const p of asks.keys()) {
+      if (bestAsk === null || p < bestAsk) bestAsk = p;
+    }
+    return { bid: bestBid, ask: bestAsk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.getBook, book.lastPrice]);
+
   // Persisted per-contract-root (Task S2 restyle) — mirrors FootprintTab.tsx's
   // FuturesFootprintBody, which persists footprint settings by root too (a
   // quarterly front-month rollover shouldn't reset the user's chosen look).
@@ -358,42 +389,57 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
         </span>
       </div>
 
-      <div className="flex-1 min-h-0">
-        {isLive ? (
-          <FinotaurChart
+      <div className="flex flex-1 min-h-0 w-full">
+        <div className="flex-1 min-w-0">
+          {isLive ? (
+            <FinotaurChart
+              symbol={nt8Symbol}
+              interval={NT8_INTERVAL_PLACEHOLDER}
+              from={from}
+              to={to}
+              dataSource={barsSource}
+              theme="dark"
+              height="100%"
+              showRefocusButton
+              focusRange={focusRange}
+              timeFitToken={timeFitToken}
+              refreshToken={barsRefreshToken}
+              wallRenderMode="matrix"
+              depthMatrixColumns={depth.columns}
+              depthMatrixBinSize={depth.binSize}
+              depthMatrixSizeFilterPct={5}
+              depthMatrixFloorUsd={0}
+              depthMatrixCandleIntervalMs={intervalSec * 1000}
+              depthMatrixPalette={preferences.palette}
+              depthMatrixSmoothing={preferences.smoothing}
+              volumeBubbles={{
+                store,
+                visible: preferences.bubbles,
+                thresholdSetting: preferences.bubbleThreshold,
+              }}
+              depthProfile={{
+                bids: restingBookSnapshot.bids,
+                asks: restingBookSnapshot.asks,
+                binSize: depth.binSize,
+                visible: preferences.sideProfile,
+              }}
+            />
+          ) : (
+            <Nt8ConnectPanel variant="depth" />
+          )}
+        </div>
+
+        <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+          <PaperTradeRail
             symbol={nt8Symbol}
-            interval={NT8_INTERVAL_PLACEHOLDER}
-            from={from}
-            to={to}
-            dataSource={barsSource}
-            theme="dark"
-            height="100%"
-            focusRange={focusRange}
-            timeFitToken={timeFitToken}
-            refreshToken={barsRefreshToken}
-            wallRenderMode="matrix"
-            depthMatrixColumns={depth.columns}
-            depthMatrixBinSize={depth.binSize}
-            depthMatrixSizeFilterPct={5}
-            depthMatrixFloorUsd={0}
-            depthMatrixCandleIntervalMs={intervalSec * 1000}
-            depthMatrixPalette={preferences.palette}
-            depthMatrixSmoothing={preferences.smoothing}
-            volumeBubbles={{
-              store,
-              visible: preferences.bubbles,
-              thresholdSetting: preferences.bubbleThreshold,
-            }}
-            depthProfile={{
-              bids: restingBookSnapshot.bids,
-              asks: restingBookSnapshot.asks,
-              binSize: depth.binSize,
-              visible: preferences.sideProfile,
-            }}
+            livePrice={book.lastPrice}
+            bid={bid}
+            ask={ask}
+            enabled={isLive}
+            disabledTitle="NinjaTrader not connected"
+            disabledDescription="Connect the desktop bridge to enable futures paper trading."
           />
-        ) : (
-          <Nt8ConnectPanel variant="depth" />
-        )}
+        </div>
       </div>
     </div>
   );
@@ -795,6 +841,7 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
               dataSource={candleDataSource}
               theme="dark"
               height="100%"
+              showRefocusButton
               focusRange={focusRange}
               timeFitToken={timeFitToken}
               wallRenderMode="matrix"

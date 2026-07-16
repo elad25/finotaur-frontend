@@ -50,11 +50,22 @@ export interface PaperTradeRailProps {
   ask: number | null;
   /** When false (non-crypto), the panel shows a disabled notice instead of the order form. */
   enabled: boolean;
+  disabledTitle?: string;
+  disabledDescription?: string;
   /** Optional pre-lifted session (DOM tab) — see the file header comment. Defaults to an internal instance when omitted. */
   session?: UseBacktestSessionReturn;
 }
 
-export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled, session }: PaperTradeRailProps) {
+export function PaperTradeRail({
+  symbol,
+  livePrice,
+  bid,
+  ask,
+  enabled,
+  disabledTitle = 'Paper trading unavailable',
+  disabledDescription = 'This surface is visible, but order entry is disabled for the current mode.',
+  session,
+}: PaperTradeRailProps) {
   // Called unconditionally (rules of hooks) even when a `session` prop is
   // supplied — see the file header comment for why this is safe.
   const internalSession = useBacktestSession(PAPER_BALANCE, 'arena-paper');
@@ -161,10 +172,10 @@ export function PaperTradeRail({ symbol, livePrice, bid, ask, enabled, session }
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
         <p className="text-[12px] font-medium text-zinc-500">
-          Live data — crypto only for now
+          {disabledTitle}
         </p>
         <p className="text-[11px] text-zinc-700">
-          Switch to a crypto symbol to enable paper trading.
+          {disabledDescription}
         </p>
       </div>
     );

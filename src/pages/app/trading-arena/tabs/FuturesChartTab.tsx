@@ -394,6 +394,7 @@ export function FuturesChartTab({ interval, indicators }: FuturesChartTabProps) 
               indicators={indicators}
               theme="dark"
               height="100%"
+              showRefocusButton
               refreshToken={barsRefreshToken}
               onBarsLoad={handleBarsLoad}
               footprint={{
