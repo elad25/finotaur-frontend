@@ -71,9 +71,9 @@ import {
 // ─── resolveAutoTransformDetail ──────────────────────────────────────────────
 
 describe('resolveAutoTransformDetail', () => {
-  it('returns "full" once candleWidthPx reaches minPx', () => {
-    expect(resolveAutoTransformDetail(20, 20)).toBe('full');
-    expect(resolveAutoTransformDetail(25, 20)).toBe('full');
+  it('returns "full" only once candle width and row height can fit text', () => {
+    expect(resolveAutoTransformDetail(50, 20, 11)).toBe('full');
+    expect(resolveAutoTransformDetail(60, 20, 14)).toBe('full');
   });
 
   it('returns "hidden" below minPx', () => {
@@ -81,9 +81,9 @@ describe('resolveAutoTransformDetail', () => {
     expect(resolveAutoTransformDetail(0, 20)).toBe('hidden');
   });
 
-  it('is a pure binary gate — no "shaded" intermediate stage exists', () => {
-    const result = resolveAutoTransformDetail(15, 20);
-    expect(['full', 'hidden']).toContain(result);
+  it('returns "shaded" between the reveal width and safe text dimensions', () => {
+    expect(resolveAutoTransformDetail(20, 20, 11)).toBe('shaded');
+    expect(resolveAutoTransformDetail(50, 20, 10.9)).toBe('shaded');
   });
 });
 

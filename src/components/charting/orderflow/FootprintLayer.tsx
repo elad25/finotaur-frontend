@@ -575,7 +575,7 @@ export function FootprintLayer({
         // (every other caller, unaffected) when unset — see FootprintConfig's
         // doc comments on both fields.
         const detail = config.autoTransformMinPx != null
-          ? resolveAutoTransformDetail(candleWidthPx, config.autoTransformMinPx)
+          ? resolveAutoTransformDetail(candleWidthPx, config.autoTransformMinPx, rowHeightPx, config.minCellPxForText)
           : config.forceFullDetail
             ? 'full'
             : computeDetailLevel(candleWidthPx, rowHeightPx, currentStageRef.current);

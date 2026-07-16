@@ -158,8 +158,20 @@ export function computeDetailLevel(
  * `forceFullDetail` and computeDetailLevel's 3-stage hysteresis. Pure,
  * frame-safe (only a px comparison).
  */
-export function resolveAutoTransformDetail(candleWidthPx: number, minPx: number): FootprintDetailLevel {
-  return candleWidthPx >= minPx ? 'full' : 'hidden';
+export function resolveAutoTransformDetail(
+  candleWidthPx: number,
+  minPx: number,
+  rowHeightPx: number = Number.POSITIVE_INFINITY,
+  minTextPx: number = FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT,
+): FootprintDetailLevel {
+  if (candleWidthPx < minPx) return 'hidden';
+
+  const safeTextWidthPx = Math.max(minTextPx, FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT);
+  if (candleWidthPx >= safeTextWidthPx && rowHeightPx >= FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) {
+    return 'full';
+  }
+
+  return 'shaded';
 }
 
 /**
@@ -703,7 +715,7 @@ export function drawCandleFootprint(
   // candle is wide enough to fit them legibly. Evaluated fresh every draw
   // frame (candleWidthPx is a live projection value, never cached), so this
   // needs no FootprintLayer cache-invalidation wiring.
-  const minTextPx = config.minCellPxForText ?? FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT;
+  const minTextPx = Math.max(config.minCellPxForText ?? FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT, FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT);
   const showText = detail === 'full' && candleWidthPx >= minTextPx;
   const groupSize = rowSize * prepared.mergeFactor;
   // Auto font size by row height (ATAS/Exocharts parity) — computed once per
