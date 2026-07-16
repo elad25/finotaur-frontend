@@ -377,10 +377,8 @@ interface FootprintToolbarStripProps {
   onChartStyleReset: () => void;
   /** 'crypto' | 'futures' — literal per body, only used for the dialog's disabled-hint copy. */
   assetClass: string;
-  showVolumeProfile: boolean;
   showCvd: boolean;
   showDelta: boolean;
-  onToggleVolumeProfile: () => void;
   onToggleCvd: () => void;
   onToggleDelta: () => void;
   statusNote?: string;
@@ -396,10 +394,8 @@ function FootprintToolbarStrip({
   onChartStyleChange,
   onChartStyleReset,
   assetClass,
-  showVolumeProfile,
   showCvd,
   showDelta,
-  onToggleVolumeProfile,
   onToggleCvd,
   onToggleDelta,
   statusNote,
@@ -443,16 +439,7 @@ function FootprintToolbarStrip({
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
 
-      <div className="flex items-center gap-1" role="group" aria-label="Volume profile and sub-pane quick toggles">
-        <button
-          type="button"
-          onClick={onToggleVolumeProfile}
-          aria-pressed={showVolumeProfile}
-          className={quickPillClass(showVolumeProfile)}
-          title="Volume Profile — visible-range volume-by-price with POC/Value Area"
-        >
-          VP
-        </button>
+      <div className="flex items-center gap-1" role="group" aria-label="Sub-pane quick toggles">
         <button
           type="button"
           onClick={onToggleCvd}
@@ -687,10 +674,8 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
         assetClass="crypto"
-        showVolumeProfile={settings.showVolumeProfile}
         showCvd={settings.showCvd}
         showDelta={settings.showDelta}
-        onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
         onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
         onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
         statusNote={statusNote}
@@ -982,10 +967,8 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
         assetClass="futures"
-        showVolumeProfile={settings.showVolumeProfile}
         showCvd={settings.showCvd}
         showDelta={settings.showDelta}
-        onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
         onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
         onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
         statusNote={statusNote}
@@ -1270,10 +1253,8 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
           onChartStyleChange={onChartStyleChange}
           onChartStyleReset={onChartStyleReset}
           assetClass="futures"
-          showVolumeProfile={settings.showVolumeProfile}
           showCvd={settings.showCvd}
           showDelta={settings.showDelta}
-          onToggleVolumeProfile={() => updateSettings({ showVolumeProfile: !settings.showVolumeProfile })}
           onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
           onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
           statusNote={statusNote}

@@ -8,8 +8,7 @@
  *   (b) cell-mode segmented control (Bid×Ask | Delta | Volume)
  *   (c) CVD / Delta sub-pane toggles
  *   (d) row-density segmented control (Auto | ×2 | ×4)
- *   (e) VP (Volume Profile) toggle — ATAS-style visible-range profile overlay
- *   (f) Heatmap toggle — Bookmap-style liquidity heatmap (DepthMatrixLayer,
+ *   (e) Heatmap toggle — Bookmap-style liquidity heatmap (DepthMatrixLayer,
  *       reused as-is from the Market Scanner)
  *
  * Disabled (dimmed, non-interactive) as a single unit when the active symbol
@@ -216,19 +215,9 @@ export function OrderFlowControls({
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
 
-      {/* Volume Profile / Heatmap / Stats toggles — independent of the
+      {/* Heatmap / Stats toggles — independent of the
           footprint on/off switch above (each is its own overlay/render mode). */}
-      <div className="flex items-center gap-1" role="group" aria-label="Volume profile, heatmap and stats overlays">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange({ ...state, showVolumeProfile: !state.showVolumeProfile })}
-          className={pillClass(state.showVolumeProfile, disabled)}
-          aria-pressed={state.showVolumeProfile}
-          title="Volume Profile — visible-range volume-by-price with POC/Value Area"
-        >
-          VP
-        </button>
+      <div className="flex items-center gap-1" role="group" aria-label="Heatmap and stats overlays">
         {!hideHeatmapToggle && (
           <button
             type="button"
