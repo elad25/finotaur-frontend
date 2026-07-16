@@ -22,7 +22,8 @@ function formatPnl(value: number): string {
 export interface DayPnlCardData {
   /** Human date label, e.g. "Wed, Jul 16, 2026". */
   dateLabel: string;
-  netPnl: number;
+  /** null → P&L hidden, render ••• (never 0). */
+  netPnl: number | null;
   /** Closed trades that make up the day's P&L. */
   closedTrades: number;
   winners: number;
@@ -38,7 +39,8 @@ export interface DayPnlCardProps {
 export const DayPnlCard = forwardRef<HTMLDivElement, DayPnlCardProps>(
   function DayPnlCard({ data }, ref) {
     const { dateLabel, netPnl, closedTrades, winners, losers, winRate } = data;
-    const isNegative = netPnl < 0;
+    const pnlHidden = netPnl === null;
+    const isNegative = netPnl !== null && netPnl < 0;
     const hasTrades = closedTrades > 0;
 
     return (
@@ -67,17 +69,26 @@ export const DayPnlCard = forwardRef<HTMLDivElement, DayPnlCardProps>(
           </div>
 
           {/* Big net P&L */}
-          <span
-            className={cn(
-              'font-sans text-[34px] font-bold leading-none',
-              isNegative ? 'text-num-negative' : 'text-status-success',
-            )}
-          >
-            {formatPnl(netPnl)}
-            <span className="ml-[6px] font-sans text-[13px] font-medium text-ink-muted align-middle">
-              USD
+          {pnlHidden ? (
+            <span
+              className="font-sans text-[34px] font-bold leading-none text-ink-muted select-none"
+              aria-label="P&L hidden"
+            >
+              •••
             </span>
-          </span>
+          ) : (
+            <span
+              className={cn(
+                'font-sans text-[34px] font-bold leading-none',
+                isNegative ? 'text-num-negative' : 'text-status-success',
+              )}
+            >
+              {formatPnl(netPnl as number)}
+              <span className="ml-[6px] font-sans text-[13px] font-medium text-ink-muted align-middle">
+                USD
+              </span>
+            </span>
+          )}
 
           {/* Divider */}
           <div className="border-t border-[rgba(201,166,70,0.20)]" />
