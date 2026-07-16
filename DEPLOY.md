@@ -12,11 +12,13 @@
 cd finotaur-frontend
 git checkout main && git pull origin main   # ensure local main = origin/main
 npm ci                                       # only if dependencies changed
-npm run build                                # outputs to dist/
-npx wrangler pages deploy dist \
-  --branch=main \
-  --project-name=finotaur-frontend
+npm run deploy:prod                          # validates Supabase key, builds, deploys dist/
 ```
+
+Do not deploy with a hand-built `dist/` unless `npm run predeploy:check` has
+passed in the same shell. The check calls Supabase with the configured
+publishable key and blocks the exact failure mode where a stale local
+`.env.local` creates a production bundle that receives `Unregistered API key`.
 
 After deploy, smoke-verify:
 

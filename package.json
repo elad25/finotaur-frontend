@@ -9,6 +9,8 @@
     "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist-ssr -c vite.config.ssr.ts",
     "prerender": "node scripts/seo/prerender.mjs",
     "build": "npm run build:client && npm run build:ssr && npm run prerender",
+    "predeploy:check": "node scripts/validate-supabase-build-env.mjs",
+    "deploy:prod": "npm run predeploy:check && npm run build && npx wrangler pages deploy dist --branch=main --project-name=finotaur-frontend",
     "build:dev": "vite build --mode development",
     "lint": "eslint . --cache --cache-location .eslintcache --cache-strategy content --concurrency auto",
     "preview": "vite preview",
