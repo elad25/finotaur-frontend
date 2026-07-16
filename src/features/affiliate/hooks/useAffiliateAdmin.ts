@@ -1,14 +1,14 @@
 // =====================================================
-// FINOTAUR AFFILIATE ADMIN HOOKS - WITH WHOP + EMAIL
+// FINOTAUR AFFILIATE ADMIN HOOKS - WITH EMAIL
 // =====================================================
 // Place in: src/features/affiliate/hooks/useAffiliateAdmin.ts
-// 
-// Version: 4.0 - Full Whop Integration + Email Notifications
-// 
-// 🆕 Features:
-// - Creates promo code in Whop when admin approves affiliate
-// - Syncs discount_tier (standard=10%, vip=15%) with Whop
-// - Updates affiliate record with whop_promo_id
+//
+// Version: 5.0 - Admin approval + Email Notifications
+// (Coupon provisioning to Whop is NOT done by admins — that runs
+// through the member/webhook path. See useAffiliateDiscount.ts.)
+//
+// Features:
+// - Creates the affiliate record when admin approves an application
 // - 📧 Sends approval email automatically via Edge Function
 // =====================================================
 
@@ -42,15 +42,6 @@ export const affiliateAdminKeys = {
 // ============================================
 // TYPES
 // ============================================
-
-// Discount tier type - matches Whop promo codes
-export type DiscountTier = 'standard' | 'vip';
-
-// Discount percentages for each tier
-export const DISCOUNT_TIER_VALUES: Record<DiscountTier, number> = {
-  standard: 10,  // 10% discount
-  vip: 15,       // 15% discount
-};
 
 export interface AffiliateAdminStats {
   total_affiliates: number;
@@ -94,16 +85,6 @@ export interface AffiliateWithDetails extends Affiliate {
   active_customers?: number;
 }
 
-interface WhopPromoResponse {
-  success: boolean;
-  whop_promo_id?: string;
-  code?: string;
-  discount?: number;
-  status?: string;
-  error?: string;
-  message?: string;
-}
-
 // ============================================
 // HELPER: Check if table exists
 // ============================================
@@ -121,68 +102,6 @@ async function tableExists(tableName: string): Promise<boolean> {
     return true;
   } catch {
     return false;
-  }
-}
-
-// ============================================
-// 🆕 HELPER: Create Whop Promo Code via Edge Function
-// ============================================
-
-async function createWhopPromoCode(
-  affiliateId: string,
-  couponCode: string,
-  discountPercent: number,
-  affiliateName?: string
-): Promise<WhopPromoResponse> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session?.access_token) {
-      throw new Error('No active session');
-    }
-
-    // Get Supabase URL from environment
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 
-                        (supabase as any).supabaseUrl ||
-                        'https://your-project.supabase.co';
-
-    console.log('[createWhopPromoCode] Calling Edge Function...');
-    console.log('[createWhopPromoCode] Affiliate:', affiliateId);
-    console.log('[createWhopPromoCode] Code:', couponCode);
-    console.log('[createWhopPromoCode] Discount:', discountPercent);
-
-    const response = await fetch(
-      `${supabaseUrl}/functions/v1/create-whop-promo`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          affiliate_id: affiliateId,
-          coupon_code: couponCode,
-          discount_percent: discountPercent,
-          affiliate_name: affiliateName,
-        }),
-      }
-    );
-
-    const result = await response.json();
-    
-    console.log('[createWhopPromoCode] Response:', result);
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to create Whop promo code');
-    }
-
-    return result;
-  } catch (error: any) {
-    console.error('[createWhopPromoCode] Error:', error);
-    return {
-      success: false,
-      error: error.message || 'Unknown error creating Whop promo',
-    };
   }
 }
 
@@ -393,28 +312,25 @@ export function useAffiliateApplications(status?: AffiliateApplicationStatus | '
 }
 
 // ============================================
-// 🔥 APPROVE APPLICATION - WITH WHOP + EMAIL
+// 🔥 APPROVE APPLICATION - WITH EMAIL
 // ============================================
 
 export function useApproveApplication() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ 
-      applicationId, 
+    mutationFn: async ({
+      applicationId,
       customCode,
       adminNotes,
-      discountTier = 'standard'
-    }: { 
-      applicationId: string; 
+    }: {
+      applicationId: string;
       customCode?: string;
       adminNotes?: string;
-      discountTier?: DiscountTier;
     }) => {
       console.log('[useApproveApplication] Starting approval...');
       console.log('[useApproveApplication] Application ID:', applicationId);
       console.log('[useApproveApplication] Custom Code:', customCode);
-      console.log('[useApproveApplication] Discount Tier:', discountTier);
 
       // 1. Get the application details
       const { data: application, error: appError } = await supabase
@@ -444,8 +360,11 @@ export function useApproveApplication() {
         throw new Error(`Code "${affiliateCode}" is already in use`);
       }
 
-      // 4. Get discount percent from tier
-      const discountPercent = DISCOUNT_TIER_VALUES[discountTier];
+      // 4. Default customer discount percent shown in the approval email.
+      // Actual real-time discount tiers/coupon provisioning happen through
+      // the member/webhook path (see useAffiliateDiscount.ts) — admins no
+      // longer pick a tier here.
+      const discountPercent = 25; // friend discount shown in the approval email (real value comes from member_referral config)
 
       // 5. Create affiliate record
       const { data: affiliate, error: createError } = await supabase
@@ -462,7 +381,7 @@ export function useApproveApplication() {
           referral_link: `https://finotaur.com/ref/${affiliateCode}`,
           status: 'active',
           current_tier: 'tier_1',
-          discount_tier: discountTier,
+          discount_tier: 'standard', // default tier; real provisioning is member/webhook-driven
           activated_at: new Date().toISOString(),
         })
         .select()
@@ -485,41 +404,7 @@ export function useApproveApplication() {
       if (updateError) throw updateError;
 
       // ============================================
-      // 🔥 7. CREATE WHOP PROMO CODE
-      // ============================================
-      console.log('[useApproveApplication] Creating Whop promo code...');
-      
-      const whopResult = await createWhopPromoCode(
-        affiliate.id,
-        affiliateCode,
-        discountPercent,
-        application.full_name
-      );
-
-      let whopPromoId: string | undefined;
-
-      if (whopResult.success && whopResult.whop_promo_id) {
-        whopPromoId = whopResult.whop_promo_id;
-        console.log('[useApproveApplication] ✅ Whop promo created:', whopPromoId);
-        
-        // Update affiliate with Whop promo ID
-        await supabase
-          .from('affiliates')
-          .update({ whop_promo_id: whopPromoId })
-          .eq('id', affiliate.id);
-
-        toast.success('Whop promo code created!', {
-          description: `Code "${affiliateCode}" is now active in Whop with ${discountPercent}% discount`,
-        });
-      } else {
-        console.error('[useApproveApplication] ⚠️ Whop promo failed:', whopResult.error);
-        toast.warning('Affiliate approved, but Whop promo creation failed', {
-          description: whopResult.error || 'Please create the promo manually in Whop dashboard',
-        });
-      }
-
-      // ============================================
-      // 📧 8. SEND APPROVAL EMAIL
+      // 📧 7. SEND APPROVAL EMAIL
       // ============================================
       console.log('[useApproveApplication] Sending approval email...');
       
@@ -545,22 +430,18 @@ export function useApproveApplication() {
       return {
         affiliate,
         affiliateCode,
-        discountTier,
         discountPercent,
-        whopPromoId,
-        whopSuccess: whopResult.success,
         emailSuccess: emailResult.success,
         applicationEmail: application.email,
         applicationName: application.full_name,
       };
     },
-    
+
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: affiliateAdminKeys.all });
-      
-      const tierLabel = result.discountTier === 'vip' ? 'VIP (15%)' : 'Standard (10%)';
+
       toast.success("Application approved!", {
-        description: `Code: ${result.affiliateCode} • Discount: ${tierLabel}`,
+        description: `Code: ${result.affiliateCode}`,
       });
     },
     
@@ -754,41 +635,6 @@ export function useUpdateAffiliate() {
     },
     onError: (error: Error) => {
       toast.error("Failed to update affiliate", {
-        description: error.message,
-      });
-    },
-  });
-}
-
-// ============================================
-// UPDATE AFFILIATE DISCOUNT TIER
-// ============================================
-
-export function useUpdateAffiliateDiscountTier() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ 
-      affiliateId, 
-      discountTier 
-    }: { 
-      affiliateId: string; 
-      discountTier: DiscountTier;
-    }) => {
-      const { error } = await supabase
-        .from('affiliates')
-        .update({ discount_tier: discountTier })
-        .eq('id', affiliateId);
-
-      if (error) throw error;
-    },
-    onSuccess: (_, { discountTier }) => {
-      queryClient.invalidateQueries({ queryKey: affiliateAdminKeys.all });
-      const tierLabel = discountTier === 'vip' ? 'VIP (15%)' : 'Standard (10%)';
-      toast.success(`Discount tier updated to ${tierLabel}`);
-    },
-    onError: (error: Error) => {
-      toast.error("Failed to update discount tier", {
         description: error.message,
       });
     },
@@ -995,7 +841,6 @@ export default {
   useAffiliateDetails,
   useUpdateAffiliateStatus,
   useUpdateAffiliate,
-  useUpdateAffiliateDiscountTier,
   useAffiliatePayouts,
   useProcessPayout,
   useCancelPayout,

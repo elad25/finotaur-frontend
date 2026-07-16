@@ -12,9 +12,9 @@
  * these numbers anywhere else — import from here.
  *
  * Live config mapping:
- *   commission_rates.tier_{1,2,3}.rate = 0.20 (flat)  -> COMMISSION_RATE_PCT
+ *   commission_rates.tier_{1,2,3}.rate = 0.15 (flat)  -> COMMISSION_RATE_PCT
  *   commission_duration_months.months = 12            -> COMMISSION_DURATION_MONTHS
- *   member_referral.friend_discount_percent = 30      -> FRIEND_DISCOUNT_PCT
+ *   member_referral.friend_discount_percent = 25      -> FRIEND_DISCOUNT_PCT
  *   member_referral.friend_discount_cycles = 3        -> FRIEND_DISCOUNT_MONTHS
  *   payout_settings.min_payout_usd = 50               -> MIN_PAYOUT_USD
  *   payout_settings.payment_methods = [paypal, bank]  -> PAYOUT_METHODS
@@ -24,13 +24,13 @@
  */
 
 /** Flat commission the affiliate earns on every referred subscription payment. */
-export const COMMISSION_RATE_PCT = 20;
+export const COMMISSION_RATE_PCT = 15;
 
 /** Number of months an affiliate keeps earning commission per referred customer. */
 export const COMMISSION_DURATION_MONTHS = 12;
 
-/** Discount the referred friend receives (this is the "30% for 3 months" figure). */
-export const FRIEND_DISCOUNT_PCT = 30;
+/** Discount the referred friend receives (this is the "25% for 3 months" figure). */
+export const FRIEND_DISCOUNT_PCT = 25;
 
 /** Number of billing cycles (months) the referred friend's discount applies. */
 export const FRIEND_DISCOUNT_MONTHS = 3;

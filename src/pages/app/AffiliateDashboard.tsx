@@ -96,14 +96,14 @@ export default function AffiliateDashboard() {
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Affiliate Program</h1>
           <p className="text-gray-400 max-w-lg mx-auto">
-            Earn up to 20% commission on every referral. Join our partner program and start earning today!
+            Earn 15% commission on every referral. Join our partner program and start earning today!
           </p>
         </div>
 
         {/* Benefits Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {[
-            { icon: DollarSign, title: '10-20% Commission', desc: 'Earn up to 20% on every referred subscription' },
+            { icon: DollarSign, title: '15% Commission', desc: 'Earn 15% on every referred subscription' },
             { icon: Clock, title: '12-Month Earnings', desc: 'Receive commissions for 12 months per customer' },
             { icon: Award, title: 'Volume Bonuses', desc: 'Unlock milestone bonuses at 20, 50, and 100 referrals' },
           ].map((benefit, i) => (

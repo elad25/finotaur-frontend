@@ -551,7 +551,7 @@ export default function IntroOffer() {
             <h2 className="text-2xl font-bold mb-2">
               <span className="text-white">One-time welcome offer: </span>
               <span style={{ background: 'linear-gradient(135deg, #F4D97B, #C9A646)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                30% Off Your First {activeMonths} Months
+                25% Off Your First {activeMonths} Months
               </span>
             </h2>
 
@@ -640,7 +640,7 @@ export default function IntroOffer() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  Claim 30% Off — {activeMonths} Months
+                  Claim 25% Off — {activeMonths} Months
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

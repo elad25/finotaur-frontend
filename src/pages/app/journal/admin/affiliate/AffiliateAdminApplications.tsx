@@ -37,14 +37,6 @@ interface Props {
   onPendingCountChange?: (count: number) => void;
 }
 
-// Discount tiers matching DB config (only 10% and 15%)
-type DiscountTier = 'standard' | 'vip';
-
-const DISCOUNT_TIERS: { id: DiscountTier; label: string; discount: number }[] = [
-  { id: 'standard', label: 'Standard', discount: 10 },
-  { id: 'vip', label: 'VIP', discount: 15 },
-];
-
 // ─── Pre-built rejection reasons with rich English affiliate-facing messages ───
 // Wording matches the detailed rejection emails in affiliateEmailTemplates.ts (REJECTION_DETAIL_MAP)
 // so the preset message shown here and the email the affiliate receives read consistently.
@@ -109,7 +101,6 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
   const [rejectReasonKey, setRejectReasonKey] = useState('');
   const [affiliateMessage, setAffiliateMessage] = useState('');
   const [showMessageEditor, setShowMessageEditor] = useState(false);
-  const [discountTier, setDiscountTier] = useState<DiscountTier>('standard');
   const [useRequestedCode, setUseRequestedCode] = useState(true);
 
   const { data: applications, isLoading } = useAffiliateApplications(statusFilter);
@@ -164,14 +155,12 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
       applicationId: selectedApp.id,
       customCode: codeToUse,
       adminNotes: adminNotes || undefined,
-      discountTier: discountTier,
     });
 
     setShowApproveModal(false);
     setSelectedApp(null);
     setCustomCode('');
     setAdminNotes('');
-    setDiscountTier('standard');
     setUseRequestedCode(true);
   };
 
@@ -221,7 +210,6 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
     setSelectedApp(app);
     setCustomCode('');
     setUseRequestedCode(!!app.requested_code);
-    setDiscountTier('standard');
     setAdminNotes('');
     setShowApproveModal(true);
   };
@@ -665,43 +653,6 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                 )}
               </div>
 
-              {/* Customer Discount Tier */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-3">
-                  Customer Discount Tier
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {DISCOUNT_TIERS.map((tier) => (
-                    <button
-                      key={tier.id}
-                      onClick={() => setDiscountTier(tier.id)}
-                      className={`
-                        relative p-4 rounded-lg border-2 transition-all text-center
-                        ${discountTier === tier.id
-                          ? 'border-[#D4AF37] bg-[#D4AF37]/10'
-                          : 'border-gray-700 bg-[#0A0A0A] hover:border-gray-600'
-                        }
-                      `}
-                    >
-                      {discountTier === tier.id && (
-                        <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#D4AF37] rounded-full flex items-center justify-center">
-                          <Check className="w-3 h-3 text-black" />
-                        </div>
-                      )}
-                      <p className={`font-semibold ${discountTier === tier.id ? 'text-[#D4AF37]' : 'text-white'}`}>
-                        {tier.label}
-                      </p>
-                      <p className={`text-sm ${discountTier === tier.id ? 'text-[#D4AF37]/70' : 'text-gray-500'}`}>
-                        {tier.discount}% off
-                      </p>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-gray-500 text-xs mt-2">
-                  Discount customers receive when using the code — valid on all plans. The affiliate earns a 10% commission on every payment for 12 months.
-                </p>
-              </div>
-
               {/* Admin Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -723,7 +674,6 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                   setShowApproveModal(false);
                   setCustomCode('');
                   setAdminNotes('');
-                  setDiscountTier('standard');
                   setUseRequestedCode(true);
                 }}
                 className="flex-1 px-4 py-3 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"

@@ -140,10 +140,8 @@ const HEADLINES = [
 ];
 
 // Discount messages
-const DISCOUNT_MESSAGES = {
-  10: '10% OFF',
-  15: '15% OFF',
-  20: '20% OFF',
+const DISCOUNT_MESSAGES: Record<number, string> = {
+  25: '25% OFF',
 };
 
 export default function AffiliateMarketing() {
@@ -152,7 +150,7 @@ export default function AffiliateMarketing() {
   const canvasRef = useRef<HTMLDivElement>(null);
   
   const [affiliateCode, setAffiliateCode] = useState<string | null>(null);
-  const [discountPercent, setDiscountPercent] = useState<number>(10);
+  const [discountPercent, setDiscountPercent] = useState<number>(25);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -260,7 +258,7 @@ export default function AffiliateMarketing() {
   // Get display dimensions
   const dimensions = DIMENSION_CONFIG[selectedTemplate.aspectRatio];
   const displayHeadline = customHeadline || selectedHeadline;
-  const discountText = DISCOUNT_MESSAGES[discountPercent as keyof typeof DISCOUNT_MESSAGES];
+  const discountText = DISCOUNT_MESSAGES[discountPercent] || `${discountPercent}% OFF`;
   const useCodeText = 'Use code:';
 
   if (loading) {

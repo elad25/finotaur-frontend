@@ -226,28 +226,27 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
 // ============================================
 
 export const INTRO_OFFER = {
-  whopPlanId: WHOP_PLAN_IDS.premium_intro_monthly,
-  whopProductId: WHOP_PRODUCT_IDS.premium_intro,
-  introPrice: 31.49,
+  whopPlanId: WHOP_PLAN_IDS.premium_monthly,
+  whopProductId: WHOP_PRODUCT_IDS.premium_monthly,
+  introPrice: 33.74,
   fullPrice: 44.99,
-  discountedCycles: 2,
-  // Hidden Whop promo — 30% off, applies to the first 1 recurring billing
-  // cycle, restricted to this plan. Combined with the plan's own initial-fee
-  // discount, this gives 2 discounted months total (month 1 = plan initial
-  // fee, month 2 = TRADER30 on the first recurring cycle).
-  promoCode: 'TRADER30',
+  discountedCycles: 3,
+  // Hidden Whop promo — 25% off the first 3 recurring billing cycles on the
+  // regular Trader plan, restricted via promo code. No initial-fee — the
+  // discount is applied entirely through INTRO25 on the standard plan.
+  promoCode: 'INTRO25',
 } as const;
 
 // ============================================
 // REFERRAL OFFER — referred-user variant of the Intro Offer
 // When the visitor arrived via a member referral code (stored on-device),
-// the Intro Offer popup swaps the organic 2-month TRADER30 discount for a
-// bigger 3-month discount, applied at checkout using the REFERRING FRIEND'S
-// own personal promo code instead of TRADER30. Friend codes only work on
-// this same hidden Trader plan. See src/components/onboarding/IntroOffer.tsx.
+// the Intro Offer popup swaps the organic 3-month INTRO25 discount for the
+// REFERRING FRIEND'S own personal promo code instead of INTRO25, applied at
+// checkout on the same regular Trader plan. See
+// src/components/onboarding/IntroOffer.tsx.
 // ============================================
 export const REFERRAL_OFFER = {
-  discountPercent: 30,
+  discountPercent: 25,
   discountedCycles: 3,
 } as const;
 
@@ -803,7 +802,7 @@ export const AFFILIATE_CONFIG = {
     expires: 'finotaur_affiliate_expires',
   },
   urlParams: ['ref', 'affiliate', 'a', 'via'],
-  discountPercent: 10,
+  discountPercent: 25,
 };
 
 // ============================================
