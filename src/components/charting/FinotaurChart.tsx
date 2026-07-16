@@ -2183,7 +2183,7 @@ export function FinotaurChart({
           onClick={refocusChart}
           className="absolute top-2 z-30 flex h-6 w-6 items-center justify-center border text-[13px] font-bold leading-none transition-colors"
           style={{
-            right: 10,
+            right: 74,
             borderColor: theme === 'light' ? '#a8a8a8' : 'rgba(255,255,255,0.22)',
             background: theme === 'light' ? '#6b6b6b' : 'rgba(63,63,70,0.92)',
             color: '#ffffff',

@@ -25,7 +25,8 @@
  * Stocks/forex (and futures for non-admins) → a plain English placeholder;
  * no live trades feed exists for those instruments today.
  *
- * No PaperTradeRail on this tab — it's a pure order-flow reading surface.
+ * Includes the same right-side PaperTradeRail workflow used by the regular
+ * chart, including a draggable width handle.
  *
  * PR 2 — Unified Footprint Settings: this tab now owns its own settings
  * system (see ../components/footprintSettings.ts +
@@ -38,7 +39,7 @@
  * unaffected.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
@@ -102,7 +103,95 @@ interface FootprintTabProps {
 // geometry (row-merge factor, font size) still derives from actual on-screen
 // px — this initial framing is what keeps that geometry sane by default.
 const INITIAL_VISIBLE_BARS = 20;
-const RAIL_WIDTH = 320;
+const RAIL_WIDTH_STORAGE_KEY = 'arena-footprint-rail-width';
+const RAIL_DEFAULT_WIDTH = 320;
+const RAIL_MIN_WIDTH = 280;
+const RAIL_MAX_WIDTH = 560;
+
+function clampRailWidth(width: number): number {
+  return Math.min(RAIL_MAX_WIDTH, Math.max(RAIL_MIN_WIDTH, width));
+}
+
+function readInitialRailWidth(): number {
+  if (typeof window === 'undefined') return RAIL_DEFAULT_WIDTH;
+  try {
+    const stored = localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!Number.isNaN(parsed)) return clampRailWidth(parsed);
+    }
+  } catch {
+    // Storage can be unavailable in hardened browser modes.
+  }
+  return RAIL_DEFAULT_WIDTH;
+}
+
+function ResizablePaperRail({ children }: { children: ReactNode }) {
+  const [railWidth, setRailWidth] = useState(readInitialRailWidth);
+  const [isDraggingRail, setIsDraggingRail] = useState(false);
+  const railWidthRef = useRef(railWidth);
+  const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    railWidthRef.current = railWidth;
+  }, [railWidth]);
+
+  const handleRailHandleMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingRail(true);
+    dragStartRef.current = { startX: event.clientX, startWidth: railWidthRef.current };
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingRail) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      setRailWidth(clampRailWidth(start.startWidth + (start.startX - event.clientX)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingRail(false);
+      dragStartRef.current = null;
+      document.body.style.userSelect = '';
+      try {
+        localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(railWidthRef.current));
+      } catch {
+        // Ignore storage failures; the live resize already succeeded.
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingRail]);
+
+  return (
+    <>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        onMouseDown={handleRailHandleMouseDown}
+        className={cn(
+          'w-1.5 flex-shrink-0 cursor-col-resize border-l border-r border-transparent bg-[#050505] transition-colors hover:border-[rgba(201,166,70,0.35)] hover:bg-[rgba(201,166,70,0.10)]',
+          isDraggingRail && 'border-[rgba(201,166,70,0.55)] bg-[rgba(201,166,70,0.16)]',
+        )}
+        title="Drag to resize the trading panel"
+      />
+      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: railWidth }}>
+        {children}
+      </div>
+    </>
+  );
+}
 
 function nowWindowCrypto(): { from: number; to: number } {
   const to = Math.floor(Date.now() / 1000);
@@ -218,7 +307,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
       <div className="flex flex-1 min-w-0">
         <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />
       </div>
-      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+      <ResizablePaperRail>
         <PaperTradeRail
           symbol={symbol}
           livePrice={null}
@@ -228,7 +317,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
           disabledTitle="Tick feed unavailable"
           disabledDescription="Choose crypto or futures to enable this trading panel."
         />
-      </div>
+      </ResizablePaperRail>
     </div>
   );
 }
@@ -651,7 +740,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
           )}
         </div>
 
-        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <ResizablePaperRail>
           <PaperTradeRail
             symbol={symbol}
             livePrice={book.lastPrice}
@@ -659,7 +748,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
             ask={ask}
             enabled
           />
-        </div>
+        </ResizablePaperRail>
       </div>
     </div>
   );
@@ -941,7 +1030,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
           )}
         </div>
 
-        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <ResizablePaperRail>
           <PaperTradeRail
             symbol={contractSymbol}
             livePrice={null}
@@ -951,7 +1040,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
             disabledTitle="Futures feed unavailable"
             disabledDescription="Order entry will enable when the futures feed is available."
           />
-        </div>
+        </ResizablePaperRail>
       </div>
 
       {/* CVD/Delta sub-panes: SKIPPED for futures, same as FuturesChartTab.tsx —
@@ -1225,7 +1314,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
           )}
         </div>
 
-        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <ResizablePaperRail>
           <PaperTradeRail
             symbol={nt8Symbol}
             livePrice={book.lastPrice}
@@ -1235,7 +1324,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
             disabledTitle="NinjaTrader not connected"
             disabledDescription="Connect the desktop bridge to enable futures paper trading."
           />
-        </div>
+        </ResizablePaperRail>
       </div>
     </div>
   );
