@@ -392,6 +392,25 @@ export function IndicatorsDialog({
                     </div>
                   )}
 
+                  <div>
+                    <div className="mb-1 text-[10px] text-[#707070]">Side</div>
+                    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Volume profile side">
+                      {[
+                        { value: 'left' as const, label: 'Left' },
+                        { value: 'right' as const, label: 'Right' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => onChartStyleChange({ volumeProfile: { ...chartStyle.volumeProfile, anchorSide: opt.value } })}
+                          className={pillClass(chartStyle.volumeProfile.anchorSide === opt.value)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-3">
                     <ToggleSwitch
                       active={chartStyle.volumeProfile.showVpoc}

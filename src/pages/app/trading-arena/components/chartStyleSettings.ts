@@ -99,6 +99,7 @@ export const TIMEZONE_OPTIONS: ReadonlyArray<{ value: ChartTimezone; label: stri
 // Session Volume Profile (Chart tab — ATAS-style, S1 "Arena WOW week")
 // ═══════════════════════════════════════════════════════════════
 export type SessionVolumeProfilePeriod = 'day' | 'week' | 'month' | 'custom';
+export type SessionVolumeProfileAnchorSide = 'left' | 'right';
 
 export interface SessionVolumeProfileSettings {
   enabled: boolean;
@@ -109,6 +110,7 @@ export interface SessionVolumeProfileSettings {
   customSessionEnd: string;
   showVpoc: boolean;
   showVahVal: boolean;
+  anchorSide: SessionVolumeProfileAnchorSide;
   /** Max % of a session's horizontal span the histogram may occupy. Range [5, 60]. */
   profileWidthPct: number;
   /** Alpha multiplier applied to the whole overlay. Range [0, 1]. */
@@ -122,7 +124,8 @@ export const DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS: SessionVolumeProfileSettin
   customSessionEnd: '16:00',
   showVpoc: true,
   showVahVal: true,
-  profileWidthPct: 30,
+  anchorSide: 'left',
+  profileWidthPct: 18,
   opacity: 1,
 };
 
@@ -255,6 +258,7 @@ function asHHMM(v: unknown, fallback: string): string {
 }
 
 const SESSION_VOLUME_PROFILE_PERIOD_VALUES: SessionVolumeProfilePeriod[] = ['day', 'week', 'month', 'custom'];
+const SESSION_VOLUME_PROFILE_ANCHOR_SIDE_VALUES: SessionVolumeProfileAnchorSide[] = ['left', 'right'];
 
 /**
  * Validates an arbitrary parsed-JSON value for the nested `volumeProfile`
@@ -267,6 +271,10 @@ export function sanitizeSessionVolumeProfileSettings(
 ): SessionVolumeProfileSettings {
   if (!raw || typeof raw !== 'object') return fallback;
   const p = raw as Partial<SessionVolumeProfileSettings>;
+  const profileWidthValue =
+    p.anchorSide === undefined && p.profileWidthPct === 30
+      ? undefined
+      : p.profileWidthPct;
 
   return {
     enabled: asBool(p.enabled, fallback.enabled),
@@ -275,7 +283,8 @@ export function sanitizeSessionVolumeProfileSettings(
     customSessionEnd: asHHMM(p.customSessionEnd, fallback.customSessionEnd),
     showVpoc: asBool(p.showVpoc, fallback.showVpoc),
     showVahVal: asBool(p.showVahVal, fallback.showVahVal),
-    profileWidthPct: asClampedNumber(p.profileWidthPct, fallback.profileWidthPct, 5, 60),
+    anchorSide: asOneOf(p.anchorSide, SESSION_VOLUME_PROFILE_ANCHOR_SIDE_VALUES, fallback.anchorSide),
+    profileWidthPct: asClampedNumber(profileWidthValue, fallback.profileWidthPct, 5, 60),
     opacity: asClampedNumber(p.opacity, fallback.opacity, 0, 1),
   };
 }

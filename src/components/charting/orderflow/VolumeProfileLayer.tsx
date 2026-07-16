@@ -185,7 +185,7 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
         if (rowSize <= 0) return;
 
         const maxBarWidthPx = paneW * VOLUME_PROFILE_MAX_WIDTH_FRAC;
-        const rightEdgeX = paneW; // right-anchored against the price-axis edge
+        const leftEdgeX = 0;
 
         // ── Row height (px) — derived from priceToCoordinate over one rowSize.
         const yAt0 = seriesInstance.priceToCoordinate(0);
@@ -201,6 +201,8 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
 
           const top = Math.min(yTop as number, yBottom as number);
           const rowH = Math.max(1, Math.abs((yBottom as number) - (yTop as number)));
+          const drawH = Math.max(1, rowH * 0.62);
+          const drawTop = top + (rowH - drawH) / 2;
 
           const volFrac = row.totalVol / profile.maxRowVol;
           const barWidth = Math.max(1, volFrac * maxBarWidthPx);
@@ -209,16 +211,16 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
           const buyWidth = barWidth * buyFrac;
           const sellWidth = barWidth - buyWidth;
 
-          // Sell portion (red) drawn first, right-anchored; buy portion (green)
-          // drawn to its left, so buy leans left / sell leans right within the
-          // row — matches ATAS's split-histogram convention.
-          const sellLeft = rightEdgeX - sellWidth;
-          ctx.fillStyle = VOLUME_PROFILE_SELL_FILL;
-          ctx.fillRect(sellLeft, top, sellWidth, rowH);
-
-          const buyLeft = sellLeft - buyWidth;
+          // Draw a neutral gold profile. Buy/sell are still accumulated for
+          // width parity with the existing data shape, but no red/green split
+          // is exposed visually.
+          const buyLeft = leftEdgeX;
           ctx.fillStyle = VOLUME_PROFILE_BUY_FILL;
-          ctx.fillRect(buyLeft, top, buyWidth, rowH);
+          ctx.fillRect(buyLeft, drawTop, buyWidth, drawH);
+
+          const sellLeft = buyLeft + buyWidth;
+          ctx.fillStyle = VOLUME_PROFILE_SELL_FILL;
+          ctx.fillRect(sellLeft, drawTop, sellWidth, drawH);
         }
 
         // ── Value Area shading (behind the histogram bars, so draw first
@@ -232,12 +234,12 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
             const top = Math.min(yVahTop as number, yValBottom as number);
             const bandH = Math.abs((yValBottom as number) - (yVahTop as number));
             ctx.fillStyle = VOLUME_PROFILE_VA_BG;
-            ctx.fillRect(rightEdgeX - maxBarWidthPx, top, maxBarWidthPx, bandH);
+            ctx.fillRect(leftEdgeX, top, maxBarWidthPx, bandH);
           }
 
           // VAH / VAL boundary lines — thin dashed gold across the profile width.
-          drawDashedHLine(ctx, profile.vah + rowSize, rightEdgeX - maxBarWidthPx, rightEdgeX, seriesInstance, VOLUME_PROFILE_VA_BOUNDARY_COLOR, 1, VOLUME_PROFILE_VA_BOUNDARY_DASH);
-          drawDashedHLine(ctx, profile.val, rightEdgeX - maxBarWidthPx, rightEdgeX, seriesInstance, VOLUME_PROFILE_VA_BOUNDARY_COLOR, 1, VOLUME_PROFILE_VA_BOUNDARY_DASH);
+          drawDashedHLine(ctx, profile.vah + rowSize, leftEdgeX, leftEdgeX + maxBarWidthPx, seriesInstance, VOLUME_PROFILE_VA_BOUNDARY_COLOR, 1, VOLUME_PROFILE_VA_BOUNDARY_DASH);
+          drawDashedHLine(ctx, profile.val, leftEdgeX, leftEdgeX + maxBarWidthPx, seriesInstance, VOLUME_PROFILE_VA_BOUNDARY_COLOR, 1, VOLUME_PROFILE_VA_BOUNDARY_DASH);
         }
 
         // ── POC line — full pane width, dashed gold ─────────────────────────

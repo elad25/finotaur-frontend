@@ -64,6 +64,8 @@ export interface SessionVolumeProfileRenderSettings {
   customSessionEnd: string;
   showVpoc: boolean;
   showVahVal: boolean;
+  /** Which side of each session span the histogram is anchored to. */
+  anchorSide: 'left' | 'right';
   /** Max % of a session's horizontal span the histogram may occupy. */
   profileWidthPct: number;
   opacity: number;
@@ -118,7 +120,7 @@ export function SessionVolumeProfileLayer({ chart, series, bars, settings, visib
   // ── Mark dirty on purely cosmetic changes (no recompute needed) ─────────
   useEffect(() => {
     dirtyRef.current = true;
-  }, [width, height, visible, settings.showVpoc, settings.showVahVal, settings.profileWidthPct, settings.opacity]);
+  }, [width, height, visible, settings.showVpoc, settings.showVahVal, settings.anchorSide, settings.profileWidthPct, settings.opacity]);
 
   // ── rAF draw loop ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -275,8 +277,11 @@ function drawSession(
 
   const profileWidthPx = Math.max(2, sessionSpanPx * (profileWidthPct / 100));
   const rowSize = session.rowSize;
+  const anchorLeftX = settings.anchorSide === 'right'
+    ? Math.max(0, xEndBoundary - profileWidthPx)
+    : xStart;
 
-  // ── Histogram rows (behind candles, left-anchored at session start) ─────
+  // ── Histogram rows (behind candles, anchored per indicator setting) ─────
   const vaLow = settings.showVahVal && session.val !== null ? session.val : null;
   const vaHigh = settings.showVahVal && session.vah !== null ? session.vah + rowSize : null;
 
@@ -287,19 +292,24 @@ function drawSession(
 
     const top = Math.min(yTop as number, yBottom as number);
     const rowH = Math.max(1, Math.abs((yBottom as number) - (yTop as number)));
+    const drawH = Math.max(1, rowH * 0.62);
+    const drawTop = top + (rowH - drawH) / 2;
 
     const volFrac = row.vol / session.maxRowVol;
     const barWidth = Math.max(1, volFrac * profileWidthPx);
+    const barX = settings.anchorSide === 'right'
+      ? anchorLeftX + profileWidthPx - barWidth
+      : anchorLeftX;
 
     const inValueArea = vaLow !== null && vaHigh !== null && row.binPrice >= vaLow && row.binPrice < vaHigh;
     ctx.fillStyle = inValueArea ? SESSION_VP_ROW_FILL_VA : SESSION_VP_ROW_FILL;
-    ctx.fillRect(xStart, top, barWidth, rowH);
+    ctx.fillRect(barX, drawTop, barWidth, drawH);
   }
 
   // ── VAH/VAL boundary lines — thin dashed gold across the histogram width ─
   if (settings.showVahVal && session.vah !== null && session.val !== null) {
-    drawDashedHLine(ctx, session.vah + rowSize, xStart, xStart + profileWidthPx, series, SESSION_VP_VAHVAL_COLOR, 1, SESSION_VP_VAHVAL_DASH);
-    drawDashedHLine(ctx, session.val, xStart, xStart + profileWidthPx, series, SESSION_VP_VAHVAL_COLOR, 1, SESSION_VP_VAHVAL_DASH);
+    drawDashedHLine(ctx, session.vah + rowSize, anchorLeftX, anchorLeftX + profileWidthPx, series, SESSION_VP_VAHVAL_COLOR, 1, SESSION_VP_VAHVAL_DASH);
+    drawDashedHLine(ctx, session.val, anchorLeftX, anchorLeftX + profileWidthPx, series, SESSION_VP_VAHVAL_COLOR, 1, SESSION_VP_VAHVAL_DASH);
   }
 
   // ── vPOC row + extending ray + label ─────────────────────────────────────

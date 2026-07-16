@@ -196,14 +196,14 @@ export const FOOTPRINT_SOLID_SCHEME_BG = 'rgba(161, 161, 170, 0.08)';
 
 // ─── Volume Profile overlay tokens ──────────────────────────────────────────
 // Shares the buy/sell/gold palette above so the profile reads as part of the
-// same order-flow family as the footprint clusters, not a separate visual.
+// FINOTAUR-gold volume profile, intentionally neutral instead of buy/sell colors.
 
 /** Max width of the profile histogram as a fraction of the pane width. */
-export const VOLUME_PROFILE_MAX_WIDTH_FRAC = 0.18;
+export const VOLUME_PROFILE_MAX_WIDTH_FRAC = 0.13;
 
 /** Row fill alpha (subtle — the profile sits behind/beside candles, not over them). */
-export const VOLUME_PROFILE_BUY_FILL = 'rgba(34, 197, 94, 0.30)';
-export const VOLUME_PROFILE_SELL_FILL = 'rgba(220, 38, 38, 0.30)';
+export const VOLUME_PROFILE_BUY_FILL = 'rgba(201, 166, 70, 0.20)';
+export const VOLUME_PROFILE_SELL_FILL = 'rgba(201, 166, 70, 0.20)';
 
 /** Value Area shading — low-alpha gold band behind VAH/VAL boundary rows. */
 export const VOLUME_PROFILE_VA_BG = 'rgba(201, 166, 70, 0.08)';
@@ -235,10 +235,10 @@ export const VOLUME_PROFILE_RECOMPUTE_DEBOUNCE_MS = 150;
 // graphite histogram with a gold vPOC, matching ATAS's session profile look
 // without borrowing ATAS's blue.
 
-/** Row fill — subtle slate, sits behind candles so it must stay unobtrusive. */
-export const SESSION_VP_ROW_FILL = 'rgba(148, 163, 184, 0.18)';
+/** Row fill — subtle gold, sits behind candles so it must stay unobtrusive. */
+export const SESSION_VP_ROW_FILL = 'rgba(201, 166, 70, 0.16)';
 /** Value-Area rows — brighter than the base fill, still behind candles. */
-export const SESSION_VP_ROW_FILL_VA = 'rgba(148, 163, 184, 0.34)';
+export const SESSION_VP_ROW_FILL_VA = 'rgba(201, 166, 70, 0.28)';
 
 /** vPOC row + its extending ray + label — FINOTAUR gold, matches FOOTPRINT_POC_COLOR. */
 export const SESSION_VP_VPOC_COLOR = '#C9A646';
@@ -254,4 +254,4 @@ export const SESSION_VP_SEPARATOR_COLOR = 'rgba(255, 255, 255, 0.07)';
 export const SESSION_VP_SEPARATOR_DASH: [number, number] = [2, 4];
 
 /** Target row count per session (spec: "40-60 rows per typical session range"). */
-export const SESSION_VP_TARGET_ROW_COUNT = 50;
+export const SESSION_VP_TARGET_ROW_COUNT = 90;

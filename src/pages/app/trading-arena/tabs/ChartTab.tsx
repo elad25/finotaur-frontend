@@ -231,6 +231,7 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
     customSessionEnd: chartStyle.volumeProfile.customSessionEnd,
     showVpoc: chartStyle.volumeProfile.showVpoc,
     showVahVal: chartStyle.volumeProfile.showVahVal,
+    anchorSide: chartStyle.volumeProfile.anchorSide,
     profileWidthPct: chartStyle.volumeProfile.profileWidthPct,
     opacity: chartStyle.volumeProfile.opacity,
   }), [chartStyle.volumeProfile, chartStyle.timezone]);
