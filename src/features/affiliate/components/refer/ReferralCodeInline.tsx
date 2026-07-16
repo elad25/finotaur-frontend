@@ -257,7 +257,7 @@ export function ReferralCodeInline() {
             <div className="flex items-start gap-2.5">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" aria-hidden="true" />
               <p className="text-sm leading-relaxed text-zinc-300">
-                You earn <span className="font-semibold text-[#E6CD86]">20%</span> of every
+                You earn <span className="font-semibold text-[#E6CD86]">15%</span> of every
                 payment they make — for 12 months.
               </p>
             </div>

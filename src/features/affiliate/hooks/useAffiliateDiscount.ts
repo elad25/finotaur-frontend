@@ -32,8 +32,8 @@ const PLAN_PRICES = {
 
 // Discount rates - actual rate comes from DB per affiliate
 const DEFAULT_DISCOUNT_RATES: Record<DiscountTier, number> = {
-  standard: 0.10, // 10%
-  vip: 0.15,      // 15%
+  standard: 0.25, // 25%
+  vip: 0.25,      // 25%
 } as const;
 
 // ============================================
@@ -246,8 +246,8 @@ export function useAffiliateDiscount(
       }
 
       // Convert percentage to decimal (DB returns 10.00/15.00, we need 0.10/0.15)
-      const discountMonthlyRaw = result.discount_monthly ?? 10;
-      const discountYearlyRaw = result.discount_yearly ?? 10;
+      const discountMonthlyRaw = result.discount_monthly ?? 25;
+      const discountYearlyRaw = result.discount_yearly ?? 25;
       const discountMonthly = discountMonthlyRaw > 1 ? discountMonthlyRaw / 100 : discountMonthlyRaw;
       const discountYearly = discountYearlyRaw > 1 ? discountYearlyRaw / 100 : discountYearlyRaw;
       
@@ -494,13 +494,13 @@ export function getDiscountTierInfo(tier: DiscountTier): {
   const rates = {
     standard: {
       name: 'Standard',
-      rate: 0.10,
-      description: '10% discount on all plans',
+      rate: 0.25,
+      description: '25% discount on all plans',
     },
     vip: {
       name: 'VIP',
-      rate: 0.15,
-      description: '15% discount on all plans',
+      rate: 0.25,
+      description: '25% discount on all plans',
     },
   };
   

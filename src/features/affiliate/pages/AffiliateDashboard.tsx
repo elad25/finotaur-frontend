@@ -961,7 +961,7 @@ function NotAffiliateState() {
           You're not an affiliate yet
         </h1>
         <p className="text-gray-400 mb-6">
-          Join our affiliate program and start earning up to 20% commission on every referral!
+          Join our affiliate program and start earning 15% commission on every referral!
         </p>
         <a 
           href="/affiliate"

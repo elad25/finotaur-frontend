@@ -18,8 +18,8 @@
 //   ✅ Affiliate check → `affiliates` WHERE user_id + status = 'active'
 //   ✅ Pending check  → `affiliate_applications` WHERE status IN ('pending', 'under_review')
 //   ✅ Admin reads    → both tables + `affiliate_commissions`
-//   ✅ Commission: 20% flat, 12 months, all plans (matches DB config)
-//   ✅ Referral discount: 10% (standard tier)
+//   ✅ Commission: 15% flat, 12 months, all plans (matches DB config)
+//   ✅ Referral discount: 25% (standard tier)
 //   ✅ Powered by Whop (all financial ops via Whop)
 // =====================================================
 
@@ -125,9 +125,9 @@ const earningsExamples = [
 ];
 
 const benefits = [
-  '20% commission on all plans — monthly & yearly',
+  '15% commission on all plans — monthly & yearly',
   'Commissions paid for the first 12 months per referral',
-  'Your referrals get 10% off with your coupon code',
+  'Your referrals get 25% off with your coupon code',
   'After 12 months, your referral keeps the discount forever',
   'Real-time dashboard to track signups & earnings',
   'All payments managed automatically via Whop',
@@ -137,8 +137,8 @@ const benefits = [
 
 const howItWorks = [
   { step: '01', icon: Users, title: 'Apply & Get Approved', desc: 'Submit your application. Once an admin approves you, you receive a unique coupon code via Whop.' },
-  { step: '02', icon: Copy, title: 'Share Your Code', desc: 'Your code gives anyone 10% off on all Finotaur plans — monthly and yearly.' },
-  { step: '03', icon: TrendingUp, title: 'Earn 20% for 12 Months', desc: 'You earn 20% on every payment your referral makes for 12 months. After that, they keep their discount.' },
+  { step: '02', icon: Copy, title: 'Share Your Code', desc: 'Your code gives anyone 25% off on all Finotaur plans — monthly and yearly.' },
+  { step: '03', icon: TrendingUp, title: 'Earn 15% for 12 Months', desc: 'You earn 15% on every payment your referral makes for 12 months. After that, they keep their discount.' },
 ];
 
 const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn: boolean }) => (
@@ -155,13 +155,13 @@ const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; i
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-5 leading-tight">
             <span className="text-white">Earn </span>
-            <span className="text-[#C9A646]">20% commission</span>
+            <span className="text-[#C9A646]">15% commission</span>
             <br />
             <span className="text-white">for every trader you refer.</span>
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Share Finotaur. They get <span className="text-white font-semibold">10% off</span> with your coupon.
-            You earn <span className="text-white font-semibold">20% on every payment</span> for 12 months.
+            Share Finotaur. They get <span className="text-white font-semibold">25% off</span> with your coupon.
+            You earn <span className="text-white font-semibold">15% on every payment</span> for 12 months.
             Everything runs automatically through <span className="text-[#C9A646] font-semibold">Whop</span>.
           </p>
           <button
@@ -184,7 +184,7 @@ const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; i
       <div className="max-w-4xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { v: '20%', l: 'Commission Rate', icon: DollarSign },
+            { v: '15%', l: 'Commission Rate', icon: DollarSign },
             { v: 'All Plans', l: 'Monthly & Yearly', icon: TrendingUp },
             { v: '12 mo', l: 'Commission Duration', icon: Clock },
             { v: '$0', l: 'Cost to Join', icon: Shield },
@@ -253,11 +253,11 @@ const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; i
               </div>
               <div>
                 <h3 className="text-white font-bold text-lg">You Earn</h3>
-                <span className="text-[#C9A646] text-sm font-semibold">20% · All Plans · 12 Months</span>
+                <span className="text-[#C9A646] text-sm font-semibold">15% · All Plans · 12 Months</span>
               </div>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed">
-              For every subscriber who signs up through your code, you earn <span className="text-white font-semibold">20% of every payment</span> — monthly or yearly — for the first 12 months of their subscription.
+              For every subscriber who signs up through your code, you earn <span className="text-white font-semibold">15% of every payment</span> — monthly or yearly — for the first 12 months of their subscription.
             </p>
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
@@ -269,11 +269,11 @@ const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; i
               </div>
               <div>
                 <h3 className="text-white font-bold text-lg">They Save</h3>
-                <span className="text-emerald-400 text-sm font-semibold">10% Off with Your Coupon</span>
+                <span className="text-emerald-400 text-sm font-semibold">25% Off with Your Coupon</span>
               </div>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed">
-              When someone uses your code at checkout, they get <span className="text-white font-semibold">10% off their subscription</span>. After 12 months the discount stays with them permanently.
+              When someone uses your code at checkout, they get <span className="text-white font-semibold">25% off their subscription</span>. After 12 months the discount stays with them permanently.
             </p>
           </motion.div>
         </div>
@@ -287,7 +287,7 @@ const AffiliateLanding = memo(({ onApply, isLoggedIn }: { onApply: () => void; i
       <div className="max-w-3xl mx-auto relative z-10">
         <motion.div initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-8">
           <h2 className="text-3xl md:text-4xl font-bold mb-3"><span className="text-white">Earning </span><span className="text-[#C9A646]">potential</span></h2>
-          <p className="text-sm text-slate-400">20% on all plans · First 12 months per referral.</p>
+          <p className="text-sm text-slate-400">15% on all plans · First 12 months per referral.</p>
         </motion.div>
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(201,166,70,0.15)' }}>
           <div className="grid grid-cols-4 gap-0 px-5 py-3 text-xs font-semibold" style={{ background: 'rgba(201,166,70,0.08)' }}>
@@ -394,8 +394,8 @@ const AffiliatePending = memo(({ appliedAt }: { appliedAt: string }) => (
         {[
           'Admin reviews your application',
           'You receive approval notification',
-          'Your coupon code is created on Whop (10% off for your referrals)',
-          'You start sharing and earning 20% commission for 12 months',
+          'Your coupon code is created on Whop (25% off for your referrals)',
+          'You start sharing and earning 15% commission for 12 months',
         ].map((step, i) => (
           <div key={i} className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
@@ -436,7 +436,7 @@ const AffiliateDashboard = memo(({ affiliate, referrals, onRefresh }: {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Award className="h-6 w-6 text-[#C9A646]" />Affiliate Dashboard
           </h1>
-          <p className="text-slate-400 text-sm mt-1">20% Commission · Powered by Whop</p>
+          <p className="text-slate-400 text-sm mt-1">15% Commission · Powered by Whop</p>
         </div>
         <button onClick={onRefresh} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
           <RefreshCw className="h-4 w-4" />
@@ -469,7 +469,7 @@ const AffiliateDashboard = memo(({ affiliate, referrals, onRefresh }: {
       {/* Coupon Code */}
       <GoldCard>
         <p className="text-slate-400 text-xs mb-2 flex items-center gap-1.5">
-          <Percent className="h-3.5 w-3.5" /> Your Coupon Code (10% off for referrals)
+          <Percent className="h-3.5 w-3.5" /> Your Coupon Code (25% off for referrals)
         </p>
         <div className="flex items-center gap-2">
           <span className="text-2xl font-black text-[#C9A646] tracking-widest font-mono">{couponDisplay}</span>
@@ -487,8 +487,8 @@ const AffiliateDashboard = memo(({ affiliate, referrals, onRefresh }: {
           <div>
             <h3 className="text-white font-semibold mb-1">How Your Commissions Work</h3>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Every time someone subscribes using your code, <strong className="text-white">you earn 20%</strong> of every payment for the first <strong className="text-white">12 months</strong>.
-              After 12 months, the referral keeps their 10% discount automatically.
+              Every time someone subscribes using your code, <strong className="text-white">you earn 15%</strong> of every payment for the first <strong className="text-white">12 months</strong>.
+              After 12 months, the referral keeps their 25% discount automatically.
               All payouts are processed through your <strong className="text-[#C9A646]">Whop account</strong>.
             </p>
           </div>
@@ -749,8 +749,8 @@ const AffiliateAdminPanel = memo(({ stats, affiliates, applications, onRefresh, 
               <div>
                 <h3 className="text-white font-semibold mb-1">Whop Integration Active</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">
-                  All affiliate financial operations are managed via Whop: coupon code creation (10% discount, all plans),
-                  commission tracking (20% flat, 12 months), and automatic payouts.
+                  All affiliate financial operations are managed via Whop: coupon code creation (25% discount, all plans),
+                  commission tracking (15% flat, 12 months), and automatic payouts.
                   <strong className="text-white"> After approving an affiliate here, manually create their coupon on Whop dashboard.</strong>
                 </p>
                 <a href="https://whop.com" target="_blank" rel="noopener noreferrer"
@@ -899,7 +899,7 @@ const AffiliateAdminPanel = memo(({ stats, affiliates, applications, onRefresh, 
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[#C9A646]/5 border border-[#C9A646]/15">
                   <Zap className="w-4 h-4 text-[#C9A646] shrink-0 mt-0.5" />
                   <p className="text-slate-400 text-xs leading-relaxed">
-                    Approving will create the affiliate account and send an approval email with the coupon code. 10% discount for referrals · 20% commission for 12 months.
+                    Approving will create the affiliate account and send an approval email with the coupon code. 25% discount for referrals · 15% commission for 12 months.
                   </p>
                 </div>
               </div>
@@ -1040,7 +1040,7 @@ const ApplyModal = memo(({ onClose, onSubmit }: { onClose: () => void; onSubmit:
           <h2 className="text-xl font-bold text-white mb-1">Apply to Become an Affiliate</h2>
           <p className="text-slate-400 text-sm">
             Once approved by an admin, you'll receive a unique coupon code via Whop.
-            Your code gives referrals <strong className="text-white">10% off</strong>, and you earn <strong className="text-white">20% commission</strong> for 12 months.
+            Your code gives referrals <strong className="text-white">25% off</strong>, and you earn <strong className="text-white">15% commission</strong> for 12 months.
           </p>
         </div>
 

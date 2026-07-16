@@ -35,8 +35,8 @@ export type AffiliateTier =
   | 'tier_3'; // 75+ clients, 10%
 
 // 🔥 v2.3.0 NEW: Discount Tier (Customer discount when using affiliate code)
-export type DiscountTier = 
-  | 'standard';  // 10% discount for customers
+export type DiscountTier =
+  | 'standard';  // 25% discount for customers
 
 // 🔥 v2.1 UPDATED: Added 'verification_pending' status
 export type ReferralStatus = 
@@ -618,16 +618,16 @@ export const TIER_INFO: Record<AffiliateTier, TierInfo> = {
     name: 'Tier 1',
     minClients: 0,
     maxClients: 20,
-    commissionRate: 0.10,
-    annualRate: 0.10,
+    commissionRate: 0.15,
+    annualRate: 0.15,
     description: '0-20 paying clients',
   },
   tier_2: {
     name: 'Tier 2',
     minClients: 20,
     maxClients: 75,
-    commissionRate: 0.10,
-    annualRate: 0.10,
+    commissionRate: 0.15,
+    annualRate: 0.15,
     description: '20-75 paying clients',
     canRecruitSubAffiliates: true,
   },
@@ -635,8 +635,8 @@ export const TIER_INFO: Record<AffiliateTier, TierInfo> = {
     name: 'Tier 3',
     minClients: 75,
     maxClients: null,
-    commissionRate: 0.10,
-    annualRate: 0.10,
+    commissionRate: 0.15,
+    annualRate: 0.15,
     description: '75+ paying clients',
     canRecruitSubAffiliates: true,
   },
@@ -654,8 +654,8 @@ export interface DiscountTierInfo {
 export const DISCOUNT_TIER_INFO: Record<DiscountTier, DiscountTierInfo> = {
   standard: {
     name: 'Standard',
-    discountRate: 0.10,  // 10%
-    description: '10% discount for customers',
+    discountRate: 0.25,  // 25%
+    description: '25% discount for customers',
     badgeColor: 'text-gray-400',
     bgColor: 'bg-gray-500/10',
   },

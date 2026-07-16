@@ -195,7 +195,7 @@ export function ReferFriendCard() {
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
           Upgrade to get your personal referral code — your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off
-          their first 3 months, and you earn 20% of their payments for 12 months.
+          their first 3 months, and you earn 15% of their payments for 12 months.
         </p>
         <Button asChild variant="gold" size="sm" className="self-start">
           <Link to="/app/upgrade">Upgrade to unlock</Link>
@@ -213,7 +213,7 @@ export function ReferFriendCard() {
         </div>
         <p className="text-small leading-relaxed text-ink-secondary">
           Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months · You earn{' '}
-          20% of their payments for 12 months.
+          15% of their payments for 12 months.
         </p>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="refer-friend-card-requested-code" className="text-small font-medium text-ink-secondary">
@@ -291,7 +291,7 @@ export function ReferFriendCard() {
       </div>
 
       <p className="text-small text-ink-tertiary">
-        Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months · You earn 20%
+        Your friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off their first 3 months · You earn 15%
         of their payments for 12 months
       </p>
 

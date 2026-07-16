@@ -12,9 +12,9 @@
 // `affiliate_type = 'member'` (distinct from the legacy influencer-affiliate
 // rows, which use `affiliate_type = 'regular' | 'admin'`).
 //
-// v3.1.0 "Referral beats intro": the member's personal code now gives 30%
-// off the first 3 months of FINOTAUR Trader (beats the organic TRADER30
-// intro promo's 30% off 2 months). Members may optionally choose their own
+// v3.1.0 "Referral beats intro": the member's personal code now gives 25%
+// off the first 3 months of FINOTAUR Trader (beats the organic INTRO25
+// intro promo's 25% off 3 months). Members may optionally choose their own
 // code before it's provisioned — see `provisionMemberReferralCode`.
 // =====================================================
 
@@ -73,9 +73,9 @@ export interface MemberReferralListItem {
 }
 
 // Default discount shown before the edge function confirms the real value.
-// 30% off the first 3 months of FINOTAUR Trader (v3.1.0 — was 20%, first
+// 25% off the first 3 months of FINOTAUR Trader (v3.1.0 — was 20%, first
 // payment only).
-export const DEFAULT_MEMBER_DISCOUNT_PERCENT = 30;
+export const DEFAULT_MEMBER_DISCOUNT_PERCENT = 25;
 
 const REFERRAL_LINK_BASE = 'https://finotaur.com/ref';
 

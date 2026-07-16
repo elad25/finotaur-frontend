@@ -1,7 +1,7 @@
 // src/pages/AffiliatePage.tsx
 // ================================================
 // 🔥 AFFILIATE PROGRAM — Full Landing Page
-// 20% recurring commission for 12 months; referred friends save 30% for 3 months
+// 15% recurring commission for 12 months; referred friends save 25% for 3 months
 // Matches Finotaur gold/dark luxury design
 // ================================================
 
@@ -86,9 +86,9 @@ const AffiliatePage = () => {
   return (
     <div className="min-h-screen bg-base-900 text-white overflow-x-hidden">
       <SEO
-        title="FINOTAUR Affiliate Program — Earn 20% for 12 Months"
+        title="FINOTAUR Affiliate Program — Earn 15% for 12 Months"
         titleAsIs
-        description="Refer traders to FINOTAUR and earn 20% recurring commission for 12 months. Your friends get 30% off their first 3 months. $50 minimum payout via PayPal."
+        description="Refer traders to FINOTAUR and earn 15% recurring commission for 12 months. Your friends get 25% off their first 3 months. $50 minimum payout via PayPal."
         path="/affiliate"
         jsonLd={[softwareApplication()]}
       />
@@ -227,7 +227,7 @@ const AffiliatePage = () => {
         </div>
       </section>
 
-      {/* ========== THE DEAL — you earn 20% · they save 30% ========== */}
+      {/* ========== THE DEAL — you earn 15% · they save 25% ========== */}
       <section className="py-16 px-4 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-base-900 via-[#1A1713] to-base-900" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-gold-primary/[0.10] rounded-full blur-[150px]" />
