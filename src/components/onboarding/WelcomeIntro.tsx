@@ -4,7 +4,7 @@
 // Fires the same celebratory confetti as the first-trade moment.
 //
 // "Let's Start!" → sets TOUR_ACTIVE_KEY in sessionStorage then navigates
-//   to /app/stocks/overview (SpotlightTour opens the drawer from there).
+//   to /app/home (SpotlightTour opens the drawer from there).
 // ================================================
 
 import { useEffect, useState } from 'react';
@@ -103,9 +103,12 @@ export default function WelcomeIntro() {
     }
     sessionStorage.setItem(TOUR_ACTIVE_KEY, '1');
     setActive(false);
-    // Navigate to Research Lab — the tour's backdrop and destination.
-    // SpotlightTour opens the drawer and spotlights the first item from there.
-    navigate('/app/all-markets/overview', { replace: true });
+    // Navigate to Home — the tour's backdrop and destination. Must NOT be a
+    // Markets research path: the beta gate (MARKETS_BETA_ONLY) redirects
+    // non-beta users from there to /app/upgrade, which made the tour run on
+    // top of the pricing page for every fresh signup.
+    // SpotlightTour opens the drawer and spotlights the first item from here.
+    navigate('/app/home', { replace: true });
   };
 
   if (!active) return null;
