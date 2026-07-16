@@ -138,10 +138,13 @@ function SpotlightHighlight({ rect }: SpotlightProps) {
         top: y,
         width: w,
         height: h,
-        boxShadow: '0 0 0 9999px rgba(0,0,0,0.88)',
+        // Mostly-transparent dim — the page stays visible; the spotlighted
+        // target is lit by a gold halo instead of drowned in black.
+        boxShadow:
+          '0 0 0 9999px rgba(0,0,0,0.35), 0 0 28px 6px rgba(201,166,70,0.45), inset 0 0 18px rgba(201,166,70,0.18)',
         border: '2px solid #C9A646',
         borderRadius: 8,
-        filter: 'drop-shadow(0 0 8px rgba(201,166,70,0.5))',
+        filter: 'drop-shadow(0 0 12px rgba(201,166,70,0.65))',
         transition: SPOT_TRANSITION,
         zIndex: 9990,
       }}
@@ -159,8 +162,8 @@ function SpotlightBlur({ rect }: SpotlightProps) {
   const h = rect.height + PAD * 2;
   const base: React.CSSProperties = {
     position: 'fixed',
-    backdropFilter: 'blur(7px)',
-    WebkitBackdropFilter: 'blur(7px)',
+    backdropFilter: 'blur(2px)',
+    WebkitBackdropFilter: 'blur(2px)',
     transition: SPOT_TRANSITION,
     zIndex: 9988,
     pointerEvents: 'none',
@@ -711,7 +714,7 @@ export default function SpotlightTour() {
           </>
         ) : mode === 'fallback' ? (
           <div
-            className="fixed inset-0 bg-black/90 backdrop-blur-md pointer-events-none"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-none"
             style={{ zIndex: 9990 }}
           />
         ) : null}
