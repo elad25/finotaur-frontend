@@ -22,11 +22,11 @@ import { cn } from '@/lib/utils';
 export interface Nt8ConnectPanelProps {
   /** 'footprint' = trade-tick feed copy; 'depth' = order-book depth feed copy. Mirrors TickDataRequiredState's variant. */
   variant?: 'footprint' | 'depth';
-  /** Route to the agent pairing surface. Defaults to the Copy Trade install tab (the existing pairing UI — see App.tsx's copy-trade/install route). */
+  /** Route to the agent pairing / market-data setup surface. Defaults to the Market Data setup page (see App.tsx's trading-arena/connect-data route). */
   pairingHref?: string;
 }
 
-const DEFAULT_PAIRING_HREF = '/app/copy-trade/install';
+const DEFAULT_PAIRING_HREF = '/app/trading-arena/connect-data';
 
 type PanelPhase = 'loading-device' | 'not-paired' | BridgeStatus;
 
@@ -35,8 +35,20 @@ const VARIANT_FEED_NAME: Record<'footprint' | 'depth', string> = {
   depth: 'liquidity heatmap',
 };
 
-function statusCopy(phase: PanelPhase, variant: 'footprint' | 'depth'): { title: string; body: string } {
+function statusCopy(
+  phase: PanelPhase,
+  variant: 'footprint' | 'depth',
+  agentOffline: boolean,
+  deviceName: string | null,
+): { title: string; body: string } {
   const feed = VARIANT_FEED_NAME[variant];
+  if (agentOffline) {
+    const machine = deviceName ? ` (${deviceName})` : '';
+    return {
+      title: 'Agent offline',
+      body: `Start NinjaTrader 8 on your paired machine${machine} to resume the futures ${feed}.`,
+    };
+  }
   switch (phase) {
     case 'loading-device':
       return { title: 'Checking for your NinjaTrader agent…', body: '' };
@@ -66,7 +78,7 @@ function statusCopy(phase: PanelPhase, variant: 'footprint' | 'depth'): { title:
     case 'auth-failed':
       return {
         title: 'Pairing expired',
-        body: 'This browser is no longer authorized with your agent. Re-pair the agent from Copy Trade settings.',
+        body: 'This browser is no longer authorized with your agent. Re-pair the agent from the Market Data setup page.',
       };
     case 'unsupported-browser':
       return {
@@ -117,12 +129,21 @@ export function Nt8ConnectPanel({ variant = 'footprint', pairingHref = DEFAULT_P
         ? 'not-paired'
         : bridgeStatus;
 
-  const { title, body } = statusCopy(phase, variant);
+  // Paired device exists, but its heartbeat says the desktop agent isn't
+  // running right now (NT8/agent closed) — distinct from "never paired".
+  const agentOffline =
+    !unsupported &&
+    !!device &&
+    device.online === false &&
+    (phase === 'idle' || phase === 'agent-not-running' || phase === 'error');
+
+  const { title, body } = statusCopy(phase, variant, agentOffline, device?.deviceName ?? null);
   const showConnectButton =
     !unsupported &&
     !!device &&
     (phase === 'idle' || phase === 'agent-not-running' || phase === 'auth-failed' || phase === 'error');
-  const showPairingLink = phase === 'not-paired' || phase === 'agent-not-running' || phase === 'auth-failed';
+  const showPairingLink = phase === 'agent-not-running' || phase === 'auth-failed' || agentOffline;
+  const pairingLinkLabel = agentOffline ? 'Market data setup →' : 'Manage agent pairing →';
 
   return (
     <div className="flex h-full w-full items-center justify-center px-6">
@@ -185,12 +206,31 @@ export function Nt8ConnectPanel({ variant = 'footprint', pairingHref = DEFAULT_P
           </button>
         )}
 
+        {phase === 'not-paired' && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-[12px] font-medium text-[#C9C9C9]">
+                Connect your NinjaTrader feed — included with your plan
+              </span>
+              <a
+                href={pairingHref}
+                className="text-[11px] font-semibold text-[#707070] transition-colors duration-150 hover:text-[#C9A646]"
+              >
+                Set up →
+              </a>
+            </div>
+            <span className="text-[11px] text-[#5A5A5A]">
+              FINOTAUR Live Data — real-time without NinjaTrader — coming soon.
+            </span>
+          </div>
+        )}
+
         {showPairingLink && (
           <a
             href={pairingHref}
             className="text-[11px] font-semibold text-[#707070] transition-colors duration-150 hover:text-[#C9A646]"
           >
-            {phase === 'not-paired' ? 'Pair your NinjaTrader agent →' : 'Manage agent pairing →'}
+            {pairingLinkLabel}
           </a>
         )}
       </div>
