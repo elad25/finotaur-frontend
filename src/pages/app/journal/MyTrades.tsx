@@ -1408,14 +1408,15 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   );
 
   // ── Share Today P&L — aggregate of today's trades (same day-key + P&L rules
-  // as the Day summary view: grouped by open_at in the user's timezone).
-  const todayPnlData: DayPnlCardData = useMemo(() => {
+  // as the Day summary view: grouped by open_at in the user's timezone), plus
+  // the day's closed trades as single-trade card alternatives.
+  const { todayPnlData, todayShareableTrades } = useMemo(() => {
     const todayKey = getTradeDayKey(new Date().toISOString(), timezone);
     const todayTrades = trades.filter(
       (trade) => getTradeDayKey(trade.open_at, timezone) === todayKey,
     );
     const [summary] = buildTradeSummaries(todayTrades, oneR, timezone, "day");
-    return {
+    const data: DayPnlCardData = {
       dateLabel: formatDayLabel(new Date().toISOString(), timezone),
       netPnl: summary?.netPnl ?? 0,
       closedTrades: summary?.closedTrades ?? 0,
@@ -1423,6 +1424,21 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
       losers: summary?.losers ?? 0,
       winRate: summary?.winRate ?? 0,
     };
+    const shareable: ShareableTrade[] = (summary?.trades ?? [])
+      .filter((trade) => trade.close_at)
+      .map((trade) => ({
+        id: trade.id,
+        symbol: trade.symbol,
+        side: trade.side,
+        pnl: getTradeData(trade, oneR).pnl,
+        entry_price: trade.entry_price,
+        exit_price: trade.exit_price,
+        quantity: trade.quantity,
+        close_at: trade.close_at,
+        setup: trade.setup,
+        broker: trade.broker,
+      }));
+    return { todayPnlData: data, todayShareableTrades: shareable };
   }, [trades, oneR, timezone]);
 
   // ✅ 3. useEffect
@@ -3272,7 +3288,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
 
       {/* Share Today P&L — branded day-summary card export */}
       {shareTodayOpen && (
-        <ShareDayPnlDialog data={todayPnlData} open={shareTodayOpen} onOpenChange={setShareTodayOpen} />
+        <ShareDayPnlDialog data={todayPnlData} trades={todayShareableTrades} open={shareTodayOpen} onOpenChange={setShareTodayOpen} />
       )}
 
       {/* Delete Dialog */}

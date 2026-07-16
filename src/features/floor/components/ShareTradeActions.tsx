@@ -5,7 +5,7 @@
 // existing "Share to Floor" flow (ShareTradeDialog).
 
 import { useRef, useState } from 'react';
-import { Share2 } from 'lucide-react';
+import { Share2, EyeOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -41,9 +41,10 @@ const DEFAULT_PRIVACY: SharePrivacy = {
 export function ShareTradeActions({ trade, open, onOpenChange }: ShareTradeActionsProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [floorOpen, setFloorOpen] = useState(false);
+  const [hidePnl, setHidePnl] = useState(false);
   const { busy, canNativeShare, download, copyToClipboard, nativeShare } = useTradeCardImage();
 
-  const cardData = tradeCardFromShareable(trade, DEFAULT_PRIVACY);
+  const cardData = tradeCardFromShareable(trade, { ...DEFAULT_PRIVACY, hidePnl });
 
   async function handleDownload() {
     await download(cardRef.current, `finotaur-${trade.symbol}.png`);
@@ -89,6 +90,28 @@ export function ShareTradeActions({ trade, open, onOpenChange }: ShareTradeActio
           <div className="mx-auto w-[380px] max-w-full">
             <TradeBusinessCard ref={cardRef} data={cardData} />
           </div>
+
+          {/* Hide P&L toggle */}
+          <label className="flex items-center justify-center gap-ds-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hidePnl}
+              onChange={(e) => setHidePnl(e.target.checked)}
+              className="sr-only"
+            />
+            <span
+              className={cn(
+                'inline-flex items-center gap-[6px] rounded-full px-[12px] py-[5px]',
+                'font-sans text-[11px] font-medium border-[0.5px] transition-colors duration-base ease-out',
+                hidePnl
+                  ? 'bg-gradient-gold border-transparent text-surface-base'
+                  : 'bg-surface-2 border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary',
+              )}
+            >
+              <EyeOff className="h-[12px] w-[12px]" aria-hidden="true" />
+              Hide P&amp;L
+            </span>
+          </label>
 
           {/* Actions */}
           <div className="flex flex-wrap items-center justify-center gap-ds-2 pt-ds-2">
