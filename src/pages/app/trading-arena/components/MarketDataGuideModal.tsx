@@ -1,88 +1,32 @@
-// src/features/automation/components/AgentGuideModal.tsx
+// src/pages/app/trading-arena/components/MarketDataGuideModal.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// "GUIDE" — a step-by-step carousel popup for setting up the FINOTAUR Agent
-// (NinjaTrader 8 add-on). One slide per step, black + gold brand styling.
+// "GUIDE" — a step-by-step carousel popup for connecting live market data to
+// the Trading Arena via the FINOTAUR Agent's NT8 market bridge.
 //
-// Distribution model = NinjaScript Add-On import (no manual compile, no manual
-// folder copy, no manual reference): the user just imports the downloaded file
-// and NinjaTrader installs + compiles it automatically.
+// Shares its carousel shell + illustration components with
+// features/automation/components/AgentGuideModal.tsx (the Trade Copier setup
+// guide) — the first three steps (download / import / pair) are identical
+// setup, only framed around market data instead of copy routes. No copy-route
+// step here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Download, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  ImportMenuIllustration,
+  ToolsMenuIllustration,
+  AgentWindowIllustration,
+} from '@/features/automation/components/AgentGuideModal';
 
-// ── Inline code chip ─────────────────────────────────────────────────────────
-function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="font-mono text-zinc-200 bg-zinc-800 px-1 py-0.5 rounded text-xs break-words">
-      {children}
-    </code>
-  );
-}
-
-// ── A light Windows-menu illustration faithful to NinjaTrader 8's Control Center
-//    "Tools" menu, with the "Import → NinjaScript Add-On…" path highlighted. ─────
-// Exported so other setup-guide modals (e.g. the Trading Arena's
-// MarketDataGuideModal) can reuse the same illustration instead of
-// duplicating it.
-export function ImportMenuIllustration() {
-  // Real items above "Import" in NT8's Tools menu.
-  const items = ['Historical Data', 'Commissions', 'Risk', 'Trading Hours'];
-  return (
-    <div className="mt-3 flex flex-wrap items-start gap-2">
-      {/* Tools menu */}
-      <div className="inline-block rounded-md overflow-hidden border align-top" style={{ borderColor: '#d9d9d6', background: '#ffffff', minWidth: 210 }}>
-        <div className="px-3 py-1.5 text-[11px] font-semibold" style={{ color: '#7a7a76', background: '#f3f3f1', borderBottom: '1px solid #e6e6e2' }}>Tools</div>
-        {items.map((it) => (
-          <div key={it} className="px-3 py-1.5 text-[13px]" style={{ color: '#2a2a28' }}>{it}</div>
-        ))}
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[13px] font-semibold" style={{ background: '#C9A646', color: '#0a0a0b' }}>
-          Import
-          <ChevronRight className="h-3.5 w-3.5" />
-        </div>
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-[13px]" style={{ color: '#2a2a28' }}>
-          Export
-          <ChevronRight className="h-3.5 w-3.5" style={{ color: '#a8a8a3' }} />
-        </div>
-      </div>
-      {/* Import submenu */}
-      <div className="inline-block rounded-md overflow-hidden border align-top mt-[88px]" style={{ borderColor: '#d9d9d6', background: '#ffffff', minWidth: 200 }}>
-        <div className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold" style={{ background: '#C9A646', color: '#0a0a0b' }}>
-          NinjaScript Add-On…
-        </div>
-        <div className="px-3 py-1.5 text-[13px]" style={{ color: '#2a2a28' }}>NinjaScript…</div>
-      </div>
-    </div>
-  );
-}
-
-// ── A light Windows-menu illustration faithful to the bottom of NT8's "Tools"
-//    menu, where "Finotaur Agent…" is added once the add-on is installed. ───────
-export function ToolsMenuIllustration() {
-  const items = ['Global Simulation Mode', 'Client Dashboard', 'Settings'];
-  return (
-    <div className="mt-3 inline-block rounded-md overflow-hidden border align-top" style={{ borderColor: '#d9d9d6', background: '#ffffff', minWidth: 240 }}>
-      <div className="px-3 py-1.5 text-[11px] font-semibold" style={{ color: '#7a7a76', background: '#f3f3f1', borderBottom: '1px solid #e6e6e2' }}>Tools</div>
-      {items.map((it) => (
-        <div key={it} className="px-3 py-1.5 text-[13px]" style={{ color: '#2a2a28' }}>{it}</div>
-      ))}
-      <div className="my-1" style={{ borderTop: '1px solid #e6e6e2' }} />
-      <div className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold" style={{ background: '#C9A646', color: '#0a0a0b' }}>
-        Finotaur Agent…
-      </div>
-    </div>
-  );
-}
-
-// ── A black + gold illustration of the FINOTAUR Agent desktop window the user
-//    opens in NinjaTrader (Tools → Finotaur Agent…) to pair the device. ─────────
-export function AgentWindowIllustration() {
+// ── A black + gold illustration of the FINOTAUR Agent window's Market bridge
+//    toggle, plus the Arena's Connect action — mirrors AgentWindowIllustration's
+//    styling for visual consistency across both guide modals. ─────────────────
+function MarketBridgeIllustration() {
   return (
     <div className="mt-3 rounded-lg overflow-hidden border" style={{ borderColor: '#2e2a1a', background: '#0a0a0b' }}>
       {/* title bar */}
@@ -91,40 +35,29 @@ export function AgentWindowIllustration() {
         <span className="text-[11px]" style={{ color: '#9a9a9e' }}>Finotaur Agent</span>
       </div>
       <div className="p-4">
-        {/* header */}
         <div className="flex items-center gap-3 mb-4">
           <span className="h-9 w-9 rounded-full" style={{ background: '#C9A646' }} />
           <div>
             <p className="text-sm font-bold tracking-wide" style={{ color: '#C9A646' }}>FINOTAUR AGENT</p>
-            <p className="text-[11px]" style={{ color: '#9a9a9e' }}>v1.10.0</p>
+            <p className="text-[11px]" style={{ color: '#9a9a9e' }}>Paired · Market bridge</p>
           </div>
         </div>
-        {/* device pairing card */}
+        {/* market bridge toggle card */}
         <div className="rounded-md p-3" style={{ background: '#161617', border: '1px solid #2e2a1a' }}>
-          <p className="text-[10px] font-semibold tracking-wider mb-2" style={{ color: '#C9A646' }}>DEVICE PAIRING</p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-8 rounded" style={{ background: '#0e0e10', border: '1px solid #2e2a1a' }} />
-            <div className="h-8 px-4 flex items-center rounded text-xs font-bold" style={{ background: '#C9A646', color: '#0a0a0b' }}>Pair</div>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold tracking-wider" style={{ color: '#C9A646' }}>MARKET BRIDGE</p>
+            <span
+              className="inline-flex items-center h-5 w-9 rounded-full p-0.5"
+              style={{ background: '#C9A646' }}
+              aria-hidden="true"
+            >
+              <span className="h-4 w-4 rounded-full ml-auto" style={{ background: '#0a0a0b' }} />
+            </span>
           </div>
-          <p className="text-[11px] mt-2" style={{ color: '#9a9a9e' }}>Not paired. Enter a code from the web app.</p>
+          <p className="text-[11px] mt-2" style={{ color: '#9a9a9e' }}>
+            Streaming NT8 depth &amp; time-and-sales to this device.
+          </p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── A light "leader → follower" route illustration. ──────────────────────────
-function RouteIllustration() {
-  return (
-    <div className="mt-3 flex items-center gap-3">
-      <div className="flex-1 rounded-lg border border-[#C9A646]/30 bg-[#C9A646]/[0.06] px-3 py-2.5">
-        <p className="text-[10px] uppercase tracking-wider text-[#C9A646] font-semibold">Leader</p>
-        <p className="text-sm text-zinc-200 font-mono mt-0.5">Your account</p>
-      </div>
-      <ChevronRight className="h-5 w-5 text-[#C9A646] shrink-0" aria-hidden="true" />
-      <div className="flex-1 rounded-lg border border-zinc-700/60 bg-zinc-800/30 px-3 py-2.5">
-        <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Follower</p>
-        <p className="text-sm text-zinc-200 font-mono mt-0.5">Mirrors it</p>
       </div>
     </div>
   );
@@ -136,7 +69,7 @@ interface GuideStep {
   body: React.ReactNode;
 }
 
-function buildSteps(onClose: () => void): GuideStep[] {
+function buildSteps(): GuideStep[] {
   return [
     {
       title: 'Download the agent',
@@ -144,7 +77,8 @@ function buildSteps(onClose: () => void): GuideStep[] {
         <>
           <p>
             The FINOTAUR Agent is a small NinjaTrader&nbsp;8 add-on that runs on your machine and
-            mirrors your own trades between your own accounts.
+            streams your own real-time futures feed to the Trading Arena — your market-data
+            subscription never leaves your machine.
           </p>
           <a
             href="/downloads/finotaur-agent.zip"
@@ -180,8 +114,8 @@ function buildSteps(onClose: () => void): GuideStep[] {
       body: (
         <>
           <p>
-            Click <span className="text-zinc-200 font-medium">Pair a new device</span> above, then in
-            NinjaTrader open <span className="text-zinc-200 font-medium">Tools → Finotaur Agent…</span>{' '}
+            Click <span className="text-zinc-200 font-medium">Pair device</span> on this page, then
+            in NinjaTrader open <span className="text-zinc-200 font-medium">Tools → Finotaur Agent…</span>{' '}
             and enter the code.
           </p>
           <p className="mt-2 text-zinc-500 text-xs">
@@ -194,20 +128,22 @@ function buildSteps(onClose: () => void): GuideStep[] {
       ),
     },
     {
-      title: 'Create a copy route',
+      title: 'Enable the Market bridge & Connect',
       body: (
         <>
           <p>
-            Go to the{' '}
-            <Link to="../trade-copier" relative="path" onClick={onClose} className="text-[#C9A646] hover:underline font-medium">
-              Trade Copier
-            </Link>{' '}
-            tab, pick your <span className="text-zinc-200 font-medium">leader</span> and{' '}
-            <span className="text-zinc-200 font-medium">follower</span> accounts, set the ratio, and
-            save.
+            Back in <span className="text-zinc-200 font-medium">Tools → Finotaur Agent…</span>,
+            toggle the <span className="text-zinc-200 font-medium">Market bridge</span> ON.
           </p>
-          <p className="mt-2">That&apos;s it — your trades now mirror automatically.</p>
-          <RouteIllustration />
+          <MarketBridgeIllustration />
+          <p className="mt-3">
+            Then open the Arena&apos;s{' '}
+            <span className="text-zinc-200 font-medium">DOM</span>,{' '}
+            <span className="text-zinc-200 font-medium">Order Flow</span>, or{' '}
+            <span className="text-zinc-200 font-medium">Liquidity</span> tab and click{' '}
+            <span className="text-zinc-200 font-medium">Connect</span> — your live futures data
+            streams directly from this machine&apos;s browser.
+          </p>
         </>
       ),
     },
@@ -215,7 +151,7 @@ function buildSteps(onClose: () => void): GuideStep[] {
 }
 
 // ── Modal ────────────────────────────────────────────────────────────────────
-export function AgentGuideModal({
+export function MarketDataGuideModal({
   open,
   onOpenChange,
 }: {
@@ -223,7 +159,7 @@ export function AgentGuideModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const [step, setStep] = useState(0);
-  const steps = buildSteps(() => onOpenChange(false));
+  const steps = buildSteps();
   const total = steps.length;
   const current = steps[step];
   const isFirst = step === 0;
@@ -313,4 +249,4 @@ export function AgentGuideModal({
   );
 }
 
-export default AgentGuideModal;
+export default MarketDataGuideModal;

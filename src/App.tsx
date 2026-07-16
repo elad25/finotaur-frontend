@@ -28,6 +28,7 @@ import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
 import { AdminBetaGate } from "@/components/routes/AdminBetaGate";
+import { MarketDataGate } from "@/components/routes/MarketDataGate";
 
 
 import '@/scripts/migrationRunner';
@@ -338,6 +339,7 @@ const CryptoMarketScanner = lazy(() => import("@/pages/app/crypto/scanner/Market
 
 // Trading Arena — admin + beta only, full-screen workstation (Phase 0)
 const TradingArenaPage = lazy(() => import("@/pages/app/trading-arena/TradingArena"));
+const ConnectMarketDataPage = lazy(() => import("@/pages/app/trading-arena/ConnectMarketDataPage"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -653,6 +655,7 @@ function AppContent() {
           <Route path="crypto/scanner" element={<SuspenseRoute fallback={<div className="fixed inset-0 z-[100] bg-black" />}><AdminBetaGate fallback={<div className="fixed inset-0 z-[100] bg-black" />}><CryptoMarketScanner /></AdminBetaGate></SuspenseRoute>} />
 
           {/* TRADING ARENA — admin + beta only, full-screen workstation (Phase 0) */}
+          <Route path="trading-arena/connect-data" element={<SuspenseRoute><AdminBetaGate><MarketDataGate><ConnectMarketDataPage /></MarketDataGate></AdminBetaGate></SuspenseRoute>} />
           <Route path="trading-arena/:section?" element={<SuspenseRoute><AdminBetaGate><TradingArenaPage /></AdminBetaGate></SuspenseRoute>} />
 
           {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}

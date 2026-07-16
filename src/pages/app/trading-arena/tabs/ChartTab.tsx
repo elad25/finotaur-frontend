@@ -54,6 +54,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import {
@@ -203,11 +204,20 @@ function DelayedDataBadge() {
           </p>
           <ul className="list-disc space-y-1 pl-4">
             <li>
-              Connect your NinjaTrader desktop feed (DOM &amp; Footprint tabs → Connect) — your data
-              stays on your machine.
+              Connect your NinjaTrader desktop feed —{' '}
+              <Link
+                to="/app/trading-arena/connect-data"
+                className="font-semibold text-[#C9A646] underline decoration-[rgba(201,166,70,0.4)] underline-offset-2 transition-colors hover:text-[#F4D87C] hover:decoration-[#F4D87C]"
+              >
+                set it up on the Market Data page
+              </Link>{' '}
+              — your data stays on your machine.
             </li>
             <li>Make sure a live market-data subscription is active in your broker account.</li>
           </ul>
+          <p className="mt-2 text-[#707070]">
+            FINOTAUR Live Data — real-time without NinjaTrader — coming soon.
+          </p>
         </div>
       )}
     </div>
