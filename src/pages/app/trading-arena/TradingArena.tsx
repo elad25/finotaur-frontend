@@ -57,7 +57,7 @@ import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
 import { useArenaWorkspaces } from './hooks/useArenaWorkspaces';
 import { ChartStyleContext } from './components/chartStyleSettings';
-import { buildIndicatorsFromArenaSettings } from './components/indicatorsSettings';
+import { buildIndicatorsFromArenaSettings, type ArenaIndicatorEnabled, type ArenaIndicatorKey } from './components/indicatorsSettings';
 import type { Indicator } from '@/components/charting/types';
 
 // ---------------------------------------------------------------------------
@@ -137,11 +137,50 @@ export default function TradingArena() {
   // chartStyleSettings.ts's header comment for why.
   const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
   const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
+  const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
+  const [indicatorSettingsKey, setIndicatorSettingsKey] = useState<ArenaIndicatorKey | null>(null);
+  const [hiddenIndicators, setHiddenIndicators] = useState<Partial<Record<ArenaIndicatorKey, boolean>>>({});
+
+  const visibleIndicatorsEnabled = useMemo(
+    () => ({
+      ...indicatorsEnabled,
+      sma: indicatorsEnabled.sma && hiddenIndicators.sma !== true,
+      ema: indicatorsEnabled.ema && hiddenIndicators.ema !== true,
+      rsi: indicatorsEnabled.rsi && hiddenIndicators.rsi !== true,
+      vwap: indicatorsEnabled.vwap && hiddenIndicators.vwap !== true,
+      macd: indicatorsEnabled.macd && hiddenIndicators.macd !== true,
+      bbands: indicatorsEnabled.bbands && hiddenIndicators.bbands !== true,
+      atr: indicatorsEnabled.atr && hiddenIndicators.atr !== true,
+      volumeProfile: indicatorsEnabled.volumeProfile && hiddenIndicators.volumeProfile !== true,
+    }),
+    [indicatorsEnabled, hiddenIndicators],
+  );
 
   const indicators = useMemo<Indicator[]>(
-    () => buildIndicatorsFromArenaSettings(indicatorsEnabled, indicatorsParams, interval),
-    [indicatorsEnabled, indicatorsParams, interval],
+    () => buildIndicatorsFromArenaSettings(visibleIndicatorsEnabled, indicatorsParams, interval),
+    [visibleIndicatorsEnabled, indicatorsParams, interval],
   );
+
+  const handleIndicatorHiddenToggle = useCallback((key: ArenaIndicatorKey) => {
+    setHiddenIndicators((current) => ({ ...current, [key]: current[key] !== true }));
+  }, []);
+
+  const handleIndicatorRemove = useCallback((key: ArenaIndicatorKey) => {
+    updateIndicatorsEnabled({ [key]: false } as Partial<ArenaIndicatorEnabled>);
+    setHiddenIndicators((current) => ({ ...current, [key]: false }));
+    if (indicatorSettingsKey === key) setIndicatorSettingsKey(null);
+  }, [indicatorSettingsKey, updateIndicatorsEnabled]);
+
+  const handleOpenIndicatorSettings = useCallback((key: ArenaIndicatorKey) => {
+    setIndicatorSettingsKey(key);
+    setIndicatorsDialogOpen(true);
+  }, []);
+
+  const handleIndicatorsReset = useCallback(() => {
+    resetIndicators();
+    setHiddenIndicators({});
+    setIndicatorSettingsKey(null);
+  }, [resetIndicators]);
 
   // Order-flow raw-trade cache warm-up (PR 3, H4) — mounts a fire-and-forget
   // phase-1-sized backfill into flowStoreCache regardless of which tab is
@@ -320,7 +359,11 @@ export default function TradingArena() {
             indicatorsParams={indicatorsParams}
             onIndicatorsEnabledChange={updateIndicatorsEnabled}
             onIndicatorsParamsChange={updateIndicatorsParams}
-            onIndicatorsReset={resetIndicators}
+            onIndicatorsReset={handleIndicatorsReset}
+            indicatorsDialogOpen={indicatorsDialogOpen}
+            onIndicatorsDialogOpenChange={setIndicatorsDialogOpen}
+            indicatorSettingsKey={indicatorSettingsKey}
+            onIndicatorSettingsKeyChange={setIndicatorSettingsKey}
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             onChartStyleReset={resetChartStyle}
@@ -353,7 +396,13 @@ export default function TradingArena() {
               interval={interval}
               assetClass={assetClass}
               indicators={indicators}
-              volumeProfileEnabled={indicatorsEnabled.volumeProfile}
+              indicatorsEnabled={indicatorsEnabled}
+              indicatorsHidden={hiddenIndicators}
+              indicatorsParams={indicatorsParams}
+              onIndicatorHiddenToggle={handleIndicatorHiddenToggle}
+              onIndicatorSettingsOpen={handleOpenIndicatorSettings}
+              onIndicatorRemove={handleIndicatorRemove}
+              volumeProfileEnabled={visibleIndicatorsEnabled.volumeProfile}
               onOpenSettings={() => setChartSettingsDialogOpen(true)}
             />
           )}

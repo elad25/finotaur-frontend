@@ -39,6 +39,79 @@ export interface ArenaIndicatorEnabled extends IndicatorSettings {
   volumeProfile: boolean;
 }
 
+export type ArenaIndicatorKey = keyof ArenaIndicatorEnabled;
+
+export interface ArenaIndicatorDefinition {
+  key: ArenaIndicatorKey;
+  label: string;
+  shortLabel: string;
+  description: string;
+  section: 'overlays' | 'panes';
+}
+
+export const ARENA_INDICATOR_DEFINITIONS: ArenaIndicatorDefinition[] = [
+  {
+    key: 'vwap',
+    label: 'VWAP (Session)',
+    shortLabel: 'VWAP',
+    description: 'Cumulative volume-weighted average price, resets every session.',
+    section: 'overlays',
+  },
+  {
+    key: 'ema',
+    label: 'EMA',
+    shortLabel: 'EMA',
+    description: 'Exponential moving average - weights recent bars more heavily than older ones.',
+    section: 'overlays',
+  },
+  {
+    key: 'sma',
+    label: 'SMA',
+    shortLabel: 'SMA',
+    description: 'Simple moving average - arithmetic mean of closing price over the window.',
+    section: 'overlays',
+  },
+  {
+    key: 'bbands',
+    label: 'Bollinger Bands',
+    shortLabel: 'BB',
+    description: 'Volatility bands - a moving average plus/minus a standard-deviation multiplier.',
+    section: 'overlays',
+  },
+  {
+    key: 'volumeProfile',
+    label: 'Volume Profile (Session)',
+    shortLabel: 'VP',
+    description: 'Horizontal histogram of traded volume by price, for the current session.',
+    section: 'overlays',
+  },
+  {
+    key: 'rsi',
+    label: 'RSI',
+    shortLabel: 'RSI',
+    description: 'Momentum oscillator (0-100); reference lines at 70/30 mark overbought/oversold.',
+    section: 'panes',
+  },
+  {
+    key: 'macd',
+    label: 'MACD',
+    shortLabel: 'MACD',
+    description: 'Trend-following momentum via two EMAs and a signal line, with a histogram.',
+    section: 'panes',
+  },
+  {
+    key: 'atr',
+    label: 'ATR',
+    shortLabel: 'ATR',
+    description: 'Average True Range - volatility measured in price, not percent.',
+    section: 'panes',
+  },
+];
+
+export function getArenaIndicatorDefinition(key: ArenaIndicatorKey): ArenaIndicatorDefinition {
+  return ARENA_INDICATOR_DEFINITIONS.find((definition) => definition.key === key)!;
+}
+
 /** Session Volume Profile defaults ON (matches the prior chartStyle.volumeProfile.enabled default). */
 export const ARENA_INDICATOR_ENABLED_DEFAULTS: ArenaIndicatorEnabled = {
   ...INDICATOR_DEFAULTS,

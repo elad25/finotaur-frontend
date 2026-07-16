@@ -69,6 +69,7 @@ import { AggregatingSource } from '@/components/charting/dataSources/Aggregating
 import type { ChartDataSource, Indicator, Interval } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { PaperTradeRail } from '../components/PaperTradeRail';
+import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
   resolveIntervalPlan,
   intervalToSeconds,
@@ -82,6 +83,7 @@ import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTick
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { footprintSettingsToConfig, DEFAULT_FOOTPRINT_SETTINGS } from '../components/footprintSettings';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
+import type { ArenaIndicatorEnabled, ArenaIndicatorKey, ArenaIndicatorParams } from '../components/indicatorsSettings';
 
 interface ChartTabProps {
   symbol: string;
@@ -90,6 +92,12 @@ interface ChartTabProps {
   assetClass: string;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
+  indicatorsEnabled: ArenaIndicatorEnabled;
+  indicatorsHidden: Partial<Record<ArenaIndicatorKey, boolean>>;
+  indicatorsParams: ArenaIndicatorParams;
+  onIndicatorHiddenToggle: (key: ArenaIndicatorKey) => void;
+  onIndicatorSettingsOpen: (key: ArenaIndicatorKey) => void;
+  onIndicatorRemove: (key: ArenaIndicatorKey) => void;
   /**
    * Session Volume Profile is now modeled as an "indicator" toggle (see
    * indicatorsSettings.ts's ArenaIndicatorEnabled.volumeProfile), edited
@@ -206,7 +214,20 @@ function DelayedDataBadge() {
   );
 }
 
-export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfileEnabled, onOpenSettings }: ChartTabProps) {
+export function ChartTab({
+  symbol,
+  interval,
+  assetClass,
+  indicators,
+  indicatorsEnabled,
+  indicatorsHidden,
+  indicatorsParams,
+  onIndicatorHiddenToggle,
+  onIndicatorSettingsOpen,
+  onIndicatorRemove,
+  volumeProfileEnabled,
+  onOpenSettings,
+}: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
 
   const isCrypto = assetClass === 'crypto';
@@ -374,6 +395,15 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
       <div className="relative flex flex-1 min-w-0 flex-col">
         <div className="relative flex-1 min-h-0">
           {!isCrypto && <DelayedDataBadge />}
+          <ActiveIndicatorsLegend
+            enabled={indicatorsEnabled}
+            hidden={indicatorsHidden}
+            params={indicatorsParams}
+            chartStyle={chartStyle}
+            onToggleHidden={onIndicatorHiddenToggle}
+            onOpenSettings={onIndicatorSettingsOpen}
+            onRemove={onIndicatorRemove}
+          />
           {footprintOnZoomActive ? (
             <ChartTabFootprintOnZoomBody
               chartSymbol={chartSymbol}

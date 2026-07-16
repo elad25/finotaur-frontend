@@ -43,7 +43,6 @@
  * Escape behavior) — no shared `openMenu` state machine needed.
  */
 
-import { useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TabId } from '../types';
@@ -52,7 +51,7 @@ import { TimeframeMenu } from './TimeframeMenu';
 import { ChartSettingsDialog } from './ChartSettingsDialog';
 import { IndicatorsDialog } from './IndicatorsDialog';
 import { isIntradayInterval } from '@/components/charting/indicators';
-import { countActiveIndicators, type ArenaIndicatorEnabled, type ArenaIndicatorParams } from './indicatorsSettings';
+import { countActiveIndicators, type ArenaIndicatorEnabled, type ArenaIndicatorKey, type ArenaIndicatorParams } from './indicatorsSettings';
 import type { ChartStyleSettings } from './chartStyleSettings';
 
 interface ArenaToolbarProps {
@@ -68,6 +67,10 @@ interface ArenaToolbarProps {
   onIndicatorsEnabledChange: (patch: Partial<ArenaIndicatorEnabled>) => void;
   onIndicatorsParamsChange: <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => void;
   onIndicatorsReset: () => void;
+  indicatorsDialogOpen: boolean;
+  onIndicatorsDialogOpenChange: (open: boolean) => void;
+  indicatorSettingsKey: ArenaIndicatorKey | null;
+  onIndicatorSettingsKeyChange: (key: ArenaIndicatorKey | null) => void;
   /** Current chart style settings (Chart ▾ menu) — single source of truth lives in TradingArena.tsx. */
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
@@ -88,6 +91,10 @@ export function ArenaToolbar({
   onIndicatorsEnabledChange,
   onIndicatorsParamsChange,
   onIndicatorsReset,
+  indicatorsDialogOpen,
+  onIndicatorsDialogOpenChange,
+  indicatorSettingsKey,
+  onIndicatorSettingsKeyChange,
   chartStyle,
   onChartStyleChange,
   onChartStyleReset,
@@ -95,8 +102,6 @@ export function ArenaToolbar({
   onChartSettingsDialogOpenChange,
   assetClass,
 }: ArenaToolbarProps) {
-  const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
-
   // Indicators (N) only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
 
@@ -163,7 +168,10 @@ export function ArenaToolbar({
           {/* Indicators (N) — opens the Indicators POPUP (full settings dialog). */}
           <button
             type="button"
-            onClick={() => setIndicatorsDialogOpen(true)}
+            onClick={() => {
+              onIndicatorSettingsKeyChange(null);
+              onIndicatorsDialogOpenChange(true);
+            }}
             aria-haspopup="dialog"
             aria-expanded={indicatorsDialogOpen}
             className={cn(
@@ -177,12 +185,14 @@ export function ArenaToolbar({
           </button>
           <IndicatorsDialog
             open={indicatorsDialogOpen}
-            onOpenChange={setIndicatorsDialogOpen}
+            onOpenChange={onIndicatorsDialogOpenChange}
             enabled={indicatorsEnabled}
             params={indicatorsParams}
             onUpdateEnabled={onIndicatorsEnabledChange}
             onUpdateParams={onIndicatorsParamsChange}
             onReset={onIndicatorsReset}
+            settingsKey={indicatorSettingsKey}
+            onSettingsKeyChange={onIndicatorSettingsKeyChange}
             intraday={intraday}
             chartStyle={chartStyle}
             onChartStyleChange={onChartStyleChange}
