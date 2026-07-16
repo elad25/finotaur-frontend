@@ -15,10 +15,12 @@ npm ci                                       # only if dependencies changed
 npm run deploy:prod                          # validates Supabase key, builds, deploys dist/
 ```
 
-Do not deploy with a hand-built `dist/` unless `npm run predeploy:check` has
-passed in the same shell. The check calls Supabase with the configured
-publishable key and blocks the exact failure mode where a stale local
-`.env.local` creates a production bundle that receives `Unregistered API key`.
+Do not deploy with a hand-built `dist/` or call `wrangler pages deploy dist`
+directly. `npm run deploy:prod` is the only supported path: it validates the
+configured Supabase key before build, then `npm run build` validates the
+already-built bundle before upload. This blocks the exact failure mode where a
+stale local `.env.local` creates a production bundle that receives
+`Unregistered API key`.
 
 After deploy, smoke-verify:
 
@@ -64,8 +66,9 @@ to production for hours. See `## Verifying a deploy` for the check.
   Pages project. Only Elad has this today.
 - **Node version** — pinned to 20 in CI. Local: `node -v` should be ≥20.10.
 - **Vite env** — `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are
-  inlined at build time. CI uses dummy values (build-only); production uses
-  the real values from Elad's local `.env.local`.
+  inlined at build time. Production direct uploads use the real values from
+  Elad's local `.env.local`; Cloudflare/Git builds use the matching encrypted
+  Pages secrets. Keep both in sync with the active Supabase publishable key.
 
 ---
 

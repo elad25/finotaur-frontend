@@ -41,17 +41,24 @@ if (publishableKeys.size !== 1) {
 const supabaseUrl = [...supabaseUrls][0];
 const publishableKey = [...publishableKeys][0];
 
-const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-  headers: {
-    apikey: publishableKey,
-    Authorization: `Bearer ${publishableKey}`,
-  },
-});
+let response;
+try {
+  response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: publishableKey,
+      Authorization: `Bearer ${publishableKey}`,
+    },
+  });
+} catch (error) {
+  fail(`Could not reach Supabase to validate the built production bundle: ${error.message}`);
+}
 
 const body = await response.text();
 const lowerBody = body.toLowerCase();
+const errorCode = response.headers.get('sb-error-code')?.toLowerCase() ?? '';
 
 if (
+  errorCode.includes('unregistered_api_key') ||
   lowerBody.includes('unregistered api key') ||
   lowerBody.includes('legacy api keys are disabled') ||
   lowerBody.includes('invalid api key')

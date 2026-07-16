@@ -57,17 +57,24 @@ try {
   fail('VITE_SUPABASE_URL is not a valid URL.');
 }
 
-const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-  headers: {
-    apikey: supabaseAnonKey,
-    Authorization: `Bearer ${supabaseAnonKey}`,
-  },
-});
+let response;
+try {
+  response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
+  });
+} catch (error) {
+  fail(`Could not reach Supabase to validate VITE_SUPABASE_ANON_KEY: ${error.message}`);
+}
 
 const body = await response.text();
 const lowerBody = body.toLowerCase();
+const errorCode = response.headers.get('sb-error-code')?.toLowerCase() ?? '';
 
 if (
+  errorCode.includes('unregistered_api_key') ||
   lowerBody.includes('unregistered api key') ||
   lowerBody.includes('legacy api keys are disabled') ||
   lowerBody.includes('invalid api key')
