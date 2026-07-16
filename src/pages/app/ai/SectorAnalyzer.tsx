@@ -33,7 +33,6 @@ import { sectorMetadata, defaultBreakoutCandidate } from '@/components/SectorAna
 import { Sector, TabType, SentimentType } from '@/components/SectorAnalyzer/types';
 import { useAllSectorAnalysis, useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
@@ -223,9 +222,6 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
       </p>
       {/* Market-status badge — moved here (swapped with the Fino Explains panel).
           Renders only when the US market is closed; centered under the subtitle. */}
-      <div className="mt-ds-3 flex justify-center">
-        <MarketStatusBadge className="relative top-auto right-auto" />
-      </div>
     </motion.div>
 
     {/* Subtitle */}

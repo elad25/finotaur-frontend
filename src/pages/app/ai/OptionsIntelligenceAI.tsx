@@ -9,7 +9,6 @@ import { AiOptionsIntelligenceSkeletonPage } from '@/components/skeletons/AiOpti
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { MethodologyFooter } from '@/features/options-ai/components/MethodologyFooter';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -75,9 +74,6 @@ function OptionsIntelligenceContent() {
             <span className="text-ink-primary">Intelligence</span>
           </h1>
           {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
-          <div className="mt-ds-3 flex justify-center">
-            <MarketStatusBadge className="relative top-auto right-auto" />
-          </div>
           {/* License note — shown for paying non-admin users whose spot prices are stripped */}
           {data && data.licensed === false && (
             <p className="mt-1 text-xs text-ink-tertiary/70">

@@ -23,7 +23,7 @@ const STATUS_ICON: Record<MarketStatus, typeof Lock> = {
   'closed-weekend': Lock,
   'closed-holiday': Lock,
   'closed-after-hours': Clock,
-  'closed-pre-market': Clock,
+  'closed-pre-market': Lock,
 };
 
 export function MarketStatusBadge({ hideWhenOpen = true, className }: MarketStatusBadgeProps = {}) {
@@ -35,7 +35,7 @@ export function MarketStatusBadge({ hideWhenOpen = true, className }: MarketStat
     status.status === 'closed-weekend' ? 'Markets Closed — Weekend' :
     status.status === 'closed-holiday' ? `Markets Closed — ${status.holidayName ?? 'Holiday'}` :
     status.status === 'closed-after-hours' ? 'After Hours' :
-    status.status === 'closed-pre-market' ? 'Pre-Market' :
+    status.status === 'closed-pre-market' ? 'Markets Closed' :
     'Markets Open';
 
   return (
