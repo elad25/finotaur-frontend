@@ -19,7 +19,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import {
   BarChart3, Activity, FileText, Banknote, Globe, Brain, ShieldCheck, Crosshair, Zap
 } from 'lucide-react';
@@ -313,9 +312,6 @@ export default function MacroAnalyzer() {
               AI-powered economic intelligence & market regime analysis
             </p>
             {/* Market-status badge — centered under the subtitle (Fino Explains moved top-right) */}
-            <div className="mt-ds-3 flex justify-center">
-              <MarketStatusBadge className="relative top-auto right-auto" />
-            </div>
           </div>
 
           <div className="relative mx-auto mb-8 grid w-full max-w-[820px] grid-cols-1 overflow-hidden rounded-lg border border-white/[0.065] bg-black/24 shadow-[0_18px_54px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:grid-cols-3">

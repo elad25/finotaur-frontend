@@ -610,7 +610,7 @@ const statusHeadline = (status: MarketStatusResult): string => {
   switch (status.status) {
     case 'open': return 'Market Open';
     case 'closed-after-hours': return 'After Hours';
-    case 'closed-pre-market': return 'Pre-Market';
+    case 'closed-pre-market': return 'Markets Closed';
     case 'closed-weekend': return 'Closed — Weekend';
     case 'closed-holiday': return `Closed — ${status.holidayName ?? 'Holiday'}`;
   }

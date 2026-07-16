@@ -10,7 +10,6 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { cn } from '@/lib/utils';
 import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
@@ -119,18 +118,6 @@ export const ProtectedAppLayout = () => {
   // when US equities are closed. Auto-hides during regular session.
   // These AI Arena pages render their own market-status badge inside the page
   // header (swapped with the Fino Explains panel), so suppress the global fixed one.
-  const selfBadgeAiRoutes = [
-    '/app/ai/stock-analyzer',
-    '/app/ai/sector-analyzer',
-    '/app/ai/macro-analyzer',
-    '/app/ai/options-intelligence',
-    '/app/ai/flow-scanner',
-    '/app/ai/top-5',
-  ];
-  const showMarketStatus =
-    location.pathname.startsWith('/app/ai/') &&
-    !selfBadgeAiRoutes.some((r) => location.pathname.startsWith(r));
-
   // Journal pages manage their own page container (max-w + px) — adding the
   // global sidebar gap there would double-pad them.
   const isJournalRoute = location.pathname.startsWith('/app/journal');
@@ -168,7 +155,6 @@ export const ProtectedAppLayout = () => {
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col" style={shellStyle}>
         <ImpersonationBanner />
         <MentorViewBanner />
-        {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
         {!hideSubNav && <SubNav />}
         {/* Product Drawer — rendered at layout level so it overlays everything */}

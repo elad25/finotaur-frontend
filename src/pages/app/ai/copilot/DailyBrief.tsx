@@ -50,7 +50,6 @@ import { useDailyBrief } from '@/pages/app/ai/copilot/hooks/useDailyBrief';
 import { useSynthesisBrief } from '@/pages/app/ai/copilot/hooks/useSynthesisBrief';
 import { usePortfolioData } from '@/pages/app/ai/copilot/hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { Change, Price } from '@/components/ds/NumberDisplay';
 import type { BriefData } from '@/pages/app/ai/copilot/utils/buildBriefModules';
 import type { Opportunity } from '@/pages/app/ai/copilot/utils/opportunityMapper';
@@ -427,10 +426,6 @@ function BriefHeader({
 
       {/* Right — market status badge (inline, not fixed) + expand control */}
       <div className="flex flex-wrap items-center gap-ds-3">
-        <MarketStatusBadge
-          hideWhenOpen={false}
-          className="relative top-auto right-auto static"
-        />
         <button
           type="button"
           onClick={allOpen ? onCollapseAll : onExpandAll}

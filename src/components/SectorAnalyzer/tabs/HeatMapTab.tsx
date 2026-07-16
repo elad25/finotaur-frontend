@@ -11,7 +11,7 @@
 // =====================================================
 //
 // DATA REFRESH SCHEDULE (4x daily, US Eastern):
-//   1. 08:30 AM ET — Pre-Market    (1hr before open)
+//   1. 08:30 AM ET — Before Open   (1hr before open)
 //   2. 10:30 AM ET — Mid-Morning   (1hr into trading)
 //   3. 12:00 PM ET — Midday        (noon snapshot)
 //   4. 04:30 PM ET — Post-Close    (after market close)
@@ -115,8 +115,8 @@ function getMarketSession(): { isOpen: boolean; slot: UpdateSlot; label: string;
   if (day === 0 || day === 6) {
     return { isOpen: false, slot: 'POST_CLOSE', label: 'Weekend', nextRefresh: 'Monday 8:30 AM ET' };
   }
-  if (t < 510) return { isOpen: false, slot: 'POST_CLOSE', label: 'Pre-Market', nextRefresh: '8:30 AM ET' };
-  if (t < 570) return { isOpen: false, slot: 'PRE_MARKET', label: 'Pre-Market', nextRefresh: '10:30 AM ET' };
+  if (t < 510) return { isOpen: false, slot: 'POST_CLOSE', label: 'Market Closed', nextRefresh: '8:30 AM ET' };
+  if (t < 570) return { isOpen: false, slot: 'PRE_MARKET', label: 'Market Closed', nextRefresh: '10:30 AM ET' };
   if (t < 690) return { isOpen: true, slot: 'MID_MORNING', label: 'Morning', nextRefresh: '12:00 PM ET' };
   if (t < 960) return { isOpen: true, slot: 'MIDDAY', label: 'Afternoon', nextRefresh: '4:30 PM ET' };
   if (t < 990) return { isOpen: true, slot: 'MIDDAY', label: 'Closing', nextRefresh: '4:30 PM ET' };
@@ -299,7 +299,7 @@ const DataStatusBar = memo<{ lastUpdated: string; slot: UpdateSlot; nextRefresh:
   ({ lastUpdated, slot, nextRefresh }) => {
     const session = getMarketSession();
     const slotLabels: Record<UpdateSlot, string> = {
-      PRE_MARKET: 'Pre-Market',
+      PRE_MARKET: 'Before Open',
       MID_MORNING: 'Mid-Morning',
       MIDDAY: 'Midday',
       POST_CLOSE: 'Post-Close',

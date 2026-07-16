@@ -19,7 +19,6 @@ import { LoadingSkeleton, Skeleton } from './shared/Ui';
 import { QuickStats, TabNav } from './components/StatsAndNav';
 import { SignalFeedSection } from './components/SignalFeedSection';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 import { FlowDrawer } from './tabs/AllFlowTab';
@@ -128,9 +127,6 @@ const FlowScannerContent = memo(function FlowScannerContent() {
             <span className="text-ink-primary">Scanner</span>
           </h1>
           {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
-          <div className="mt-ds-3 flex justify-center">
-            <MarketStatusBadge className="relative top-auto right-auto" />
-          </div>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">
             Dark pool prints · Insider trades · Institutional moves · Confluence alerts

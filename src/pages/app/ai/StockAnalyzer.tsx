@@ -22,7 +22,6 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 import { AIArenaShell } from '@/components/ai-arena';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
 import { StockLoadingSkeleton } from '@/components/stock-analyzer/StockLoadingSkeleton';
 import { TabNav } from '@/components/stock-analyzer/TabNav';
@@ -180,12 +179,6 @@ export default function StockAnalyzer() {
       constructionMarkers={false}
     >
       {/* Market-status badge — centered under the hero, visible when market is closed */}
-      {!stockData && (
-        <div className="mt-ds-3 flex justify-center">
-          <MarketStatusBadge className="relative top-auto right-auto" />
-        </div>
-      )}
-
       {/* Usage badge */}
       {stockData && (
         <motion.div

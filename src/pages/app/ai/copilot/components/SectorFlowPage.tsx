@@ -3,7 +3,6 @@
 // not broad sectors. File name kept as SectorFlowPage for diff minimality.
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { useSectorFlowSnapshot, useSectorFlowBriefing } from '../hooks/useSectorFlow';
 import { SectorFlowHeatmap } from './SectorFlowHeatmap';
 import { SharpestMoversPanel } from './SharpestMoversPanel';
@@ -24,9 +23,6 @@ function SectorFlowPageInner() {
           <p className="text-ink-secondary text-sm mt-ds-2 max-w-2xl">
             Industry-level capital rotation. We track <span className="text-ink-primary">Semiconductors, Cybersecurity, Solar, Biotech, Oil Services</span> — not broad sectors. Score = relative strength · volume z-score · price change.
           </p>
-        </div>
-        <div className="md:self-start">
-          <MarketStatusBadge className="relative top-auto right-auto" />
         </div>
       </header>
 

@@ -40,7 +40,6 @@ import type { ScanResult, CatalystResult, CatalystPick, AnalystAction, Spillover
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 
 // Lazy load admin tracker (only loaded when admin toggles ON)
 const AdminTrackerView = lazy(() => import('./AdminTrackerView'));
@@ -1675,9 +1674,6 @@ function Top5Content() {
             <span style={{ background: GOLD.gradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: `drop-shadow(0 0 20px ${GOLD.dim}0.3))` }}>Intelligence Desk</span>
           </h1>
           {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
-          <div className="mt-ds-3 flex justify-center">
-            <MarketStatusBadge className="relative top-auto right-auto" />
-          </div>
           <p className="text-[14px] tracking-wide" style={{ color: '#8A8A8A' }}>
             {adminModeEnabled ? 'Admin Tracker · Recommendation performance monitoring'
               : isLoading ? 'Loading latest analysis...' : totalPicks > 0

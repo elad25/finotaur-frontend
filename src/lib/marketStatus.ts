@@ -233,7 +233,7 @@ export function getMarketStatus(now: Date = new Date()): MarketStatusResult {
     status = 'closed-pre-market';
     const prev = previousTradingDay(et.year, et.month, et.day);
     lastY = prev.year; lastM = prev.month; lastD = prev.day; lastW = prev.weekday;
-    reason = 'Pre-market (opens 9:30 AM ET)';
+    reason = 'Market closed before the regular session';
   } else if (minOfDay >= closeMin) {
     status = 'closed-after-hours';
     lastY = et.year; lastM = et.month; lastD = et.day; lastW = et.weekday;
