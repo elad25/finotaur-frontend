@@ -207,7 +207,7 @@ export const DEFAULT_CHART_STYLE: ChartStyleSettings = {
   pricePrecision: 'default',
 
   volumeProfile: DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS,
-  footprintOnZoom: false,
+  footprintOnZoom: true,
 };
 
 // ═══════════════════════════════════════════════════════════════

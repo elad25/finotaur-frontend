@@ -43,7 +43,7 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { toTabId } from './types';
 import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
-import { FootprintChart } from './components/FootprintChart';
+import { ChartTab }    from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { DomTab }        from './tabs/DomTab';
@@ -136,6 +136,7 @@ export default function TradingArena() {
   // below, around <main>) instead of prop threading — see
   // chartStyleSettings.ts's header comment for why.
   const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
+  const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
 
   const indicators = useMemo<Indicator[]>(
     () => buildIndicatorsFromArenaSettings(indicatorsEnabled, indicatorsParams, interval),
@@ -323,6 +324,8 @@ export default function TradingArena() {
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             onChartStyleReset={resetChartStyle}
+            chartSettingsDialogOpen={chartSettingsDialogOpen}
+            onChartSettingsDialogOpenChange={setChartSettingsDialogOpen}
             assetClass={assetClass}
           />
         </div>
@@ -345,7 +348,14 @@ export default function TradingArena() {
       <ChartStyleContext.Provider value={chartStyle}>
         <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
           {activeTab === 'chart' && (
-            <FootprintChart symbol={symbol} interval={interval} />
+            <ChartTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
+              indicators={indicators}
+              volumeProfileEnabled={indicatorsEnabled.volumeProfile}
+              onOpenSettings={() => setChartSettingsDialogOpen(true)}
+            />
           )}
           {activeTab === 'order-flow' && (
             <FootprintTab

@@ -73,6 +73,8 @@ interface ArenaToolbarProps {
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
   onChartStyleReset: () => void;
   /** Current asset class — passed straight through to ChartSettingsDialog (gates the footprint auto-transform toggle). */
+  chartSettingsDialogOpen: boolean;
+  onChartSettingsDialogOpenChange: (open: boolean) => void;
   assetClass: string;
 }
 
@@ -89,10 +91,11 @@ export function ArenaToolbar({
   chartStyle,
   onChartStyleChange,
   onChartStyleReset,
+  chartSettingsDialogOpen,
+  onChartSettingsDialogOpenChange,
   assetClass,
 }: ArenaToolbarProps) {
   const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
-  const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
 
   // Indicators (N) only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
@@ -127,7 +130,7 @@ export function ArenaToolbar({
           which is chart-tab only. */}
       <button
         type="button"
-        onClick={() => setChartSettingsDialogOpen(true)}
+        onClick={() => onChartSettingsDialogOpenChange(true)}
         aria-label="Chart settings"
         aria-haspopup="dialog"
         aria-expanded={chartSettingsDialogOpen}
@@ -142,7 +145,7 @@ export function ArenaToolbar({
       </button>
       <ChartSettingsDialog
         open={chartSettingsDialogOpen}
-        onOpenChange={setChartSettingsDialogOpen}
+        onOpenChange={onChartSettingsDialogOpenChange}
         settings={chartStyle}
         onChange={onChartStyleChange}
         onReset={onChartStyleReset}

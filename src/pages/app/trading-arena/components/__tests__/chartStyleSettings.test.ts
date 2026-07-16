@@ -45,7 +45,7 @@ describe('DEFAULT_CHART_STYLE', () => {
 
     // Session Volume Profile + footprint-on-zoom (S1 "Arena WOW week")
     expect(DEFAULT_CHART_STYLE.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
-    expect(DEFAULT_CHART_STYLE.footprintOnZoom).toBe(false);
+    expect(DEFAULT_CHART_STYLE.footprintOnZoom).toBe(true);
   });
 
   it('candle default is exactly the "classic" preset', () => {
@@ -152,7 +152,7 @@ describe('sanitizeChartStyleSettings', () => {
   it('degrades a corrupt/foreign nested volumeProfile object to defaults instead of throwing', () => {
     const result = sanitizeChartStyleSettings({ volumeProfile: 'not-an-object', footprintOnZoom: 'yes' });
     expect(result.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
-    expect(result.footprintOnZoom).toBe(false);
+    expect(result.footprintOnZoom).toBe(true);
   });
 });
 

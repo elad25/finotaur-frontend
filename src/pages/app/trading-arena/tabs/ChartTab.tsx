@@ -31,7 +31,8 @@
  *
  * This tab is intentionally a PLAIN chart (2026-07 restructure) — no order
  * flow / footprint overlay, no CVD/Delta sub-panes, no depth-matrix heatmap,
- * EXCEPT for two opt-in S1 "Arena WOW week" additions (both default OFF /
+ * EXCEPT for two S1 "Arena WOW week" additions (Volume Profile default ON,
+ * footprint-on-zoom default ON but only visible after zoom-in /
  * safe no-ops unless the user turns them on via Chart ▾ → Chart Settings):
  *
  *  1. Session Volume Profile (ATAS-style, multi-session, OHLCV-bar-derived —
@@ -97,6 +98,7 @@ interface ChartTabProps {
    * still exists on ChartStyleSettings but is no longer read for visibility.
    */
   volumeProfileEnabled: boolean;
+  onOpenSettings?: () => void;
 }
 
 // Rolling 24-hour window for the chart (from = now − 24h, to = now).
@@ -204,7 +206,7 @@ function DelayedDataBadge() {
   );
 }
 
-export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfileEnabled }: ChartTabProps) {
+export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfileEnabled, onOpenSettings }: ChartTabProps) {
   const { from, to } = useMemo(nowWindow, [symbol, interval]);
 
   const isCrypto = assetClass === 'crypto';
@@ -366,7 +368,7 @@ export function ChartTab({ symbol, interval, assetClass, indicators, volumeProfi
   }, [isDraggingRail]);
 
   return (
-    <div className="flex flex-1 min-h-0 w-full">
+    <div className="flex flex-1 min-h-0 w-full" onDoubleClick={onOpenSettings}>
       {/* Chart pane */}
       <div className="relative flex flex-1 min-w-0 flex-col">
         <div className="relative flex-1 min-h-0">
