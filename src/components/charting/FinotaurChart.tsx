@@ -153,6 +153,10 @@ function pickTheme(mode: ChartTheme) {
   return mode === 'light' ? FINOTAUR_LIGHT_THEME : FINOTAUR_DARK_THEME;
 }
 
+// Free cursor mode: do not snap the mouse crosshair to nearby candle OHLC
+// values. Footprint reading needs the crosshair to follow the pointer exactly.
+const FREE_CROSSHAIR_MODE = CrosshairMode.Normal;
+
 // ═══════════════════════════════════════════════════════════════
 // Indicator palette
 // ═══════════════════════════════════════════════════════════════
@@ -447,7 +451,7 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
       rightOffset: 6,
     },
     crosshair: {
-      mode: CrosshairMode.Normal,
+      mode: FREE_CROSSHAIR_MODE,
       vertLine: {
         color: t.crosshair,
         width: 1,
@@ -983,6 +987,7 @@ export function FinotaurChart({
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
     });
+    chart.applyOptions({ crosshair: { mode: FREE_CROSSHAIR_MODE } });
 
     const t = pickTheme(theme);
     const series = chart.addCandlestickSeries({
