@@ -32,6 +32,8 @@ import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
 import { type ShareableTrade } from "@/features/floor/components/ShareTradeDialog";
 import { ShareTradeActions } from "@/features/floor/components/ShareTradeActions";
+import { ShareDayPnlDialog } from "@/features/floor/components/ShareDayPnlDialog";
+import type { DayPnlCardData } from "@/features/floor/components/DayPnlCard";
 import { isManualTrade } from "@/lib/trades/isManualTrade";
 import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
@@ -47,7 +49,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain, Send, Share2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -1335,6 +1337,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(() => new Set());
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareTodayOpen, setShareTodayOpen] = useState(false);
   const [isSettingR, setIsSettingR] = useState(false);
   const [stopInput, setStopInput] = useState('');
   const [savingR, setSavingR] = useState(false);
@@ -1402,6 +1405,24 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
     } : null,
     [selectedTrade],
   );
+
+  // ── Share Today P&L — aggregate of today's trades (same day-key + P&L rules
+  // as the Day summary view: grouped by open_at in the user's timezone).
+  const todayPnlData: DayPnlCardData = useMemo(() => {
+    const todayKey = getTradeDayKey(new Date().toISOString(), timezone);
+    const todayTrades = trades.filter(
+      (trade) => getTradeDayKey(trade.open_at, timezone) === todayKey,
+    );
+    const [summary] = buildTradeSummaries(todayTrades, oneR, timezone, "day");
+    return {
+      dateLabel: formatDayLabel(new Date().toISOString(), timezone),
+      netPnl: summary?.netPnl ?? 0,
+      closedTrades: summary?.closedTrades ?? 0,
+      winners: summary?.winners ?? 0,
+      losers: summary?.losers ?? 0,
+      winRate: summary?.winRate ?? 0,
+    };
+  }, [trades, oneR, timezone]);
 
   // ✅ 3. useEffect
 
@@ -2065,11 +2086,11 @@ const stats = useMemo<Stats>(() => {
             </TooltipProvider>
             {!effectiveReadOnly && (
               <Button
-                onClick={() => navigate("/app/journal/new")}
+                onClick={() => setShareTodayOpen(true)}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Trade
+                <Share2 className="w-4 h-4 mr-2" />
+                Share Today PnL
               </Button>
             )}
           </div>
@@ -3244,6 +3265,11 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
           'chart' tab block) so switching tabs doesn't unmount it. */}
       {shareableTrade && (
         <ShareTradeActions trade={shareableTrade} open={shareOpen} onOpenChange={setShareOpen} />
+      )}
+
+      {/* Share Today P&L — branded day-summary card export */}
+      {shareTodayOpen && (
+        <ShareDayPnlDialog data={todayPnlData} open={shareTodayOpen} onOpenChange={setShareTodayOpen} />
       )}
 
       {/* Delete Dialog */}
