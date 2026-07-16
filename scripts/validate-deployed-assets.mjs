@@ -15,10 +15,10 @@ async function fetchText(url) {
   const response = await fetch(url, { cache: 'no-store' });
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw new Error(`${url} -> ${response.status} ${response.statusText}`);
   }
   if (contentType.includes('text/html') && /\/assets\//.test(url)) {
-    throw new Error(`asset returned HTML (${contentType})`);
+    throw new Error(`${url} -> asset returned HTML (${contentType})`);
   }
   return response.text();
 }
