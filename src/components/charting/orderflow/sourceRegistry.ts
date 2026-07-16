@@ -27,9 +27,11 @@ export interface ResolvedTradeSource {
 /**
  * Resolves the live trade source + tick size for an instrument, by asset
  * class. Returns null when no live feed exists for the class (stock, forex)
- * or the caller isn't authorized (futures is admin-only — see
- * FuturesChartTab.tsx / FootprintTab.tsx's compliance note: the Databento
- * futures preview is never customer-facing).
+ * or the caller isn't authorized (futures without a live NT8 bridge is
+ * gated to admins and paid-tier users — see FuturesChartTab.tsx /
+ * FootprintTab.tsx's compliance note: the Databento futures path is a
+ * delayed historical "Session Review" surface, customer-facing for paid
+ * tiers, still NEVER Tradovate market data, still delayed-only).
  *
  * `symbol` convention deliberately differs by asset class, matching what
  * each caller already holds locally (avoids a redundant resolution step
@@ -50,14 +52,20 @@ export interface ResolvedTradeSource {
  *
  * `opts.nt8Connected` — true when the caller has a LIVE NT8 desktop-agent
  * bridge connection (see nt8Bridge.ts). Available to ALL users (not
- * admin-gated, unlike the Databento preview below) and takes priority: a
+ * admin-gated, unlike the Databento path below) and takes priority: a
  * connected NT8 bridge is real live data from the user's own NinjaTrader,
- * whereas Databento is an admin-only delayed dev preview.
+ * whereas Databento is a delayed historical review surface.
+ *
+ * `opts.paidTier` — true when the caller has market-data entitlement per
+ * `useMarketDataEntitled()` (marketDataEntitlement.ts — the same rule
+ * MarketDataGate.tsx enforces at the route level). Unlocks the Databento
+ * "Session Review" path for paying customers, mirroring the existing
+ * admin-only dev-preview gate rather than replacing it.
  */
 export function resolveTradeSource(
   assetClass: 'crypto' | 'futures' | 'stock' | 'forex',
   symbol: string,
-  opts: { isAdmin: boolean; nt8Connected?: boolean },
+  opts: { isAdmin: boolean; nt8Connected?: boolean; paidTier?: boolean },
 ): ResolvedTradeSource | null {
   if (assetClass === 'crypto') {
     return { source: BinanceTradeSource, tickSize: getCryptoTickSize(symbol) };
@@ -71,9 +79,11 @@ export function resolveTradeSource(
       return { source: Nt8TradeSource, tickSize: spec.tickSize };
     }
 
-    // Databento futures preview is admin-only — never customer-facing (see
-    // FuturesChartTab.tsx's compliance note, mirrored in FootprintTab.tsx).
-    if (!opts.isAdmin) return null;
+    // Databento delayed historical review — customer-facing for paid tiers
+    // as Session Review (see FootprintTab.tsx's compliance note), plus the
+    // existing admin dev-preview toggle. Still NEVER Tradovate, still
+    // delayed-only.
+    if (!opts.isAdmin && !opts.paidTier) return null;
     return { source: DatabentoTradeSource, tickSize: spec.tickSize };
   }
 
