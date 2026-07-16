@@ -43,7 +43,7 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { toTabId } from './types';
 import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
-import { ChartTab }      from './tabs/ChartTab';
+import { FootprintChart } from './components/FootprintChart';
 import { FootprintTab }  from './tabs/FootprintTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { DomTab }        from './tabs/DomTab';
@@ -345,13 +345,7 @@ export default function TradingArena() {
       <ChartStyleContext.Provider value={chartStyle}>
         <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
           {activeTab === 'chart' && (
-            <ChartTab
-              symbol={symbol}
-              interval={interval}
-              assetClass={assetClass}
-              indicators={indicators}
-              volumeProfileEnabled={indicatorsEnabled.volumeProfile}
-            />
+            <FootprintChart symbol={symbol} interval={interval} />
           )}
           {activeTab === 'order-flow' && (
             <FootprintTab
