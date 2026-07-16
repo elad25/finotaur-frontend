@@ -107,6 +107,11 @@ export function ProductDrawer() {
             borderColor: 'rgba(201,166,70,0.12)',
           }}
         >
+          <DrawerPrimitive.Title className="sr-only">Product navigation</DrawerPrimitive.Title>
+          <DrawerPrimitive.Description className="sr-only">
+            Navigate between FINOTAUR products and admin areas.
+          </DrawerPrimitive.Description>
+
           {/* Header */}
           <div
             className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"

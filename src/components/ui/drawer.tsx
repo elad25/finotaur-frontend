@@ -22,25 +22,46 @@ const DrawerOverlay = React.forwardRef<
 ));
 DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName;
 
+function hasDrawerPart(children: React.ReactNode, displayName: string): boolean {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    const element = child as React.ReactElement<{ children?: React.ReactNode }>;
+    const childDisplayName = (element.type as { displayName?: string })?.displayName;
+    if (childDisplayName === displayName) return true;
+    return hasDrawerPart(element.props.children, displayName);
+  });
+}
+
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DrawerPortal>
-    <DrawerOverlay />
-    <DrawerPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
-        className,
-      )}
-      {...props}
-    >
-      <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
-      {children}
-    </DrawerPrimitive.Content>
-  </DrawerPortal>
-));
+>(({ className, children, ...props }, ref) => {
+  const hasTitle = hasDrawerPart(children, DrawerPrimitive.Title.displayName);
+  const hasDescription =
+    props["aria-describedby"] !== undefined ||
+    hasDrawerPart(children, DrawerPrimitive.Description.displayName);
+
+  return (
+    <DrawerPortal>
+      <DrawerOverlay />
+      <DrawerPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+          className,
+        )}
+        {...props}
+      >
+        {!hasTitle && <DrawerPrimitive.Title className="sr-only">Drawer</DrawerPrimitive.Title>}
+        {!hasDescription && (
+          <DrawerPrimitive.Description className="sr-only">Drawer content</DrawerPrimitive.Description>
+        )}
+        <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+        {children}
+      </DrawerPrimitive.Content>
+    </DrawerPortal>
+  );
+});
 DrawerContent.displayName = "DrawerContent";
 
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
