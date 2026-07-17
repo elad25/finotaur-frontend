@@ -255,3 +255,92 @@ describe('runAutoBacktest — engine-level look-ahead invariant', () => {
     }
   });
 });
+
+// ============================================================================
+// 5. RiskConfig.maxTradesPerDay — enforcement + per-day reset + regression
+// ============================================================================
+//
+// Fixture: a strictly-increasing price ramp where EVERY 3-candle window forms
+// a fresh bullish FVG (candles[i-2].high < candles[i].low with a large
+// margin), using 'close-confirm' + 'market' entries (always fill at the very
+// next bar's open, no price-touch needed) and a razor-thin fixed-pct target
+// (the strong uptrend guarantees the very next bar's high clears it) plus a
+// far fixed-pct stop (never touched -- lows only ever dip 1 point below the
+// bar's own open). This produces a reliable "fill this bar / close next bar"
+// cadence: a new position opens every bar starting at bar 3, and closes one
+// bar later, freeing the single MVP concurrent slot for the next pending
+// signal. That cadence is what lets several trades open within one
+// calendar day so maxTradesPerDay can be exercised deterministically.
+// ============================================================================
+
+function rampCandle(i: number, timeSec: number): Candle {
+  const open = 100 + 20 * i;
+  return { time: timeSec, open, high: open + 5, low: open - 1, close: open + 4, volume: 1 };
+}
+
+function rampSetup(): ReturnType<typeof makeDefaultSetup> {
+  const setup = makeDefaultSetup('BTCUSDT', '15m');
+  setup.direction = 'both';
+  setup.patterns = [looseFvgParams()];
+  setup.entry = { trigger: 'close-confirm', orderType: 'market', validForBars: 50 };
+  setup.stop = { basis: 'fixed-pct', fixedPct: 5 }; // far away -> never touched by the uptrend
+  setup.target = { basis: 'fixed-pct', fixedPct: 0.01 }; // razor-thin -> hits the very next bar
+  return setup;
+}
+
+describe('runAutoBacktest — RiskConfig.maxTradesPerDay', () => {
+  it('caps fills to maxTradesPerDay within a calendar day, and the cap RESETS on the next day', () => {
+    // Day 1 (2023-11-14 UTC): 8 bars, 15m apart -> well within one UTC day.
+    const day1Start = Date.UTC(2023, 10, 14, 0, 0, 0) / 1000;
+    // Day 2 (2023-11-16 UTC): starts 2 days later -> guaranteed new UTC day,
+    // continuing the SAME price ramp (index keeps climbing) so FVGs keep
+    // forming across the artificial time jump.
+    const day2Start = day1Start + 2 * 86_400;
+
+    const candles: Candle[] = [
+      ...Array.from({ length: 8 }, (_, i) => rampCandle(i, day1Start + i * 900)),
+      ...Array.from({ length: 8 }, (_, k) => rampCandle(8 + k, day2Start + k * 900)),
+    ];
+
+    const setup = rampSetup();
+    setup.risk.maxTradesPerDay = 2;
+
+    const result = runAutoBacktest(setup, candles);
+
+    // Bucket each closed trade's entryTime into a UTC calendar day and count.
+    const dayOf = (entryTimeSec: number) =>
+      new Date(entryTimeSec * 1000).toISOString().slice(0, 10);
+    const countsByDay = new Map<string, number>();
+    for (const t of result.trades) {
+      const d = dayOf(t.entryTime);
+      countsByDay.set(d, (countsByDay.get(d) ?? 0) + 1);
+    }
+
+    // Exactly 2 distinct trading days show up, each capped at exactly 2 fills
+    // -- proving both the cap itself AND that it resets on the new day.
+    expect(countsByDay.size).toBe(2);
+    for (const [day, count] of countsByDay) {
+      expect(count, `day ${day} should have exactly maxTradesPerDay (2) fills`).toBe(2);
+    }
+    expect(result.trades).toHaveLength(4);
+  });
+
+  it('regression: maxTradesPerDay left undefined does not cap fills (all eligible signals still fill)', () => {
+    // Single-day, 8-bar slice of the same ramp fixture with NO maxTradesPerDay
+    // set (the default/backward-compatible `makeDefaultSetup` shape).
+    const day1Start = Date.UTC(2023, 10, 14, 0, 0, 0) / 1000;
+    const candles: Candle[] = Array.from({ length: 8 }, (_, i) =>
+      rampCandle(i, day1Start + i * 900),
+    );
+
+    const setup = rampSetup();
+    expect(setup.risk.maxTradesPerDay).toBeUndefined();
+
+    const result = runAutoBacktest(setup, candles);
+
+    // Without a cap, the fill-then-close-next-bar cadence lets MANY more than
+    // 2 trades close within this single day -- proving the day limit is truly
+    // opt-in and does not regress the uncapped path.
+    expect(result.trades.length).toBeGreaterThan(2);
+  });
+});

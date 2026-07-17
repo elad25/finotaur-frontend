@@ -73,11 +73,14 @@ export class StatisticsEngine {
     // Calculate Sharpe Ratio
     const returns = trades.map(t => (t.realizedPnlPercent || 0) / 100);
     const sharpeRatio = this.calculateSharpeRatio(returns);
-    
+
+    // Calculate Sortino Ratio (downside-deviation variant of Sharpe)
+    const sortinoRatio = this.calculateSortinoRatio(returns);
+
     // Calculate drawdown
-    const { maxDrawdown, maxDrawdownPercent, drawdownCurve } = 
+    const { maxDrawdown, maxDrawdownPercent, drawdownCurve } =
       this.calculateDrawdown(trades, initialBalance);
-    
+
     const recoveryFactor = maxDrawdown > 0 ? netProfit / maxDrawdown : 0;
     
     // Consecutive wins/losses
@@ -102,10 +105,13 @@ export class StatisticsEngine {
     const lastTradeTime = trades[trades.length - 1]?.exitTime || 0;
     const tradingDays = (lastTradeTime - firstTradeTime) / (24 * 60 * 60);
     const avgTradesPerDay = tradingDays > 0 ? totalTrades / tradingDays : 0;
-    
+
+    // Calculate Calmar Ratio (annualized return / max drawdown %)
+    const calmarRatio = this.calculateCalmarRatio(totalPnlPercent, tradingDays, maxDrawdownPercent);
+
     // Equity curve
     const equityCurve = this.calculateEquityCurve(trades, initialBalance);
-    
+
     return {
       totalTrades,
       winningTrades,
@@ -125,6 +131,8 @@ export class StatisticsEngine {
       profitFactor,
       expectancy,
       sharpeRatio,
+      sortinoRatio,
+      calmarRatio,
       maxDrawdown,
       maxDrawdownPercent,
       recoveryFactor,
@@ -162,10 +170,66 @@ export class StatisticsEngine {
     
     // Annualized Sharpe Ratio (assuming daily returns)
     const sharpe = (avgReturn / stdDev) * Math.sqrt(252); // 252 trading days
-    
+
     return sharpe;
   }
-  
+
+  /**
+   * Calculate Sortino Ratio
+   * Like Sharpe, but only penalizes downside volatility (returns below 0)
+   * instead of total volatility. Mirrors calculateSharpeRatio's return-series
+   * construction and annualization (×√252), swapping stdDev for downside
+   * deviation (stddev computed over negative returns only).
+   */
+  private calculateSortinoRatio(returns: number[]): number {
+    if (returns.length < 2) return 0;
+
+    const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+
+    const downsideReturns = returns.filter(r => r < 0);
+
+    // No downside at all: can't compute a downside deviation. If the mean
+    // return is positive, there's no risk to penalize — cap at a large but
+    // finite value (mirrors the "no losers" edge case) rather than Infinity,
+    // which would be unusable in UI/comparisons. If mean is flat/negative
+    // with no negative individual returns (degenerate), fall back to 0.
+    if (downsideReturns.length === 0) {
+      return avgReturn > 0 ? 100 : 0;
+    }
+
+    const downsideVariance = downsideReturns.reduce((sum, r) => sum + (r * r), 0) / downsideReturns.length;
+    const downsideDeviation = Math.sqrt(downsideVariance);
+
+    if (downsideDeviation === 0) return 0;
+
+    // Annualized Sortino Ratio (assuming daily returns)
+    const sortino = (avgReturn / downsideDeviation) * Math.sqrt(252); // 252 trading days
+
+    return sortino;
+  }
+
+  /**
+   * Calculate Calmar Ratio
+   * Annualized return divided by max drawdown percent. Annualizes
+   * `totalPnlPercent` by scaling it to a 365-day year using the trade
+   * series' own span (`tradingDays`, same derivation as elsewhere in this
+   * class: last exit minus first entry). Guards div-by-zero on both the
+   * span (min 1 day) and max drawdown (0 drawdown → 0 Calmar, since a
+   * ratio against zero risk is not meaningful).
+   */
+  private calculateCalmarRatio(
+    totalPnlPercent: number,
+    tradingDaysSpan: number,
+    maxDrawdownPercent: number
+  ): number {
+    if (maxDrawdownPercent === 0) return 0;
+
+    const spanDays = Math.max(1, tradingDaysSpan);
+    const annualizedReturn = totalPnlPercent * (365 / spanDays);
+
+    return annualizedReturn / maxDrawdownPercent;
+  }
+
   /**
    * Calculate maximum drawdown
    */
@@ -312,6 +376,8 @@ export class StatisticsEngine {
       profitFactor: 0,
       expectancy: 0,
       sharpeRatio: 0,
+      sortinoRatio: 0,
+      calmarRatio: 0,
       maxDrawdown: 0,
       maxDrawdownPercent: 0,
       recoveryFactor: 0,

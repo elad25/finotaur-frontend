@@ -61,15 +61,22 @@ export interface AutoPosition {
  *
  * @param signal     the armed signal that just filled
  * @param fillPrice  the actual fill price returned by the execution engine
- * @param size       position size from calculatePositionSize
+ * @param size       position size from calculatePositionSize (fractional
+ *                   units) or, for futures, a whole-contract count
  * @param entryTime  entry timestamp in SECONDS (journal convention; the
  *                   StatisticsEngine multiplies by 1000 when formatting dates)
+ * @param pointValue dollar value of one full point move per unit of `size`.
+ *                   Defaults to 1 (crypto/fractional convention, where `size`
+ *                   is already a dollar-per-point-equivalent unit count).
+ *                   Futures callers pass the contract's point value (e.g. 2
+ *                   for MNQ) so riskAmount reflects real dollar risk.
  */
 export function signalToPosition(
   signal: TradeSignal,
   fillPrice: number,
   size: number,
   entryTime: number,
+  pointValue: number = 1,
 ): AutoPosition {
   const risk = Math.abs(fillPrice - signal.stopLoss);
   const reward = Math.abs(signal.takeProfit - fillPrice);
@@ -88,6 +95,6 @@ export function signalToPosition(
     entryTime,
     status: 'open',
     riskRewardRatio: risk > 0 ? reward / risk : 0,
-    riskAmount: risk * size,
+    riskAmount: risk * size * pointValue,
   };
 }
