@@ -17,7 +17,7 @@
 // not for reporting what actually happened.
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -31,12 +31,17 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
+import { Save } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card } from '@/components/ds/Card';
+import { Button } from '@/components/ds/Button';
 import { cn } from '@/lib/utils';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import {
   useAutoBacktestStore,
   selectAutoResult,
   selectAutoSetup,
+  selectAutoRunId,
 } from '@/store/useAutoBacktestStore';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
 import {
@@ -44,6 +49,7 @@ import {
   type BacktestStatisticsLike,
   type RMultipleDistribution,
 } from '@/core/auto/AutoBacktestEngine';
+import { saveAutoBacktestTradesToJournal } from '@/lib/backtest/autoJournaling';
 
 // ---------------------------------------------------------------------------
 // Secondary R:R what-if model constants (fixed-risk normalization only)
@@ -442,10 +448,51 @@ function RDistributionChart({ dist }: { dist: RMultipleDistribution }) {
 export function ResultsSummary() {
   const result = useAutoBacktestStore(selectAutoResult);
   const setup = useAutoBacktestStore(selectAutoSetup);
+  const runId = useAutoBacktestStore(selectAutoRunId);
   const from = useAutoBacktestStore((s) => s.from);
   const to = useAutoBacktestStore((s) => s.to);
+  const { id: userId } = useEffectiveUser();
 
   const [selectedR, setSelectedR] = useState<number>(DEFAULT_R);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const closedTrades = useMemo(
+    () => (result?.trades ?? []).filter((t) => t.exitPrice != null && t.status === 'closed'),
+    [result],
+  );
+
+  const handleSaveToJournal = useCallback(async () => {
+    if (!userId) {
+      toast.error('Sign in to save trades to your journal');
+      return;
+    }
+    if (!runId || closedTrades.length === 0) {
+      toast.info('No closed trades to save yet');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await saveAutoBacktestTradesToJournal(
+        { trades: closedTrades, setup, runId },
+        userId,
+      );
+      if (res.errors > 0) {
+        const total = res.saved + res.errors;
+        toast.error(`Failed to save ${res.errors} of ${total} trades`, {
+          action: {
+            label: 'Retry',
+            onClick: () => void handleSaveToJournal(),
+          },
+        });
+      } else {
+        toast.success(`${res.saved} trade${res.saved === 1 ? '' : 's'} saved to journal`);
+      }
+    } catch {
+      toast.error('Failed to save trades to journal');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [userId, runId, closedTrades, setup]);
 
   const symbol = setup.instrument.symbol;
   const timeframe = setup.instrument.timeframe;
@@ -518,6 +565,17 @@ export function ResultsSummary() {
             {totalTrades === 1 ? 'trade' : 'trades'}.
           </p>
         </div>
+        <Button
+          type="button"
+          variant="goldOutline"
+          size="compact"
+          showArrow={false}
+          onClick={handleSaveToJournal}
+          disabled={isSaving || !userId || closedTrades.length === 0}
+        >
+          <Save size={13} />
+          {isSaving ? 'Saving…' : 'Save trades to journal'}
+        </Button>
       </div>
 
       {/* Stat cards — real run statistics */}
