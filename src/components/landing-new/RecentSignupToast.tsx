@@ -77,7 +77,7 @@ const RecentSignupToast = memo(function RecentSignupToast() {
       initial={{ opacity: 0, x: -18, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
-      className="fixed bottom-6 left-5 z-[80] flex w-[calc(100vw-2.5rem)] max-w-sm items-center gap-4 rounded-xl border border-[#C9A646]/30 bg-[#0b0a08]/95 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-md sm:left-6 sm:w-full"
+      className="fixed bottom-6 left-5 z-[80] flex w-[calc(100vw-2.5rem)] max-w-xs items-center gap-4 rounded-xl border border-[#C9A646]/30 bg-[#0b0a08]/95 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-md sm:left-6 sm:w-full"
       aria-live="polite"
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#C9A646]/30 bg-black/50">
