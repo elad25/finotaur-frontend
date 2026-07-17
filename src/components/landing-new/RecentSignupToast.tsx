@@ -25,16 +25,6 @@ function publicApiUrl(path: string) {
   return `${base}${path}`;
 }
 
-function formatSignupTime(minutesAgoValue: number | null) {
-  if (minutesAgoValue === null) return 'recently';
-  if (minutesAgoValue < 1) return 'just now';
-  if (minutesAgoValue < 60) return `${minutesAgoValue} min ago`;
-
-  const hours = Math.floor(minutesAgoValue / 60);
-  if (hours === 1) return '1 hour ago';
-  return `${Math.min(hours, 23)} hours ago`;
-}
-
 const RecentSignupToast = memo(function RecentSignupToast() {
   const [signups, setSignups] = useState<RecentSignup[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -105,8 +95,6 @@ const RecentSignupToast = memo(function RecentSignupToast() {
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
           <Clock className="h-3.5 w-3.5 text-[#C9A646]" />
-          <span>{formatSignupTime(activeSignup.minutesAgo)}</span>
-          <span className="text-zinc-600">|</span>
           <span>last 24 hours</span>
         </div>
       </div>
