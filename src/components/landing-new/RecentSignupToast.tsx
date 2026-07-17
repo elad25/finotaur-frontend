@@ -94,7 +94,7 @@ const RecentSignupToast = memo(function RecentSignupToast() {
         <img
           src={SIGNUP_PROOF_LOGO}
           alt="Finotaur logo"
-          className="h-11 w-11 object-contain p-1"
+          className="h-full w-full object-cover"
           loading="lazy"
         />
       </div>
