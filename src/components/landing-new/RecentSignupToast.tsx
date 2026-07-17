@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Shield } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 type RecentSignup = {
   firstName: string;
@@ -91,17 +91,13 @@ const RecentSignupToast = memo(function RecentSignupToast() {
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-white">
-          {activeSignup.firstName} just joined Finotaur
+          {activeSignup.firstName}
         </p>
+        <p className="truncate text-sm text-zinc-300">just joined Finotaur</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
           <Clock className="h-3.5 w-3.5 text-[#C9A646]" />
           <span>last 24 hours</span>
         </div>
-      </div>
-
-      <div className="hidden shrink-0 items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 sm:flex">
-        <Shield className="h-3 w-3" />
-        First name only
       </div>
     </motion.aside>
   );
