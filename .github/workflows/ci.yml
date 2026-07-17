@@ -24,6 +24,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_ANON_KEY: dummy_key_for_ci_build_only
+          # Dummy env above → the built-bundle Supabase guard cannot pass here
+          # by design; it stays armed on real builds (Cloudflare / deploy:prod).
+          VALIDATE_BUILT_SUPABASE: skip
 
   typecheck:
     name: typecheck (tsc)
