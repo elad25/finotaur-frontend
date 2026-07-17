@@ -427,6 +427,7 @@ export function ChartTab({
             />
           ) : (
             <FinotaurChart
+              hideCursor
               symbol={chartSymbol}
               interval={chartInterval}
               from={from}
@@ -557,6 +558,7 @@ function ChartTabFootprintOnZoomBody({
 
   return (
     <FinotaurChart
+      hideCursor
       symbol={chartSymbol}
       interval={chartInterval}
       from={from}

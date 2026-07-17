@@ -618,6 +618,13 @@ export interface FinotaurChartProps {
   theme?: ChartTheme;
   /** Container height. Number = pixels; string = CSS (e.g. '100%', '600px'). */
   height?: number | string;
+  /**
+   * Hide the OS mouse cursor over the chart pane so only the crosshair is
+   * visible (NinjaTrader-style). The price/time axes keep their resize
+   * cursors because lightweight-charts sets those as inline styles, which
+   * override the inherited `cursor: none`. Used by Trading Arena tabs.
+   */
+  hideCursor?: boolean;
   /** Fired on fetch failure. Caller decides whether to render a fallback UI. */
   onError?: (err: Error) => void;
   /**
@@ -845,6 +852,7 @@ export function FinotaurChart({
   indicators,
   theme = 'dark',
   height = 600,
+  hideCursor = false,
   onError,
   focusRange,
   timeFitToken,
@@ -1918,7 +1926,11 @@ export function FinotaurChart({
           z15, VolumeBubblesLayer z12, VolumeProfileLayer z14). The chart's
           own background is transparent (see buildChartOptions above) so the
           z5 layers are genuinely visible behind the candles. */}
-      <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 6 }} />
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ zIndex: 6, ...(hideCursor ? { cursor: 'none' } : null) }}
+      />
 
       {/* Session Volume Profile overlay (Chart tab only) — rendered BEHIND
           candles (z-index 5 vs the chart canvas mount's z-index 6, and the

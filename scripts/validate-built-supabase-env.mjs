@@ -1,6 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+// CI compile-check builds use dummy VITE_ env vars (no real Supabase project),
+// so the bundle can never contain a real URL/key there. The GitHub Actions
+// workflow sets this flag explicitly; production paths (Cloudflare Pages build,
+// npm run deploy:prod) never set it, so the guard stays fully armed for them.
+if (process.env.VALIDATE_BUILT_SUPABASE === 'skip') {
+  console.log('[postbuild:supabase] Skipped: VALIDATE_BUILT_SUPABASE=skip (CI compile-check build with dummy env).');
+  process.exit(0);
+}
+
 const distDir = resolve(process.cwd(), 'dist');
 const assetsDir = join(distDir, 'assets');
 
