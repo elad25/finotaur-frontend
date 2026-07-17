@@ -766,6 +766,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
         <div className="flex flex-1 min-w-0 flex-col">
           <div className="relative flex-1 min-h-0">
             <FinotaurChart
+              hideCursor
               symbol={symbol}
               interval={candleInterval}
               from={from}
@@ -1116,6 +1117,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
             </div>
           ) : (
             <FinotaurChart
+              hideCursor
               symbol={contractSymbol}
               interval={DATABENTO_INTERVAL_PLACEHOLDER}
               chartStyle={chartStyle}
@@ -1526,6 +1528,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
         <div className="relative flex-1 min-w-0">
           {isLive || showRecordedSession ? (
             <FinotaurChart
+              hideCursor
               symbol={nt8Symbol}
               interval={DATABENTO_INTERVAL_PLACEHOLDER}
               from={from}

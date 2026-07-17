@@ -32,7 +32,6 @@ import {
 import { CleanSelect } from './CleanSelect';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
 import {
-  CANDLE_COLOR_PRESETS,
   BACKGROUND_PRESETS,
   TIMEZONE_OPTIONS,
   type ChartStyleSettings,
@@ -126,9 +125,6 @@ function ToggleSwitch({ active, onClick, label, disabled }: { active: boolean; o
 export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, onReset, assetClass }: ChartSettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<DialogTabId>('candles');
 
-  const activeCandlePresetId = CANDLE_COLOR_PRESETS.find(
-    (p) => p.up === settings.candleUpColor && p.down === settings.candleDownColor,
-  )?.id;
   const activeBackgroundPresetId = BACKGROUND_PRESETS.find(
     (p) => p.color === settings.backgroundColor,
   )?.id;
@@ -176,44 +172,6 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
           <div className="max-h-[65vh] flex-1 overflow-y-auto p-4">
             {activeTab === 'candles' && (
               <div className="flex flex-col gap-4">
-                <div>
-                  <SectionLabel>Presets</SectionLabel>
-                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Candle color preset">
-                    {CANDLE_COLOR_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        title={preset.label}
-                        aria-pressed={activeCandlePresetId === preset.id}
-                        onClick={() =>
-                          onChange({
-                            candleUpColor: preset.up,
-                            candleDownColor: preset.down,
-                            // Presets stay one-click — clear any per-element
-                            // overrides so Body/Border/Wick all snap back to
-                            // mirroring the preset's up/down colors.
-                            candleBorderUpColor: undefined,
-                            candleBorderDownColor: undefined,
-                            candleWickUpColor: undefined,
-                            candleWickDownColor: undefined,
-                          })
-                        }
-                        className={cn(
-                          'flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded border transition-all duration-150',
-                          activeCandlePresetId === preset.id
-                            ? 'border-[rgba(201,166,70,0.65)] ring-1 ring-[rgba(201,166,70,0.45)]'
-                            : 'border-[rgba(255,255,255,0.12)] hover:border-[rgba(255,255,255,0.3)]',
-                        )}
-                      >
-                        <span className="h-full w-1/2" style={{ background: preset.up }} aria-hidden="true" />
-                        <span className="h-full w-1/2" style={{ background: preset.down }} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <SectionDivider />
-
                 <div>
                   <SectionLabel>Body</SectionLabel>
                   <div className="flex flex-wrap items-center gap-4">
@@ -349,15 +307,6 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
                   </div>
                 </div>
 
-                <SectionDivider />
-
-                <FieldRow label="Watermark">
-                  <ToggleSwitch
-                    active={settings.watermarkVisible}
-                    onClick={() => onChange({ watermarkVisible: !settings.watermarkVisible })}
-                    label={settings.watermarkVisible ? 'On' : 'Off'}
-                  />
-                </FieldRow>
               </div>
             )}
 

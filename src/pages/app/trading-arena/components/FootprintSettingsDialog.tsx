@@ -763,13 +763,6 @@ export function FootprintSettingsDialog({
                         ))}
                       </div>
                     </div>
-                    <FieldRow label="Watermark">
-                      <ToggleSwitch
-                        active={chartStyle.watermarkVisible}
-                        onClick={() => onChartStyleChange({ watermarkVisible: !chartStyle.watermarkVisible })}
-                        label={chartStyle.watermarkVisible ? 'On' : 'Off'}
-                      />
-                    </FieldRow>
                   </div>
                 </div>
 

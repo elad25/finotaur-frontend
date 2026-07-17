@@ -393,6 +393,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
         <div className="flex-1 min-w-0">
           {isLive ? (
             <FinotaurChart
+              hideCursor
               symbol={nt8Symbol}
               interval={NT8_INTERVAL_PLACEHOLDER}
               from={from}
@@ -834,6 +835,7 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
         <div className="relative flex flex-1 min-w-0 flex-col">
           <div className="relative flex-1 min-h-0">
             <FinotaurChart
+              hideCursor
               symbol={symbol}
               interval={candleInterval}
               from={from}

@@ -7,12 +7,29 @@
  * @see DESIGN_SYSTEM.md
  */
 
+import { useState } from "react";
 import { Button } from "@/components/ds/Button";
+import { ColorSwatchPicker } from "@/pages/app/trading-arena/components/ColorSwatchPicker";
 import { Card, Eyebrow } from "@/components/ds/Card";
 import { Price, Change, Quote } from "@/components/ds/NumberDisplay";
 import { JournalKpiCard } from "@/components/journal/ds/JournalKpiCard";
 import { JournalGauge } from "@/components/journal/ds/JournalGauge";
 import { Target, TrendingUp, DollarSign, Award } from "lucide-react";
+
+/** Stateful harness for the Trading Arena color picker (Body Up/Down pair). */
+function ColorPickerDemo() {
+  const [upColor, setUpColor] = useState("#4CAF50");
+  const [downColor, setDownColor] = useState("#F44336");
+  return (
+    <div className="flex items-center gap-ds-6 rounded-lg border border-[rgba(201,166,70,0.25)] bg-[#0A0A0B] p-ds-5">
+      <ColorSwatchPicker label="Up" value={upColor} onChange={setUpColor} />
+      <ColorSwatchPicker label="Down" value={downColor} onChange={setDownColor} />
+      <span className="text-caption text-ink-secondary">
+        up: {upColor} · down: {downColor}
+      </span>
+    </div>
+  );
+}
 
 export default function DesignLab() {
   return (
@@ -67,6 +84,13 @@ export default function DesignLab() {
               </div>
             </Card>
           </div>
+        </section>
+
+        {/* ----- Trading Arena color picker ----- */}
+        <section className="mb-ds-9">
+          <Eyebrow>Trading Arena</Eyebrow>
+          <h2 className="mt-ds-2 mb-ds-5 font-serif text-h2">ColorSwatchPicker (TV-style)</h2>
+          <ColorPickerDemo />
         </section>
 
         {/* ----- Cards ----- */}

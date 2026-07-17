@@ -386,6 +386,7 @@ export function FuturesChartTab({ interval, indicators }: FuturesChartTabProps) 
             </div>
           ) : (
             <FinotaurChart
+              hideCursor
               symbol={contractSymbol}
               interval={interval}
               from={from}
