@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Clock } from 'lucide-react';
+import { Clock, X } from 'lucide-react';
 
 type RecentSignup = {
   firstName: string;
@@ -28,6 +28,7 @@ function publicApiUrl(path: string) {
 const RecentSignupToast = memo(function RecentSignupToast() {
   const [signups, setSignups] = useState<RecentSignup[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +70,7 @@ const RecentSignupToast = memo(function RecentSignupToast() {
   }, [signups.length]);
 
   const activeSignup = signups[activeIndex];
-  if (!activeSignup) return null;
+  if (dismissed || !activeSignup) return null;
 
   return (
     <motion.aside
@@ -77,9 +78,17 @@ const RecentSignupToast = memo(function RecentSignupToast() {
       initial={{ opacity: 0, x: -18, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
-      className="fixed bottom-6 left-5 z-[80] flex w-[calc(100vw-2.5rem)] max-w-xs items-center gap-4 rounded-xl border border-[#C9A646]/30 bg-[#0b0a08]/95 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-md sm:left-6 sm:w-full"
+      className="fixed bottom-6 left-5 z-[80] flex w-[calc(100vw-2.5rem)] max-w-xs items-center gap-4 rounded-xl border border-[#C9A646]/30 bg-[#0b0a08]/95 p-4 pr-9 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-md relative sm:left-6 sm:w-full"
       aria-live="polite"
     >
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        aria-label="Dismiss"
+        className="absolute right-2 top-2 rounded-md p-1 text-zinc-500 transition-colors hover:text-zinc-200"
+      >
+        <X className="h-4 w-4" />
+      </button>
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#C9A646]/30 bg-black/50">
         <img
           src={SIGNUP_PROOF_LOGO}
