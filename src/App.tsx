@@ -136,6 +136,15 @@ const BestTradingJournalTradovate = lazy(() => import("@/pages/BestTradingJourna
 const BestTradingJournalFutures = lazy(() => import("@/pages/BestTradingJournalFutures"));
 const BestTradingJournalPropFirm = lazy(() => import("@/pages/BestTradingJournalPropFirm"));
 const AITradingJournal = lazy(() => import("@/pages/AITradingJournal"));
+const ReviewsPage = lazy(() => import("@/pages/ReviewsPage"));
+const FAQPage = lazy(() => import("@/pages/learn/FAQPage"));
+const LearnIndexPage = lazy(() => import("@/pages/learn/LearnIndexPage"));
+const HowToPassPropFirmEvaluation = lazy(() => import("@/pages/learn/HowToPassPropFirmEvaluation"));
+const TradeCopierGuide = lazy(() => import("@/pages/learn/TradeCopierGuide"));
+const HowToStopRevengeTrading = lazy(() => import("@/pages/learn/HowToStopRevengeTrading"));
+const FindYourTradingLeaks = lazy(() => import("@/pages/learn/FindYourTradingLeaks"));
+const WinRateProfitFactorExpectancy = lazy(() => import("@/pages/learn/WinRateProfitFactorExpectancy"));
+const IsATradingJournalWorthIt = lazy(() => import("@/pages/learn/IsATradingJournalWorthIt"));
 const ResearchIndex = lazy(() => import("@/pages/research/ResearchIndexPage"));
 const TickerResearch = lazy(() => import("@/pages/research/TickerResearchPage"));
 const WelcomeScreen = lazy(() => import("@/pages/onboarding/WelcomeScreen"));
@@ -511,6 +520,15 @@ function AppContent() {
         <Route path="/best-trading-journal-for-futures" element={<SuspenseRoute><BestTradingJournalFutures /></SuspenseRoute>} />
         <Route path="/best-trading-journal-for-prop-firm" element={<SuspenseRoute><BestTradingJournalPropFirm /></SuspenseRoute>} />
         <Route path="/ai-trading-journal" element={<SuspenseRoute><AITradingJournal /></SuspenseRoute>} />
+        <Route path="/reviews" element={<SuspenseRoute><ReviewsPage /></SuspenseRoute>} />
+        <Route path="/faq" element={<SuspenseRoute><FAQPage /></SuspenseRoute>} />
+        <Route path="/learn" element={<SuspenseRoute><LearnIndexPage /></SuspenseRoute>} />
+        <Route path="/learn/how-to-pass-a-prop-firm-evaluation" element={<SuspenseRoute><HowToPassPropFirmEvaluation /></SuspenseRoute>} />
+        <Route path="/learn/trade-copier-guide" element={<SuspenseRoute><TradeCopierGuide /></SuspenseRoute>} />
+        <Route path="/learn/how-to-stop-revenge-trading" element={<SuspenseRoute><HowToStopRevengeTrading /></SuspenseRoute>} />
+        <Route path="/learn/find-your-trading-leaks" element={<SuspenseRoute><FindYourTradingLeaks /></SuspenseRoute>} />
+        <Route path="/learn/win-rate-profit-factor-expectancy" element={<SuspenseRoute><WinRateProfitFactorExpectancy /></SuspenseRoute>} />
+        <Route path="/learn/is-a-trading-journal-worth-it" element={<SuspenseRoute><IsATradingJournalWorthIt /></SuspenseRoute>} />
         {/* War Zone URLs now redirect to Top Secret (Daily Briefing tab merged in).
             Warzonepage.tsx is kept on disk as the source of DailyBriefingSection rendering. */}
         <Route path="/warzone" element={<Navigate to="/app/top-secret" replace />} />
