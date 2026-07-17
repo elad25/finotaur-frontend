@@ -60,6 +60,15 @@ const PRESERVED_ENTRIES = [
   { loc: "/best-trading-journal-for-futures",    lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
   { loc: "/best-trading-journal-for-prop-firm",  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
   { loc: "/ai-trading-journal",                  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/faq",                                 lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/reviews",                             lastmod: TODAY, changefreq: "weekly",  priority: "0.7" },
+  { loc: "/learn",                                lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/learn/how-to-pass-a-prop-firm-evaluation", lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/learn/trade-copier-guide",            lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/learn/how-to-stop-revenge-trading",   lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/learn/find-your-trading-leaks",       lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/learn/win-rate-profit-factor-expectancy", lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/learn/is-a-trading-journal-worth-it", lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
 ];
 
 // ---------------------------------------------------------------------------

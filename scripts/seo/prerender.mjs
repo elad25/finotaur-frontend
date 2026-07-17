@@ -28,6 +28,30 @@ function flagValue(name) {
 const LIMIT = flagValue("limit") ? parseInt(flagValue("limit"), 10) : null;
 const SINGLE_TICKER = flagValue("ticker");
 const OUT_DIR = flagValue("out") ?? "dist";
+const MARKETING_ONLY = args.includes("--marketing-only");
+
+// ---------------------------------------------------------------------------
+// Marketing / GEO routes (Wave 2) — flat routes, no dynamic params. Rendered
+// in the same loop as research routes, using the same flat .html output
+// convention (see step 4c below). Each route is wrapped in its own try/catch
+// (step 4) so a single broken marketing page never fails the whole prerender.
+// ---------------------------------------------------------------------------
+const MARKETING_ROUTES = [
+  "/faq",
+  "/reviews",
+  "/learn",
+  "/learn/how-to-pass-a-prop-firm-evaluation",
+  "/learn/trade-copier-guide",
+  "/learn/how-to-stop-revenge-trading",
+  "/learn/find-your-trading-leaks",
+  "/learn/win-rate-profit-factor-expectancy",
+  "/learn/is-a-trading-journal-worth-it",
+  "/best-trading-journal-for-tradovate",
+  "/best-trading-journal-for-futures",
+  "/best-trading-journal-for-prop-firm",
+  "/ai-trading-journal",
+  "/journal-copier",
+];
 
 const BASE_OUT = path.resolve(REPO_ROOT, OUT_DIR);
 
@@ -111,12 +135,19 @@ const tickerSymbols = universe.tickers.map((t) => t.ticker);
 
 let routes;
 
-if (SINGLE_TICKER) {
+if (MARKETING_ONLY) {
+  // --marketing-only → render just the marketing/GEO routes (fast smoke test
+  // for step 3c verification, no need to churn through all research tickers).
+  routes = [...MARKETING_ROUTES];
+  if (LIMIT !== null) {
+    routes = routes.slice(0, LIMIT);
+  }
+} else if (SINGLE_TICKER) {
   // --ticker=AAPL → render only that one ticker route
   routes = [`/research/${SINGLE_TICKER.toUpperCase()}`];
 } else {
-  // Full run: index page + all tickers
-  routes = ["/research", ...tickerSymbols.map((t) => `/research/${t}`)];
+  // Full run: index page + all tickers + marketing/GEO routes
+  routes = ["/research", ...tickerSymbols.map((t) => `/research/${t}`), ...MARKETING_ROUTES];
   if (LIMIT !== null) {
     routes = routes.slice(0, LIMIT);
   }
@@ -138,6 +169,7 @@ console.log(`[prerender] Output dir: ${BASE_OUT}/research/\n`);
 const startTime = Date.now();
 let successCount = 0;
 const failures = [];
+const marketingFailures = [];
 
 for (let i = 0; i < routes.length; i++) {
   const route = routes[i];
@@ -194,8 +226,16 @@ for (let i = 0; i < routes.length; i++) {
 
     successCount++;
   } catch (err) {
-    failures.push({ route, error: err.message ?? String(err) });
-    console.error(`[prerender] FAIL ${route}: ${err.message ?? err}`);
+    const message = err.message ?? String(err);
+    if (MARKETING_ROUTES.includes(route)) {
+      // Marketing/GEO routes are best-effort: warn and fall back to the SPA
+      // shell for this route rather than failing the whole build (step 3b).
+      marketingFailures.push({ route, error: message });
+      console.warn(`[prerender] WARN (marketing route, non-fatal) ${route}: ${message}`);
+    } else {
+      failures.push({ route, error: message });
+      console.error(`[prerender] FAIL ${route}: ${message}`);
+    }
   }
 
   // 4f. Progress every 100 routes
@@ -215,6 +255,15 @@ const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 console.log(
   `\n=== Prerender done === wrote ${successCount} files in ${totalElapsed}s. Output: ${OUT_DIR}/research/`
 );
+
+if (marketingFailures.length > 0) {
+  console.warn(
+    `\n[prerender] ${marketingFailures.length} marketing route(s) fell back to the SPA shell (non-fatal):`
+  );
+  marketingFailures.forEach(({ route, error }) => {
+    console.warn(`  ${route}: ${error}`);
+  });
+}
 
 if (failures.length > 0) {
   console.error(`\n[prerender] FAILURES: ${failures.length} route(s) failed:`);
