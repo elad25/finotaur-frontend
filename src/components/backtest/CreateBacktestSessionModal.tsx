@@ -9,7 +9,7 @@
 // sessions are unaffected. CommissionConfig is stored on the session and
 // threaded into useBacktestSession via setCommissionConfig on chart load.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Plus, Loader2 } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
@@ -40,8 +40,6 @@ import {
 } from '@/hooks/useStrategies';
 import { useBacktestSessionStore } from '@/store/useBacktestSessionStore';
 import {
-  ASSET_TYPE_LABELS,
-  COMING_SOON_ASSETS,
   type BacktestAssetType,
   type BacktestSession,
 } from '@/types/backtestSession';
@@ -52,7 +50,11 @@ import {
   type CommissionConfig,
   DEFAULT_COMMISSION_CONFIG,
 } from '@/lib/backtest/orderEngine';
-import { isDatabentoCachedSymbol } from '@/components/charting/dataSources';
+import {
+  isCryptoSymbol,
+  isDatabentoCachedSymbol,
+  isForexPair,
+} from '@/components/charting/dataSources';
 import { supabase } from '@/lib/supabase';
 
 /** Probe symbol used to read the shared Databento futures cache's date coverage — all
@@ -109,7 +111,6 @@ async function fetchFuturesCoverage(): Promise<FuturesCoverage | null> {
 }
 
 const GOLD = '#C9A646';
-const ASSET_ORDER: BacktestAssetType[] = ['forex', 'stocks', 'crypto', 'futures'];
 
 interface CreateBacktestSessionModalProps {
   open: boolean;
@@ -163,8 +164,11 @@ export function CreateBacktestSessionModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [strategyId, setStrategyId] = useState<string>('');
-  const [assetType, setAssetType] = useState<BacktestAssetType>('forex');
   const [symbol, setSymbol] = useState<string>('');
+  // Populated only when the trader picked a suggestion (cross-class search);
+  // null when free-typed, in which case assetType is inferred from the symbol
+  // shape below.
+  const [pickedAssetClass, setPickedAssetClass] = useState<AssetClass | null>(null);
   const [startBalance, setStartBalance] = useState<string>('');
   const [range, setRange] = useState<DateRange | undefined>();
   const [dateOpen, setDateOpen] = useState(false);
@@ -179,6 +183,18 @@ export function CreateBacktestSessionModal({
   const [futuresCoverage, setFuturesCoverage] = useState<FuturesCoverage | null>(null);
   const [futuresCoverageFetched, setFuturesCoverageFetched] = useState(false);
 
+  // Asset type is DERIVED, not user-picked: a chosen suggestion carries its
+  // own class; a free-typed symbol is classified by shape (crypto pair →
+  // forex pair → cached futures root → else stocks).
+  const assetType: BacktestAssetType = useMemo(() => {
+    if (pickedAssetClass) return pickedAssetClass;
+    if (!symbol) return 'stocks';
+    if (isCryptoSymbol(symbol)) return 'crypto';
+    if (isForexPair(symbol)) return 'forex';
+    if (isDatabentoCachedSymbol(symbol)) return 'futures';
+    return 'stocks';
+  }, [symbol, pickedAssetClass]);
+
   useEffect(() => {
     if (assetType !== 'futures' || futuresCoverageFetched) return;
     setFuturesCoverageFetched(true);
@@ -189,8 +205,8 @@ export function CreateBacktestSessionModal({
     setName('');
     setDescription('');
     setStrategyId('');
-    setAssetType('forex');
     setSymbol('');
+    setPickedAssetClass(null);
     setStartBalance('');
     setRange(undefined);
     setDateOpen(false);
@@ -204,12 +220,6 @@ export function CreateBacktestSessionModal({
   const handleClose = (next: boolean) => {
     if (!next) resetForm();
     onOpenChange(next);
-  };
-
-  const handleAssetChange = (next: BacktestAssetType) => {
-    if (COMING_SOON_ASSETS.includes(next)) return;
-    setAssetType(next);
-    setSymbol(''); // reset symbol when asset class changes
   };
 
   const handleCreateStrategy = async () => {
@@ -380,47 +390,19 @@ export function CreateBacktestSessionModal({
             )}
           </div>
 
-          {/* Type tabs */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-400">Type</Label>
-            <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/5 p-1">
-              {ASSET_ORDER.map((t) => {
-                const soon = COMING_SOON_ASSETS.includes(t);
-                const active = assetType === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    disabled={soon}
-                    onClick={() => handleAssetChange(t)}
-                    className={cn(
-                      'relative rounded-md py-1.5 text-xs font-medium transition-all',
-                      active
-                        ? 'bg-[#C9A646] text-black'
-                        : 'text-gray-400 hover:text-white',
-                      soon && 'opacity-40 cursor-not-allowed'
-                    )}
-                  >
-                    {ASSET_TYPE_LABELS[t]}
-                    {soon && (
-                      <span className="absolute -top-1.5 -right-1 text-[8px] text-[#C9A646]">soon</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Symbol */}
+          {/* Symbol — cross-class search; asset type is inferred from the
+              chosen (or typed) symbol instead of picked manually. */}
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-400">Symbol</Label>
             <SymbolAutocomplete
               symbol={symbol}
-              assetClass={assetType as AssetClass}
-              filterToAssetClass
-              filterSymbols={assetType === 'futures' ? isCachedFuturesEntry : undefined}
+              filterSymbols={isCachedFuturesEntry}
+              placeholder="Search any symbol — e.g. TSLA, BTCUSDT, MNQ…"
               variant="field"
-              onSelect={setSymbol}
+              onSelect={(next, pickedClass) => {
+                setSymbol(next);
+                setPickedAssetClass(pickedClass ?? null);
+              }}
             />
           </div>
 

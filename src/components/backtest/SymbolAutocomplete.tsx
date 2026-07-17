@@ -22,17 +22,27 @@ export function SymbolAutocomplete({
   compact = false,
   filterToAssetClass = false,
   filterSymbols,
+  placeholder = 'Search ticker…',
 }: {
   symbol: string;
   assetClass?: AssetClass;
-  onSelect: (symbol: string) => void;
+  /** `assetClass` is only populated when the trader picked a suggestion
+   *  (not on a free-typed custom commit) — callers that don't need it can
+   *  ignore the second argument. */
+  onSelect: (symbol: string, assetClass?: AssetClass) => void;
   variant?: 'toolbar' | 'field';
   /** Toolbar-variant only: a tighter, narrower input for cramped headers. */
   compact?: boolean;
   filterToAssetClass?: boolean;
   /** Optional extra predicate applied on top of `filterToAssetClass` — e.g.
-   *  restricting futures suggestions to symbols with a populated data cache. */
+   *  restricting futures suggestions to symbols with a populated data cache.
+   *  In single-class mode (`filterToAssetClass=true`) it applies to the whole
+   *  (already homogeneous) list, same as before. In cross-class mode
+   *  (`filterToAssetClass=false`, the default) it applies ONLY to futures-class
+   *  entries — other classes are never filtered by it. */
   filterSymbols?: (entry: SymbolEntry & { assetClass: AssetClass }) => boolean;
+  /** Input placeholder — defaults to the original toolbar copy. */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -44,7 +54,13 @@ export function SymbolAutocomplete({
     let list = filterToAssetClass && assetClass
       ? ALL_SYMBOLS.filter((u) => u.assetClass === assetClass)
       : ALL_SYMBOLS;
-    if (filterSymbols) list = list.filter(filterSymbols);
+    if (filterSymbols) {
+      list = filterToAssetClass
+        ? list.filter(filterSymbols)
+        // Cross-class mode: only restrict the futures slice (e.g. to cached
+        // roots) — stocks/crypto/forex entries are never touched by it.
+        : list.filter((u) => u.assetClass !== 'futures' || filterSymbols(u));
+    }
     return list;
   }, [filterToAssetClass, assetClass, filterSymbols]);
 
@@ -58,9 +74,19 @@ export function SymbolAutocomplete({
   const matches = useMemo(() => {
     const q = query.trim().toUpperCase();
     if (!q) return universe.slice(0, 8);
-    return universe
-      .filter((u) => u.ticker.toUpperCase().includes(q) || u.label.toUpperCase().includes(q))
-      .slice(0, 8);
+    // Rank ticker prefix-matches first (e.g. "TS" → TSLA), then fall back to
+    // ticker/name substring matches — so the closest match always sorts top.
+    const prefixHits: typeof universe = [];
+    const substringHits: typeof universe = [];
+    for (const u of universe) {
+      const ticker = u.ticker.toUpperCase();
+      if (ticker.startsWith(q)) {
+        prefixHits.push(u);
+      } else if (ticker.includes(q) || u.label.toUpperCase().includes(q)) {
+        substringHits.push(u);
+      }
+    }
+    return [...prefixHits, ...substringHits].slice(0, 8);
   }, [universe, query]);
 
   // Reset the keyboard highlight whenever the visible match list changes.
@@ -75,8 +101,8 @@ export function SymbolAutocomplete({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
-  const commit = (entry: SymbolEntry) => {
-    onSelect(entry.symbol);
+  const commit = (entry: SymbolEntry & { assetClass?: AssetClass }) => {
+    onSelect(entry.symbol, entry.assetClass);
     setQuery('');
     setOpen(false);
     inputRef.current?.blur();
@@ -99,7 +125,7 @@ export function SymbolAutocomplete({
         ref={inputRef}
         type="text"
         value={open ? query : currentTicker}
-        placeholder="Search ticker…"
+        placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
         onFocus={() => { setQuery(''); setOpen(true); }}
@@ -145,15 +171,15 @@ export function SymbolAutocomplete({
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); commit(m); }}
                 onMouseEnter={() => setHighlight(i)}
-                className={`flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left transition-colors ${
+                className={`flex w-full items-baseline gap-3 px-3 py-1.5 text-left transition-colors ${
                   i === highlight ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
                 }`}
               >
-                <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
+                <span className={`shrink-0 font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
                   {m.ticker}
                 </span>
-                <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">{m.assetClass}</span>
-                <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
+                <span className="flex-1 truncate text-[11px] text-zinc-500">{m.label}</span>
+                <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">{m.assetClass}</span>
               </button>
             ))
           )}
