@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Candle } from '../../../components/ReplayChart/types';
-import type { SessionFilter } from '../types';
+import type { BiasFilter, SessionFilter } from '../types';
 import { MarketContext } from '../MarketContext';
 
 function c(
@@ -233,5 +233,120 @@ describe('MarketContext.sessionAllowed', () => {
 
     // The bar's actual weekday is excluded from `days` -> disallowed.
     expect(ctx.sessionAllowed[0]).toBe(false);
+  });
+});
+
+// ============================================================================
+// (d) HTF bias — closed-bar causality (Fix 1: no look-ahead into a still-
+//     forming HTF bar's close)
+// ============================================================================
+
+describe('MarketContext.htfBias — closed-bar semantics', () => {
+  // A single flat-price candle at a given time. Only `close` matters for the
+  // 'ema' bias method (emaLength=1 makes ema[i] === close[i], so bias[i] is
+  // simply sign(close[i] - close[i-1])).
+  function mkCandle(time: number, close: number): Candle {
+    return { time, open: close, high: close + 1, low: close - 1, close, volume: 1 };
+  }
+
+  const T = 1_700_000_000; // arbitrary base, seconds (journal convention)
+  const HTF_DURATION_SEC = 4 * 60 * 60; // '4h' = 14400s
+
+  // Three 4h HTF bars, back-to-back with no gaps:
+  //   htf0: opens T,          closes T+14400  (close=100 -> bias always 0, first bar)
+  //   htf1: opens T+14400,    closes T+28800  (close=90  -> bias -1, since 90 < 100)
+  //   htf2: opens T+28800,    closes T+43200  (close=200 -> bias +1, since 200 > 90)
+  const htf0 = mkCandle(T, 100);
+  const htf1 = mkCandle(T + HTF_DURATION_SEC, 90);
+  const htf2 = mkCandle(T + 2 * HTF_DURATION_SEC, 200);
+  const htfCandles: Candle[] = [htf0, htf1, htf2];
+
+  const bias: BiasFilter = {
+    enabled: true,
+    htfTimeframe: '4h',
+    method: 'ema',
+    emaLength: 1,
+  };
+
+  it('never reads a still-forming HTF bar\'s close -- uses the previous CLOSED bar\'s bias instead', () => {
+    // LTF (5m) bars probing every relevant instant relative to the 3 HTF bars.
+    const ltf: Candle[] = [
+      mkCandle(T, 1), // idx0: htf0 not closed yet -> neutral
+      mkCandle(T + 14_000, 1), // idx1: still inside htf0 (closes at T+14400) -> neutral
+      mkCandle(T + HTF_DURATION_SEC, 1), // idx2: htf0 JUST closed (boundary, <=) -> bias[htf0]=0
+      mkCandle(T + 2 * HTF_DURATION_SEC, 1), // idx3: htf1 JUST closed -> bias[htf1]=-1
+      mkCandle(T + 2 * HTF_DURATION_SEC + 1_200, 1), // idx4: INSIDE forming htf2 (closes at T+43200) -> must still read htf1's bias (-1), NOT htf2's future +1
+      mkCandle(T + 3 * HTF_DURATION_SEC, 1), // idx5: htf2 JUST closed -> bias[htf2]=+1
+    ];
+
+    const ctx = MarketContext.build(ltf, {
+      swingLookback: 2,
+      atrPeriod: 14,
+      bias,
+      htfCandles,
+    });
+
+    expect(ctx.htfBias[0]).toBe(0);
+    expect(ctx.htfBias[1]).toBe(0);
+    expect(ctx.htfBias[2]).toBe(0); // htf0 closed, but htf0's own bias is neutral (first bar)
+    expect(ctx.htfBias[3]).toBe(-1); // htf1 closed -> its bias (-1) becomes visible
+    // THE critical assertion: idx4 sits strictly inside htf2's still-forming
+    // window. Under the old open-time alignment bug, htf2.open (T+28800) <=
+    // this bar's time would have advanced the pointer to htf2 and leaked its
+    // eventual (+1) bias -- a look-ahead bug. Closed-bar semantics must keep
+    // reading htf1's bias (-1) until htf2 actually closes at idx5.
+    expect(ctx.htfBias[4]).toBe(-1);
+    expect(ctx.htfBias[5]).toBe(1); // htf2 closed -> its bias (+1) becomes visible
+  });
+
+  it('is neutral (0) for every LTF bar before the first HTF bar has closed', () => {
+    const ltf: Candle[] = [
+      mkCandle(T, 1),
+      mkCandle(T + 1_000, 1),
+      mkCandle(T + HTF_DURATION_SEC - 1, 1), // 1 second before htf0 closes
+    ];
+    const ctx = MarketContext.build(ltf, {
+      swingLookback: 2,
+      atrPeriod: 14,
+      bias,
+      htfCandles,
+    });
+    expect(ctx.htfBias).toEqual([0, 0, 0]);
+  });
+
+  it('truncated-prefix invariance: dropping the still-forming HTF bar does not change bias for LTF bars that never needed it', () => {
+    // Same LTF probe bars as the causality test, but stop BEFORE the point
+    // that needs htf2 closed (i.e. exclude idx5 from the causality test).
+    const ltf: Candle[] = [
+      mkCandle(T, 1),
+      mkCandle(T + 14_000, 1),
+      mkCandle(T + HTF_DURATION_SEC, 1),
+      mkCandle(T + 2 * HTF_DURATION_SEC, 1),
+      mkCandle(T + 2 * HTF_DURATION_SEC + 1_200, 1),
+    ];
+
+    const fullCtx = MarketContext.build(ltf, {
+      swingLookback: 2,
+      atrPeriod: 14,
+      bias,
+      htfCandles, // full 3-bar HTF series (includes the still-forming htf2)
+    });
+
+    // Truncate the HTF series at the last CLOSED bar relative to this LTF
+    // range (htf1) -- i.e. drop the still-forming/future htf2 entirely, the
+    // way a live/incremental run would look mid-way through htf2's window.
+    const truncatedHtfCandles = htfCandles.slice(0, 2); // [htf0, htf1] only
+
+    const truncCtx = MarketContext.build(ltf, {
+      swingLookback: 2,
+      atrPeriod: 14,
+      bias,
+      htfCandles: truncatedHtfCandles,
+    });
+
+    // Every LTF bar in this range is derivable purely from htf0/htf1 (none of
+    // them ever needed htf2 to have closed) -> bias must be IDENTICAL whether
+    // or not htf2 is present in the input at all.
+    expect(truncCtx.htfBias).toEqual(fullCtx.htfBias);
   });
 });

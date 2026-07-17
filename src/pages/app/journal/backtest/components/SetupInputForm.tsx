@@ -11,9 +11,10 @@
 import { useState } from 'react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
-import { Field, SelectField } from '@/components/backtest/auto/formControls';
+import { Field, NumberField, SelectField } from '@/components/backtest/auto/formControls';
 import { useAutoBacktestStore } from '@/store/useAutoBacktestStore';
 import { makeDefaultSetup, type SessionFilter } from '@/core/auto/types';
+import { getContractSpec } from '@/core/auto/contractSpecs';
 import { parseSetupFromText } from '@/services/backtest/aiSetupService';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,17 @@ const DEFAULT_SYMBOL = 'MNQ';
 const DEFAULT_TIMEFRAME = '5m';
 const DEFAULT_SESSION_VALUE = 'london-ny';
 
+type SizingMode = 'risk-pct' | 'fixed-contracts';
+
+const SIZING_MODE_OPTIONS: SymbolOption[] = [
+  { value: 'risk-pct', label: 'Risk % of account' },
+  { value: 'fixed-contracts', label: 'Fixed contracts' },
+];
+
+const DEFAULT_SIZING_MODE: SizingMode = 'risk-pct';
+const DEFAULT_RISK_PCT = 1;
+const DEFAULT_CONTRACTS = 1;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -131,6 +143,9 @@ export function SetupInputForm() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const [sessionValue, setSessionValue] = useState(DEFAULT_SESSION_VALUE);
+  const [sizingMode, setSizingMode] = useState<SizingMode>(DEFAULT_SIZING_MODE);
+  const [riskPct, setRiskPct] = useState(DEFAULT_RISK_PCT);
+  const [contracts, setContracts] = useState(DEFAULT_CONTRACTS);
   const [strategyText, setStrategyText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -138,6 +153,7 @@ export function SetupInputForm() {
 
   const isBusy = parsing || status === 'loading-data' || status === 'running';
   const canSubmit = strategyText.trim().length > 0 && !isBusy;
+  const contractSpec = getContractSpec(symbol);
 
   async function handleSubmit() {
     const trimmed = strategyText.trim();
@@ -156,6 +172,13 @@ export function SetupInputForm() {
     const base = makeDefaultSetup(symbol, timeframe);
     const chosenSession = SESSION_PRESETS.find((p) => p.value === sessionValue)?.session
       ?? base.session;
+    // Sizing controls always win over the makeDefaultSetup risk-pct default.
+    base.risk = {
+      ...base.risk,
+      sizingMode,
+      riskPerTradePct: riskPct,
+      contracts: sizingMode === 'fixed-contracts' ? contracts : undefined,
+    };
 
     try {
       const parsed = await parseSetupFromText(trimmed);
@@ -207,6 +230,42 @@ export function SetupInputForm() {
           options={SESSION_PRESETS.map((p) => ({ value: p.value, label: p.label }))}
           onChange={setSessionValue}
         />
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <SelectField
+          label="Position sizing"
+          value={sizingMode}
+          options={SIZING_MODE_OPTIONS}
+          onChange={(v) => setSizingMode(v as SizingMode)}
+        />
+        {sizingMode === 'risk-pct' ? (
+          <NumberField
+            label="Risk per trade (%)"
+            hint="Account percent risked on each trade."
+            value={riskPct}
+            min={0.1}
+            max={10}
+            step={0.1}
+            onChange={setRiskPct}
+          />
+        ) : (
+          <NumberField
+            label="Contracts"
+            hint="Fixed contract count per trade (futures only)."
+            value={contracts}
+            min={1}
+            step={1}
+            onChange={(v) => setContracts(Math.max(1, Math.floor(v)))}
+          />
+        )}
+        {contractSpec && (
+          <Field label="Contract spec">
+            <p className="rounded-lg border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 text-sm text-ink-secondary">
+              {contractSpec.root} · ${contractSpec.pointValue}/pt · tick {contractSpec.tickSize}
+            </p>
+          </Field>
+        )}
       </div>
 
       <div className="mt-4">

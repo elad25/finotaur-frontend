@@ -23,8 +23,16 @@ import { MarketContext } from './MarketContext';
 import { runDetectors } from './detectors/registry';
 import { buildSignal } from './SignalBuilder';
 import { signalToPosition, type AutoPosition } from './signalToPosition';
-import { candleTimeMs } from './MarketContext';
+import { candleTimeMs, localDayKey } from './MarketContext';
 import { computeRLadderAggregate, type RLadderAgg } from './rLadderAnalysis';
+import { getContractSpec } from './contractSpecs';
+import {
+  resolveFuturesContracts,
+  applyFuturesTickSlippage,
+  futuresPnl,
+  futuresCommissionRoundTrip,
+  priceMovePercent,
+} from './futuresExecution';
 
 /** Fixed reward:risk levels the honest-results R-ladder is simulated at. */
 export const R_LADDER_LEVELS = [1, 2, 3, 4, 5];
@@ -161,6 +169,32 @@ export function runAutoBacktest(
   const commissionPct = setup.risk.commissionPct ?? 0;
   const slippagePct = setup.risk.slippagePct ?? 0;
 
+  // Futures contract spec for this run's symbol (null for crypto/other
+  // symbols, in which case every branch below falls through to the existing
+  // fractional-unit math via OrderExecutionEngine, unchanged).
+  const contractSpec = getContractSpec(setup.instrument.symbol);
+  const sizingMode = setup.risk.sizingMode ?? 'risk-pct';
+  const commissionPerContract =
+    setup.risk.commissionPerContract ?? contractSpec?.defaultCommissionPerSide ?? 0;
+  const slippageTicks = setup.risk.slippageTicks;
+
+  // Per-day trade cap (RiskConfig.maxTradesPerDay). Only enforced when set to
+  // a finite number >= 1; undefined/0/absent stays unlimited (backward
+  // compatible). "Day" boundary uses the session filter's timezone when the
+  // session filter is enabled (reusing the same local-calendar-day notion the
+  // session gate already applies to this run), else UTC.
+  const maxTradesPerDayRaw = setup.risk.maxTradesPerDay;
+  const maxTradesPerDay =
+    typeof maxTradesPerDayRaw === 'number' &&
+    Number.isFinite(maxTradesPerDayRaw) &&
+    maxTradesPerDayRaw >= 1
+      ? maxTradesPerDayRaw
+      : undefined;
+  const dayTimezone =
+    setup.session.enabled && setup.session.timezone ? setup.session.timezone : 'UTC';
+  let currentDayKey: string | null = null;
+  let tradesOpenedToday = 0;
+
   const n = candles.length;
   const PROGRESS_EVERY = 500;
 
@@ -168,19 +202,56 @@ export function runAutoBacktest(
   for (let i = 0; i < n; i++) {
     const candle = candles[i];
 
+    // Roll the day-trade counter forward whenever the bar crosses into a new
+    // calendar day (only tracked when the cap is actually enforced).
+    if (maxTradesPerDay !== undefined) {
+      const dayKey = localDayKey(candleTimeMs(candle), dayTimezone);
+      if (dayKey !== currentDayKey) {
+        currentDayKey = dayKey;
+        tradesOpenedToday = 0;
+      }
+    }
+
     // (a) Manage the open position: SL first, then TP (engine convention).
     if (open) {
       const sl = orderEngine.checkStopLoss(open, candle);
       const tp = sl ? null : orderEngine.checkTakeProfit(open, candle);
       const hit = sl ?? tp;
       if (hit) {
-        const exitPrice = applyExitSlippage(orderEngine, hit.price, open.type, slippagePct);
-        const { pnl, pnlPercent } = orderEngine.calculateRealizedPnL(open, exitPrice);
-        const commission = commissionPct > 0
-          ? orderEngine.calculateCommission(exitPrice, open.size, commissionPct) +
-            orderEngine.calculateCommission(open.entryPrice, open.size, commissionPct)
-          : 0;
-        const netPnl = pnl - commission;
+        let exitPrice: number;
+        let netPnl: number;
+        let pnlPercent: number;
+
+        if (contractSpec) {
+          // Futures: whole-contract, point-value P&L + per-contract commission.
+          const closingSide: 'buy' | 'sell' = open.type === 'long' ? 'sell' : 'buy';
+          exitPrice = slippageTicks
+            ? applyFuturesTickSlippage(hit.price, contractSpec.tickSize, slippageTicks, closingSide)
+            : hit.price;
+          const grossPnl = futuresPnl(
+            open.entryPrice,
+            exitPrice,
+            contractSpec.pointValue,
+            open.size,
+            open.type === 'long',
+          );
+          const commission = commissionPerContract > 0
+            ? futuresCommissionRoundTrip(commissionPerContract, open.size)
+            : 0;
+          netPnl = grossPnl - commission;
+          pnlPercent = priceMovePercent(open.entryPrice, exitPrice, open.type === 'long');
+        } else {
+          // Crypto/other: existing fractional-unit math, unchanged.
+          exitPrice = applyExitSlippage(orderEngine, hit.price, open.type, slippagePct);
+          const pnlResult = orderEngine.calculateRealizedPnL(open, exitPrice);
+          const commission = commissionPct > 0
+            ? orderEngine.calculateCommission(exitPrice, open.size, commissionPct) +
+              orderEngine.calculateCommission(open.entryPrice, open.size, commissionPct)
+            : 0;
+          netPnl = pnlResult.pnl - commission;
+          pnlPercent = pnlResult.pnlPercent;
+        }
+
         open.exitPrice = exitPrice;
         open.exitTime = Math.floor(candleTimeMs(candle) / 1000);
         open.exitReason = hit.reason;
@@ -204,7 +275,8 @@ export function runAutoBacktest(
           !open &&
           i >= sig.armIndex &&
           ctx.sessionAllowed[i] &&
-          biasAgrees(setup, ctx.htfBias[i], sig.direction);
+          biasAgrees(setup, ctx.htfBias[i], sig.direction) &&
+          (maxTradesPerDay === undefined || tradesOpenedToday < maxTradesPerDay);
 
         if (!canConsider) {
           stillPending.push(sig);
@@ -224,18 +296,47 @@ export function runAutoBacktest(
           continue;
         }
 
-        const fillPrice = slippagePct > 0
-          ? orderEngine.applySlippage(fill, slippagePct, side)
-          : fill;
-        const size = orderEngine.calculatePositionSize(
-          balance,
-          fillPrice,
-          sig.stopLoss,
-          setup.risk.riskPerTradePct,
-        );
+        let fillPrice: number;
+        let size: number;
+
+        if (contractSpec) {
+          // Futures: tick-based slippage + whole-contract risk-based/fixed sizing.
+          fillPrice = slippageTicks
+            ? applyFuturesTickSlippage(fill, contractSpec.tickSize, slippageTicks, side)
+            : fill;
+          const stopDistancePoints = Math.abs(fillPrice - sig.stopLoss);
+          const sizing = resolveFuturesContracts({
+            sizingMode,
+            riskPerTradePct: setup.risk.riskPerTradePct,
+            balance,
+            contractsConfig: setup.risk.contracts,
+            stopDistancePoints,
+            pointValue: contractSpec.pointValue,
+          });
+          if (!sizing) {
+            // Stop too wide for the risk budget at 1 contract -- skip this
+            // fill, keep the signal pending in case a tighter fill comes later.
+            stillPending.push(sig);
+            continue;
+          }
+          size = sizing.contracts;
+        } else {
+          // Crypto/other: existing fractional-unit math, unchanged.
+          fillPrice = slippagePct > 0
+            ? orderEngine.applySlippage(fill, slippagePct, side)
+            : fill;
+          size = orderEngine.calculatePositionSize(
+            balance,
+            fillPrice,
+            sig.stopLoss,
+            setup.risk.riskPerTradePct,
+          );
+        }
+
         if (size > 0) {
           const entryTime = Math.floor(candleTimeMs(candle) / 1000);
-          open = signalToPosition(sig, fillPrice, size, entryTime);
+          open = signalToPosition(sig, fillPrice, size, entryTime, contractSpec?.pointValue ?? 1);
+          if (maxTradesPerDay !== undefined) tradesOpenedToday++;
           // Do NOT keep this signal; one fill consumes it. Remaining pending
           // can't fill while open is set anyway.
         } else {

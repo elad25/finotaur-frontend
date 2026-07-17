@@ -302,7 +302,18 @@ function computeSessionAllowed(
 
 /**
  * HTF bias mapped down to each LTF bar. Each LTF bar is associated with the
- * most-recently CLOSED HTF bar (htf.time <= ltf.time), never a future one.
+ * most-recently CLOSED HTF bar -- CLOSED meaning
+ * `htfOpenTime + htfBarDuration <= ltfOpenTime`, never a still-forming one.
+ *
+ * This is deliberately stricter than "htf.time <= ltf.time" (open-time
+ * alignment): the bias VALUE at an HTF index is derived from that bar's
+ * CLOSE (EMA over closes / confirmed structure), so an HTF bar only becomes
+ * safe to read once it has fully closed relative to the LTF bar consuming
+ * it. Example: a 4h bar opens 00:00 and closes 04:00; an LTF bar at 01:00
+ * must NOT read the bias computed from that bar's (not-yet-existing) 04:00
+ * close -- it must read the PREVIOUS closed 4h bar's bias, or neutral (0)
+ * if no HTF bar has closed yet.
+ *
  * Bias = EMA slope sign (method 'ema') or last-confirmed HTF structure
  * (method 'structure'). Disabled/absent -> all neutral (0).
  */
@@ -323,21 +334,71 @@ function computeHtfBias(
       ? emaSlopeBias(htfCandles, bias.emaLength ?? 50)
       : structureBias(htfCandles);
 
-  // For each LTF bar, find the latest HTF bar whose time <= ltf.time.
-  let htfIdx = 0;
+  // HTF bar duration, needed to know when a candidate HTF bar has actually
+  // CLOSED. Prefer the setup's explicit timeframe label; fall back to the
+  // median spacing between consecutive HTF candles (robust to occasional
+  // gaps -- weekends/holidays -- that would skew a plain mean/first-delta).
+  const htfDurationMs =
+    timeframeToMs(bias.htfTimeframe) ?? medianDeltaMs(htfCandles);
+
+  // For each LTF bar, find the latest HTF bar that has fully CLOSED by the
+  // LTF bar's own open time. htfIdx = -1 means no HTF bar has closed yet.
+  let htfIdx = -1;
   for (let i = 0; i < n; i++) {
     const tLtf = candleTimeMs(candles[i]);
     while (
       htfIdx + 1 < htfCandles.length &&
-      candleTimeMs(htfCandles[htfIdx + 1]) <= tLtf
+      candleTimeMs(htfCandles[htfIdx + 1]) + htfDurationMs <= tLtf
     ) {
       htfIdx++;
     }
-    // Guard: only apply if the candidate HTF bar has already closed (<= now).
-    out[i] =
-      candleTimeMs(htfCandles[htfIdx]) <= tLtf ? htfBiasSeries[htfIdx] : 0;
+    out[i] = htfIdx >= 0 ? htfBiasSeries[htfIdx] : 0;
   }
   return out;
+}
+
+/** Known timeframe labels mapped to milliseconds. Extend as new timeframes
+ *  become selectable in the bias-filter UI. */
+const TIMEFRAME_TO_MS: Record<string, number> = {
+  '1m': 60_000,
+  '3m': 3 * 60_000,
+  '5m': 5 * 60_000,
+  '15m': 15 * 60_000,
+  '30m': 30 * 60_000,
+  '1h': 60 * 60_000,
+  '2h': 2 * 60 * 60_000,
+  '4h': 4 * 60 * 60_000,
+  '6h': 6 * 60 * 60_000,
+  '8h': 8 * 60 * 60_000,
+  '12h': 12 * 60 * 60_000,
+  '1d': 24 * 60 * 60_000,
+  '3d': 3 * 24 * 60 * 60_000,
+  '1w': 7 * 24 * 60 * 60_000,
+};
+
+function timeframeToMs(tf?: string): number | undefined {
+  if (!tf) return undefined;
+  return TIMEFRAME_TO_MS[tf];
+}
+
+/**
+ * Robust bar-duration estimate: the MEDIAN delta between consecutive candle
+ * open times. Used only as a fallback when the timeframe label isn't in the
+ * known map above -- median is resistant to the occasional large gap
+ * (weekend/holiday/missing bar) that would otherwise skew a mean or a
+ * first-delta sample toward an unrepresentative duration.
+ */
+function medianDeltaMs(candles: Candle[]): number {
+  if (candles.length < 2) return 0;
+  const deltas: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    deltas.push(candleTimeMs(candles[i]) - candleTimeMs(candles[i - 1]));
+  }
+  deltas.sort((a, b) => a - b);
+  const mid = Math.floor(deltas.length / 2);
+  return deltas.length % 2 === 0
+    ? (deltas[mid - 1] + deltas[mid]) / 2
+    : deltas[mid];
 }
 
 /** EMA-slope bias series: +1 if EMA rising, -1 if falling, 0 flat. Causal. */
@@ -404,6 +465,22 @@ export function candleTimeMs(c: Candle): number {
 function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map((x) => parseInt(x, 10));
   return (h || 0) * 60 + (m || 0);
+}
+
+/**
+ * Local calendar-day key ("YYYY-MM-DD") for a UTC ms timestamp in `timezone`.
+ * Used to bucket bars into trading days for day-scoped risk limits (e.g.
+ * `RiskConfig.maxTradesPerDay` in AutoBacktestEngine). Uses the `en-CA`
+ * locale, which formats dates as YYYY-MM-DD by construction.
+ */
+export function localDayKey(ms: number, timezone: string): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return fmt.format(new Date(ms));
 }
 
 /** Local minutes-of-day and weekday (0=Sun) for a UTC ms timestamp in tz. */

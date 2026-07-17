@@ -11,6 +11,8 @@
 // describes the *shape* of a setup and the *shape* of detector output.
 // ============================================================================
 
+import { getContractSpec } from './contractSpecs';
+
 /** Supported ICT-style pattern families. */
 export type PatternType = 'FVG' | 'IFVG' | 'BREAKER' | 'OB' | 'LIQUIDITY';
 
@@ -167,6 +169,22 @@ export interface RiskConfig {
   initialBalance: number;
   commissionPct?: number;
   slippagePct?: number;
+  /**
+   * Position-sizing strategy for futures instruments. Ignored for fractional
+   * (crypto) symbols, which always size by riskPerTradePct. Default
+   * 'risk-pct' when unset.
+   */
+  sizingMode?: 'risk-pct' | 'fixed-contracts';
+  /** Whole-number contract count, used only when sizingMode === 'fixed-contracts'. */
+  contracts?: number;
+  /** Commission per side, per contract ($). Overrides the contract spec's default when set. */
+  commissionPerContract?: number;
+  /**
+   * Futures slippage in ticks (price offset = slippageTicks * tickSize),
+   * applied on both entry and exit fills. When set for a futures symbol,
+   * this replaces the percent-based slippagePct for that run.
+   */
+  slippageTicks?: number;
 }
 
 export interface SetupDefinition {
@@ -294,6 +312,10 @@ export function makeDefaultSetup(
   timeframe: string,
 ): SetupDefinition {
   const now = Date.now();
+  // Futures symbols default to a 1-tick slippage assumption (unrealistic to
+  // model 0 slippage on a whole-contract fill); crypto/other symbols keep
+  // the existing 0-slippage-by-default behavior untouched.
+  const isFutures = getContractSpec(symbol) !== null;
   return {
     id: `setup_${now.toString(36)}`,
     schemaVersion: 1,
@@ -312,6 +334,8 @@ export function makeDefaultSetup(
       initialBalance: 10000,
       commissionPct: 0,
       slippagePct: 0,
+      sizingMode: 'risk-pct',
+      ...(isFutures ? { slippageTicks: 1 } : {}),
     },
     instrument: { symbol, timeframe, source: 'binance' },
     createdAt: now,

@@ -1,35 +1,29 @@
 // src/pages/app/journal/backtest/components/ResultsSummary.tsx
 // ============================================================================
-// RESULTS SUMMARY — "The results" section (HONEST, R-ladder-driven).
+// RESULTS SUMMARY — "The results" section, driven by StatisticsEngine.
 //
-// WHY THIS EXISTS (honesty fix)
-// ------------------------------
-// The engine fills market/limit orders at (or after) the NEXT bar's open,
-// which can gap past a take-profit level that was priced off the signal's
-// PRE-FILL reference entry. That can record a "win" whose real fill sat on
-// the losing side of the actual market path -- an equity curve that only
-// declines while individual trades say "take profit". Instead of trusting
-// the engine's own exit bookkeeping, this component drives EVERY number here
-// (headline P&L, equity curve, all 6 stat cards) from the fill-anchored
-// R-ladder (`core/auto/rLadderAnalysis.ts`): for each REAL trade's actual
-// fill (entryPrice/stopLoss/direction), re-simulate fixed reward:risk targets
-// against the REAL candles and score wins/losses off that, not off the
-// engine's own take-profit/stop-loss exit reason.
+// The headline (stat cards, equity curve, monthly P&L, risk/return row,
+// direction breakdown, R-multiple distribution) is driven by the run's REAL
+// statistics (`result.statistics`, produced by `StatisticsEngine.calculate`
+// against the user's actual configured `initialBalance` / `riskPerTradePct`)
+// and the run's real closed trades (`result.trades`) — NOT a fixed
+// $50,000/1% recompute.
 //
-// FIXED-RISK MODEL
-// -----------------
-//   ACCOUNT = $50,000, RISK_PCT = 1% -> riskPerTrade = $500 per trade.
-//   At a selected reward:risk R: resolved trade pnl = win ? +R*500 : -500.
-//   'open' trades (never resolved within available candle history) are
-//   EXCLUDED from every stat and reported as a footnote count.
-//   Equity curve = cumulative from $50,000, trades sorted by entryTime.
-//   Max drawdown = max peak-to-trough on that cumulative curve.
+// The R:R what-if ladder (fixed $50,000 / 1% risk, fill-anchored re-scoring
+// of each real trade's actual fill against real candles at fixed
+// reward:risk targets via `core/auto/rLadderAnalysis.ts`) remains as a
+// secondary, clearly-labeled normalization tool below the real-stats
+// sections — useful for comparing "what if I'd used a different R target",
+// not for reporting what actually happened.
 // ============================================================================
 
 import { useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -45,80 +39,43 @@ import {
   selectAutoSetup,
 } from '@/store/useAutoBacktestStore';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
-import { R_LADDER_LEVELS } from '@/core/auto/AutoBacktestEngine';
+import {
+  R_LADDER_LEVELS,
+  type BacktestStatisticsLike,
+  type RMultipleDistribution,
+} from '@/core/auto/AutoBacktestEngine';
 
 // ---------------------------------------------------------------------------
-// Simulation constants (fixed-risk model)
+// Secondary R:R what-if model constants (fixed-risk normalization only)
 // ---------------------------------------------------------------------------
 
-const ACCOUNT_SIZE = 50_000;
-const RISK_PCT = 1; // 1% of account risked per trade
-const RISK_PER_TRADE = (ACCOUNT_SIZE * RISK_PCT) / 100; // $500
-
+const WHATIF_ACCOUNT_SIZE = 50_000;
+const WHATIF_RISK_PCT = 1; // 1% of account risked per trade
+const WHATIF_RISK_PER_TRADE = (WHATIF_ACCOUNT_SIZE * WHATIF_RISK_PCT) / 100; // $500
 const DEFAULT_R = 2;
 
 const GREEN = '#4AD295';
 const RED = '#E36363';
 
 // ---------------------------------------------------------------------------
-// Fixed-risk R-ladder derivation
+// Real-statistics helpers
 // ---------------------------------------------------------------------------
 
-interface EquityPoint {
-  time: number; // seconds, from the trade's entryTime
-  balance: number;
+/** Read a numeric field off the loose `BacktestStatisticsLike` (index-signature) type. */
+function num(stats: BacktestStatisticsLike, key: string): number {
+  const v = stats[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
-interface RRow {
-  r: number;
-  trades: number; // resolved (win+loss) trade count
-  winRate: number; // 0-100
-  netPnl: number; // $
-  expectancy: number; // avg R per resolved trade
-}
-
-interface SelectedRStats {
-  netPnl: number;
-  winRate: number;
-  profitFactor: number;
-  maxDrawdown: number;
-  maxDrawdownPct: number;
+interface DirectionBreakdown {
   longCount: number;
   longWinRate: number;
   shortCount: number;
   shortWinRate: number;
-  equityCurve: EquityPoint[];
-  openCount: number;
-  resolvedCount: number;
 }
 
-/** Trades sorted by entryTime, oldest first — shared ordering for equity/DD. */
-function sortedByEntry(trades: AutoPosition[]): AutoPosition[] {
-  return [...trades].sort((a, b) => a.entryTime - b.entryTime);
-}
-
-/** Per-trade pnl at a given R under the fixed-risk model. `null` if 'open'. */
-function tradePnlAtR(trade: AutoPosition, r: number): number | null {
-  const outcome = trade.rLadder?.[r];
-  if (outcome === 'win') return r * RISK_PER_TRADE;
-  if (outcome === 'loss') return -RISK_PER_TRADE;
-  return null; // 'open' or missing -> excluded
-}
-
-/** Full stat set for the currently-selected R, computed from the R-ladder. */
-function computeSelectedRStats(trades: AutoPosition[], r: number): SelectedRStats {
-  const ordered = sortedByEntry(trades);
-
-  let balance = ACCOUNT_SIZE;
-  let peak = ACCOUNT_SIZE;
-  let maxDrawdown = 0;
-  const equityCurve: EquityPoint[] = [];
-
-  let grossWin = 0;
-  let grossLoss = 0;
-  let wins = 0;
-  let openCount = 0;
-
+/** Long/short trade counts + win rate from the REAL closed trades (realizedPnl-based). */
+function computeDirectionBreakdown(trades: AutoPosition[]): DirectionBreakdown {
   let longCount = 0;
   let longWins = 0;
   let longResolved = 0;
@@ -126,53 +83,68 @@ function computeSelectedRStats(trades: AutoPosition[], r: number): SelectedRStat
   let shortWins = 0;
   let shortResolved = 0;
 
-  for (const trade of ordered) {
-    const pnl = tradePnlAtR(trade, r);
-    if (pnl === null) {
-      openCount++;
-      continue;
-    }
-
-    balance += pnl;
-    peak = Math.max(peak, balance);
-    maxDrawdown = Math.max(maxDrawdown, peak - balance);
-    equityCurve.push({ time: trade.entryTime, balance });
-
-    if (pnl > 0) {
-      grossWin += pnl;
-      wins++;
-    } else {
-      grossLoss += Math.abs(pnl);
-    }
-
+  for (const trade of trades) {
+    if (trade.realizedPnl === undefined) continue;
+    const win = trade.realizedPnl > 0;
     if (trade.type === 'long') {
       longCount++;
       longResolved++;
-      if (pnl > 0) longWins++;
+      if (win) longWins++;
     } else {
       shortCount++;
       shortResolved++;
-      if (pnl > 0) shortWins++;
+      if (win) shortWins++;
     }
   }
 
-  const resolvedCount = ordered.length - openCount;
-  const netPnl = grossWin - grossLoss;
-
   return {
-    netPnl,
-    winRate: resolvedCount > 0 ? (wins / resolvedCount) * 100 : 0,
-    profitFactor: grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0,
-    maxDrawdown,
-    maxDrawdownPct: ACCOUNT_SIZE > 0 ? (maxDrawdown / ACCOUNT_SIZE) * 100 : 0,
     longCount,
     longWinRate: longResolved > 0 ? (longWins / longResolved) * 100 : 0,
     shortCount,
     shortWinRate: shortResolved > 0 ? (shortWins / shortResolved) * 100 : 0,
-    equityCurve,
-    openCount,
-    resolvedCount,
   };
+}
+
+interface MonthlyPnlPoint {
+  month: string; // "YYYY-MM"
+  label: string; // "Jan '24"
+  pnl: number;
+}
+
+/** Monthly P&L, grouped by REAL trade exit month (realizedPnl). */
+function computeMonthlyPnl(trades: AutoPosition[]): MonthlyPnlPoint[] {
+  const byMonth = new Map<string, number>();
+
+  for (const trade of trades) {
+    if (trade.realizedPnl === undefined || trade.exitTime === undefined) continue;
+    const date = new Date(trade.exitTime * 1000);
+    const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    byMonth.set(key, (byMonth.get(key) ?? 0) + trade.realizedPnl);
+  }
+
+  return Array.from(byMonth.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, pnl]) => ({
+      month,
+      label: new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-US', {
+        month: 'short',
+        year: '2-digit',
+        timeZone: 'UTC',
+      }),
+      pnl,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Secondary R:R what-if model (fixed $50k / 1% risk)
+// ---------------------------------------------------------------------------
+
+interface RRow {
+  r: number;
+  trades: number; // resolved (win+loss) trade count
+  winRate: number; // 0-100
+  netPnl: number; // $
+  expectancy: number; // avg R per resolved trade
 }
 
 /** The R:R what-if table rows — one per R_LADDER_LEVELS entry. */
@@ -188,11 +160,11 @@ function computeRRows(trades: AutoPosition[]): RRow[] {
       if (outcome === 'win') {
         wins++;
         netR += r;
-        netPnl += r * RISK_PER_TRADE;
+        netPnl += r * WHATIF_RISK_PER_TRADE;
       } else if (outcome === 'loss') {
         losses++;
         netR -= 1;
-        netPnl -= RISK_PER_TRADE;
+        netPnl -= WHATIF_RISK_PER_TRADE;
       }
     }
 
@@ -219,6 +191,11 @@ function fmtUsd(n: number): string {
 
 function fmtDateShort(ms: number): string {
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function fmtRatio(n: number): string {
+  if (!Number.isFinite(n)) return n > 0 ? '∞' : '0.00';
+  return n.toFixed(2);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +225,7 @@ function StatCard({
 }
 
 // ---------------------------------------------------------------------------
-// R:R selector
+// R:R selector (secondary section)
 // ---------------------------------------------------------------------------
 
 function RSelector({
@@ -288,7 +265,7 @@ function RSelector({
 }
 
 // ---------------------------------------------------------------------------
-// R:R what-if table
+// R:R what-if table (secondary section)
 // ---------------------------------------------------------------------------
 
 function RLadderTable({
@@ -302,9 +279,12 @@ function RLadderTable({
 }) {
   return (
     <Card padding="default">
-      <h3 className="text-sm font-semibold text-ink-primary">Risk : Reward — what-if</h3>
+      <h3 className="text-sm font-semibold text-ink-primary">
+        Risk:Reward What-If (normalized $50k / 1% risk)
+      </h3>
       <p className="mt-0.5 text-[12px] text-ink-tertiary">
-        Same real trades, re-scored at each fixed risk:reward target against real candles.
+        Same real trades, re-scored at each fixed risk:reward target against real candles — a
+        normalization tool, not the actual account result above.
       </p>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[480px] border-collapse text-sm">
@@ -351,6 +331,111 @@ function RLadderTable({
 }
 
 // ---------------------------------------------------------------------------
+// Monthly P&L bar chart
+// ---------------------------------------------------------------------------
+
+function MonthlyPnlChart({ data }: { data: MonthlyPnlPoint[] }) {
+  return (
+    <Card padding="default">
+      <h3 className="text-sm font-semibold text-ink-primary">Monthly P&amp;L</h3>
+      {data.length > 0 ? (
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={data} margin={{ top: 16, right: 8, left: 4, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              stroke="#666666"
+              tick={{ fill: '#888888', fontSize: 11 }}
+              tickLine={false}
+            />
+            <YAxis
+              stroke="#666666"
+              tick={{ fill: '#888888', fontSize: 11 }}
+              tickLine={false}
+              width={56}
+              tickFormatter={(v) => fmtUsd(v)}
+            />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#161616',
+                border: '1px solid rgba(74,210,149,0.25)',
+                borderRadius: '12px',
+                padding: '10px 12px',
+              }}
+              labelStyle={{ color: '#F4F4F4', marginBottom: 4, fontWeight: 600 }}
+              formatter={(value: number) => [fmtUsd(value), 'P&L']}
+              cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+            />
+            <Bar dataKey="pnl" radius={[4, 4, 4, 4]} maxBarSize={40}>
+              {data.map((point) => (
+                <Cell key={point.month} fill={point.pnl >= 0 ? GREEN : RED} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="mt-4 flex h-[120px] w-full items-center justify-center rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1">
+          <p className="text-sm text-ink-tertiary">No closed trades to break down by month.</p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// R-multiple distribution bars
+// ---------------------------------------------------------------------------
+
+const R_BUCKET_ORDER: ReadonlyArray<keyof RMultipleDistribution> = [
+  '< -2R',
+  '-2R to -1R',
+  '-1R to 0R',
+  '0R to 1R',
+  '1R to 2R',
+  '2R to 3R',
+  '> 3R',
+];
+
+function RDistributionChart({ dist }: { dist: RMultipleDistribution }) {
+  const max = Math.max(1, ...R_BUCKET_ORDER.map((k) => dist[k]));
+  const total = R_BUCKET_ORDER.reduce((s, k) => s + dist[k], 0);
+  if (total === 0) return null;
+
+  return (
+    <Card padding="default">
+      <h3 className="mb-4 text-sm font-semibold text-ink-primary">R-multiple distribution</h3>
+      <div className="flex h-32 items-end gap-2">
+        {R_BUCKET_ORDER.map((bucket) => {
+          const count = dist[bucket];
+          const positive =
+            bucket.startsWith('0R') ||
+            bucket.startsWith('1R') ||
+            bucket.startsWith('2R') ||
+            bucket.startsWith('>');
+          return (
+            <div key={bucket} className="flex flex-1 flex-col items-center justify-end gap-1">
+              <span className="text-[11px] tabular-nums text-ink-secondary">{count}</span>
+              <div
+                className={cn(
+                  'w-full rounded-t-sm',
+                  positive ? 'bg-gold-primary' : 'bg-num-negative',
+                )}
+                style={{ height: `${(count / max) * 100}%`, minHeight: count > 0 ? 4 : 0 }}
+                aria-hidden
+              />
+              <span className="text-center text-[10px] leading-tight text-ink-tertiary">
+                {bucket}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -364,38 +449,60 @@ export function ResultsSummary() {
 
   const symbol = setup.instrument.symbol;
   const timeframe = setup.instrument.timeframe;
+  const initialBalance = setup.risk.initialBalance;
 
-  const stats = useMemo(() => {
+  const stats = result?.statistics ?? null;
+
+  const directionBreakdown = useMemo(() => {
     if (!result) return null;
-    return computeSelectedRStats(result.trades, selectedR);
-  }, [result, selectedR]);
+    return computeDirectionBreakdown(result.trades);
+  }, [result]);
+
+  const monthlyPnl = useMemo(() => {
+    if (!result) return [];
+    return computeMonthlyPnl(result.trades);
+  }, [result]);
 
   const rRows = useMemo(() => {
     if (!result) return [];
     return computeRRows(result.trades);
   }, [result]);
 
+  // Real equity curve, from the engine's own StatisticsEngine output — reflects
+  // the configured account size / risk %, not the fixed $50k/1% what-if model.
   const chartData = useMemo(() => {
-    if (!stats) return [];
-    const mapped = stats.equityCurve.map((p) => ({
+    if (!stats?.equityCurve) return [];
+    return stats.equityCurve.map((p) => ({
       date: new Date(p.time * 1000).toISOString(),
       value: p.balance,
     }));
-    return [{ date: new Date(from).toISOString(), value: ACCOUNT_SIZE }, ...mapped];
-  }, [stats, from]);
+  }, [stats]);
 
   const { minValue, maxValue } = useMemo(() => {
     const values = chartData.map((d) => d.value);
     return {
-      minValue: Math.min(ACCOUNT_SIZE, ...values, ACCOUNT_SIZE),
-      maxValue: Math.max(ACCOUNT_SIZE, ...values, ACCOUNT_SIZE),
+      minValue: Math.min(initialBalance, ...values, initialBalance),
+      maxValue: Math.max(initialBalance, ...values, initialBalance),
     };
-  }, [chartData]);
+  }, [chartData, initialBalance]);
 
-  if (!result || !stats) return null;
+  if (!result || !stats || !directionBreakdown) return null;
 
   const dateRangeLabel = `${fmtDateShort(from)} – ${fmtDateShort(to)}`;
-  const isPos = stats.netPnl >= 0;
+  const totalPnl = num(stats, 'totalPnl');
+  const totalTrades = num(stats, 'totalTrades');
+  const winRate = num(stats, 'winRate');
+  const profitFactor = num(stats, 'profitFactor');
+  const avgWin = num(stats, 'avgWin');
+  const avgLoss = num(stats, 'avgLoss');
+  const expectancy = num(stats, 'expectancy');
+  const sharpeRatio = num(stats, 'sharpeRatio');
+  const sortinoRatio = num(stats, 'sortinoRatio');
+  const calmarRatio = num(stats, 'calmarRatio');
+  const maxDrawdown = num(stats, 'maxDrawdown');
+  const maxDrawdownPercent = num(stats, 'maxDrawdownPercent');
+
+  const isPos = totalPnl >= 0;
   const accent = isPos ? GREEN : RED;
   const hasCurve = chartData.length > 1;
 
@@ -406,14 +513,44 @@ export function ResultsSummary() {
         <div>
           <h2 className="text-xl font-bold text-gold-primary sm:text-2xl">The results</h2>
           <p className="mt-1 text-sm text-ink-secondary">
-            $50,000 account, {dateRangeLabel}. {stats.resolvedCount.toLocaleString()}{' '}
-            {stats.resolvedCount === 1 ? 'trade' : 'trades'} at 1:{selectedR} risk:reward.
+            ${initialBalance.toLocaleString('en-US')} account, risking{' '}
+            {setup.risk.riskPerTradePct}% per trade, {dateRangeLabel}. {totalTrades.toLocaleString()}{' '}
+            {totalTrades === 1 ? 'trade' : 'trades'}.
           </p>
         </div>
-        <RSelector selected={selectedR} onSelect={setSelectedR} />
       </div>
 
-      {/* Equity curve — green/red area, $-denominated, from the R-ladder */}
+      {/* Stat cards — real run statistics */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard
+          label="Win rate"
+          value={`${winRate.toFixed(1)}%`}
+          tone={winRate >= 50 ? 'positive' : 'neutral'}
+        />
+        <StatCard
+          label="Profit factor"
+          value={Number.isFinite(profitFactor) ? profitFactor.toFixed(2) : '∞'}
+          tone={profitFactor >= 1 ? 'positive' : 'negative'}
+        />
+        <StatCard
+          label="Net P&L"
+          value={fmtUsd(totalPnl)}
+          tone={totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral'}
+        />
+        <StatCard label="Total trades" value={totalTrades.toLocaleString('en-US')} />
+        <StatCard
+          label="Avg win / loss"
+          value={fmtUsd(avgWin)}
+          subtext={`vs ${fmtUsd(-avgLoss)}`}
+        />
+        <StatCard
+          label="Expectancy"
+          value={fmtUsd(expectancy)}
+          tone={expectancy > 0 ? 'positive' : expectancy < 0 ? 'negative' : 'neutral'}
+        />
+      </div>
+
+      {/* Equity curve — real balance, from StatisticsEngine */}
       <Card padding="default">
         {hasCurve ? (
           <ResponsiveContainer width="100%" height={320}>
@@ -458,7 +595,7 @@ export function ResultsSummary() {
                 itemStyle={{ color: accent }}
                 formatter={(value: number) => [fmtUsd(value), 'Balance']}
               />
-              <ReferenceLine y={ACCOUNT_SIZE} stroke="#7AB6F4" strokeDasharray="5 5" strokeOpacity={0.45} />
+              <ReferenceLine y={initialBalance} stroke="#7AB6F4" strokeDasharray="5 5" strokeOpacity={0.45} />
               <Area
                 type="monotone"
                 dataKey="value"
@@ -472,55 +609,67 @@ export function ResultsSummary() {
           </ResponsiveContainer>
         ) : (
           <div className="flex h-[200px] w-full items-center justify-center rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1">
-            <p className="text-sm text-ink-tertiary">
-              No trades resolved for this setup and range at 1:{selectedR}.
-            </p>
+            <p className="text-sm text-ink-tertiary">No trades resolved for this setup and range.</p>
           </div>
         )}
       </Card>
 
-      {/* Stat cards — driven entirely by the selected-R fill-anchored R-ladder */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Monthly P&L */}
+      <MonthlyPnlChart data={monthlyPnl} />
+
+      {/* Risk & Return */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
-          label="Net P&L"
-          value={fmtUsd(stats.netPnl)}
-          tone={stats.netPnl > 0 ? 'positive' : stats.netPnl < 0 ? 'negative' : 'neutral'}
+          label="Sharpe ratio"
+          value={fmtRatio(sharpeRatio)}
+          tone={sharpeRatio >= 1 ? 'positive' : 'neutral'}
         />
         <StatCard
-          label="Win rate"
-          value={`${stats.winRate.toFixed(1)}%`}
-          tone={stats.winRate >= 50 ? 'positive' : 'neutral'}
+          label="Sortino ratio"
+          value={fmtRatio(sortinoRatio)}
+          tone={sortinoRatio >= 1 ? 'positive' : 'neutral'}
         />
         <StatCard
-          label="Profit factor"
-          value={Number.isFinite(stats.profitFactor) ? stats.profitFactor.toFixed(2) : '∞'}
-          tone={stats.profitFactor >= 1 ? 'positive' : 'negative'}
+          label="Calmar ratio"
+          value={fmtRatio(calmarRatio)}
+          tone={calmarRatio >= 1 ? 'positive' : 'neutral'}
         />
         <StatCard
           label="Max drawdown"
-          value={fmtUsd(-stats.maxDrawdown)}
-          subtext={`−${stats.maxDrawdownPct.toFixed(1)}% of starting balance`}
+          value={fmtUsd(-maxDrawdown)}
+          subtext={`−${maxDrawdownPercent.toFixed(1)}% of starting balance`}
           tone="negative"
-        />
-        <StatCard
-          label="Long trades"
-          value={stats.longCount.toLocaleString()}
-          subtext={`${stats.longWinRate.toFixed(0)}% win rate`}
-        />
-        <StatCard
-          label="Short trades"
-          value={stats.shortCount.toLocaleString()}
-          subtext={`${stats.shortWinRate.toFixed(0)}% win rate`}
         />
       </div>
 
-      {/* R:R what-if table */}
-      <RLadderTable rows={rRows} selected={selectedR} onSelect={setSelectedR} />
+      {/* Direction breakdown — real closed trades */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Long trades"
+          value={directionBreakdown.longCount.toLocaleString('en-US')}
+          subtext={`${directionBreakdown.longWinRate.toFixed(0)}% win rate`}
+        />
+        <StatCard
+          label="Short trades"
+          value={directionBreakdown.shortCount.toLocaleString('en-US')}
+          subtext={`${directionBreakdown.shortWinRate.toFixed(0)}% win rate`}
+        />
+      </div>
+
+      {/* R-multiple distribution */}
+      <RDistributionChart dist={result.rMultipleDistribution} />
+
+      {/* R:R what-if table — secondary, normalized model */}
+      <div className="flex flex-col gap-3">
+        <RSelector selected={selectedR} onSelect={setSelectedR} />
+        <RLadderTable rows={rRows} selected={selectedR} onSelect={setSelectedR} />
+      </div>
 
       {/* Disclosure */}
       <p className="text-[12px] text-ink-tertiary">
-        Simulated on a $50,000 account risking 1% per trade at 1:{selectedR} risk:reward —{' '}
-        {symbol} {timeframe}. {stats.openCount} trades never resolved (excluded).
+        Results above reflect the actual configured account (${initialBalance.toLocaleString('en-US')},{' '}
+        {setup.risk.riskPerTradePct}% risk per trade) for {symbol} {timeframe}. The Risk:Reward
+        What-If section below re-scores the same real trades on a normalized $50,000 / 1% account.
       </p>
     </div>
   );
