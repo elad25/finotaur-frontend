@@ -6,7 +6,18 @@
 // ============================================
 
 import { useEffect, useState } from 'react';
-import { Megaphone, AlertTriangle, Users, Target, Compass, Info, CreditCard, DollarSign } from 'lucide-react';
+import {
+  Megaphone,
+  AlertTriangle,
+  Users,
+  Target,
+  Compass,
+  Info,
+  CreditCard,
+  DollarSign,
+  Wallet,
+  Gauge,
+} from 'lucide-react';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
@@ -94,11 +105,51 @@ interface AdPurchaseData {
   purchases: unknown[];
 }
 
+// ---- Ad spend (admin_ad_spend) — Meta/X platform spend for CAC/ROAS ----
+
+interface AdSpendTotals {
+  spend: number;
+  currency: string;
+  impressions: number;
+  clicks: number;
+}
+
+interface CampaignSpendRow {
+  platform: string;
+  campaign_id: string;
+  campaign_name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+}
+
+interface AdSpendRow {
+  platform: string;
+  campaign_id: string;
+  campaign_name: string;
+  ad_id: string;
+  ad_name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+}
+
+interface AdSpendData {
+  window_days: number;
+  totals: AdSpendTotals;
+  by_campaign: CampaignSpendRow[];
+  by_ad: AdSpendRow[];
+}
+
 type WindowDays = 7 | 30 | 90;
 
 const WINDOW_OPTIONS: WindowDays[] = [7, 30, 90];
 const MAX_RECENT_SIGNUPS = 100;
 const GOLD = '#C9A646';
+// Approximation constant for converting USD revenue into ILS (ad spend is
+// reported in ILS by admin_ad_spend). Not a live FX rate — good enough for
+// a directional ROAS card. Update if the ILS/USD rate shifts materially.
+const ILS_PER_USD = 3.7;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,6 +164,30 @@ function pct(num: number, denom: number): string {
 /** Format a USD amount as a whole-dollar string (e.g. $1,234). */
 function money(n: number): string {
   return `$${(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+/** Format an ILS amount as a whole-shekel string (e.g. ₪1,234). */
+function shekel(n: number): string {
+  return `₪${(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+/** Safe division guarding zero/negative/non-finite denominators — returns
+ * null (render as em-dash) instead of NaN/Infinity. */
+function ratio(numerator: number, denom: number): number | null {
+  if (!denom || !Number.isFinite(denom) || denom <= 0) return null;
+  const r = numerator / denom;
+  return Number.isFinite(r) ? r : null;
+}
+
+/** Format a ratio value or em-dash placeholder (used for ₪ metrics). */
+function shekelOrDash(n: number | null): string {
+  return n === null ? '—' : shekel(n);
+}
+
+/** Format a ROAS multiple to 2 significant figures (e.g. 3.2x), or em-dash. */
+function roasOrDash(n: number | null): string {
+  if (n === null) return '—';
+  return `${n.toPrecision(2)}x`;
 }
 
 /** Shorten a long URL for a table cell; full value available via title tooltip. */
@@ -147,6 +222,7 @@ export function AttributionTab() {
   const [days, setDays] = useState<WindowDays>(90);
   const [data, setData] = useState<AdAttributionData | null>(null);
   const [purchaseData, setPurchaseData] = useState<AdPurchaseData | null>(null);
+  const [spendData, setSpendData] = useState<AdSpendData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,10 +232,11 @@ export function AttributionTab() {
       try {
         setLoading(true);
         setError(null);
-        // Signups (primary) + paid conversions (additive) in parallel.
-        const [attribution, purchases] = await Promise.all([
+        // Signups (primary) + paid conversions + ad spend (both additive) in parallel.
+        const [attribution, purchases, spend] = await Promise.all([
           supabase.rpc('admin_ad_attribution', { p_days: days }),
           supabase.rpc('admin_ad_purchases', { p_days: days }),
+          supabase.rpc('admin_ad_spend', { p_days: days }),
         ]);
         if (attribution.error) throw attribution.error;
         if (cancelled) return;
@@ -171,6 +248,14 @@ export function AttributionTab() {
           setPurchaseData(null);
         } else {
           setPurchaseData(purchases.data as AdPurchaseData);
+        }
+        // Spend is additive too — the sync cron may not have run yet, or the
+        // RPC may not be deployed; either way the rest of the tab still works.
+        if (spend.error) {
+          console.error('[AttributionTab] spend load failed:', spend.error);
+          setSpendData(null);
+        } else {
+          setSpendData(spend.data as AdSpendData);
         }
       } catch (err) {
         if (cancelled) return;
@@ -277,6 +362,73 @@ export function AttributionTab() {
       revenue: p.revenue,
     });
   }
+
+  // Ad-spend overlay (additive, per-window). Same discipline as above: a
+  // failed/undeployed/not-yet-synced admin_ad_spend RPC hides spend/CAC/ROAS
+  // columns without touching the rest of the tab.
+  const showSpend = spendData !== null;
+  const spendTotals = spendData?.totals ?? null;
+
+  // Our discipline names every Meta ad exactly as its utm_content slug, so
+  // ad_name === utm_content is the join key. utmContentToCampaign is built
+  // from the ATTRIBUTION side's by_ad (signup data) — it tells us which
+  // utm_campaign each utm_content belongs to.
+  const utmContentToCampaign = new Map<string, string>();
+  for (const a of by_ad) {
+    if (a.utm_content) utmContentToCampaign.set(a.utm_content, a.utm_campaign ?? '');
+  }
+
+  // Per-ad spend: sum Meta spend rows whose ad_name matches this utm_content
+  // (an ad can appear more than once, e.g. split across ad sets/platforms).
+  const spendByAdName = new Map<string, number>();
+  for (const s of spendData?.by_ad ?? []) {
+    spendByAdName.set(s.ad_name, (spendByAdName.get(s.ad_name) ?? 0) + (s.spend || 0));
+  }
+
+  // Per-campaign spend: for each utm_content we know about, if a Meta ad
+  // with that exact name spent money, attribute that spend to the
+  // ATTRIBUTION campaign the utm_content belongs to (not the Meta campaign
+  // it happened to run under — the two can diverge, e.g. an ad reused
+  // across ad sets).
+  const spendByCampaignName = new Map<string, number>();
+  for (const [utmContent, utmCampaign] of utmContentToCampaign) {
+    const matchedSpend = spendByAdName.get(utmContent);
+    if (matchedSpend) {
+      spendByCampaignName.set(utmCampaign, (spendByCampaignName.get(utmCampaign) ?? 0) + matchedSpend);
+    }
+  }
+
+  // Money must never silently disappear: any Meta campaign whose ads never
+  // matched a known utm_content (e.g. an engagement boost of an organic
+  // post, run outside our tagging discipline) is surfaced as its own row.
+  const allKnownUtmContent = new Set(utmContentToCampaign.keys());
+  const unattributedCampaigns: { campaign_name: string; spend: number }[] = [];
+  for (const c of spendData?.by_campaign ?? []) {
+    const ownAds = (spendData?.by_ad ?? []).filter((a) => a.campaign_id === c.campaign_id);
+    const hasKnownAd = ownAds.some((a) => allKnownUtmContent.has(a.ad_name));
+    if (!hasKnownAd && c.spend > 0) {
+      unattributedCampaigns.push({ campaign_name: c.campaign_name || c.campaign_id, spend: c.spend });
+    }
+  }
+
+  // Per-campaign paid-conversion lookup (for CAC/ROAS by campaign).
+  const campaignPurchaseByKey = new Map<string, { first_payment_subs: number; revenue: number }>();
+  for (const p of purchaseData?.by_campaign ?? []) {
+    campaignPurchaseByKey.set(`${p.utm_campaign}|${p.utm_source}`, {
+      first_payment_subs: p.first_payment_subs,
+      revenue: p.revenue,
+    });
+  }
+
+  // KPI-level metrics.
+  const spendTotal = spendTotals?.spend ?? 0;
+  const costPerSignup = spendTotals ? ratio(spendTotal, totals.attributed) : null;
+  const cac = spendTotals ? ratio(spendTotal, purchaseTotals?.first_payment_subs ?? 0) : null;
+  const roasValue = spendTotals
+    ? ratio((purchaseTotals?.revenue ?? 0) * ILS_PER_USD, spendTotal)
+    : null;
+  const hasCampaignRows = by_campaign.length > 0 || unattributedCampaigns.length > 0;
+
   const recentSignups = [...signups]
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, MAX_RECENT_SIGNUPS);
@@ -331,6 +483,36 @@ export function AttributionTab() {
         </section>
       )}
 
+      {/* ---- Ad spend / CAC / ROAS KPI cards ---- */}
+      {spendTotals && (
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            title="Ad Spend"
+            value={shekel(spendTotal)}
+            subtitle={`${spendTotals.impressions.toLocaleString('en-US')} impr · ${spendTotals.clicks.toLocaleString('en-US')} clicks · last ${data.window_days}d`}
+            icon={Wallet}
+          />
+          <StatsCard
+            title="Cost / Signup"
+            value={shekelOrDash(costPerSignup)}
+            subtitle={`spend ÷ ${totals.attributed.toLocaleString('en-US')} attributed signups`}
+            icon={Target}
+          />
+          <StatsCard
+            title="CAC"
+            value={shekelOrDash(cac)}
+            subtitle={`spend ÷ ${(purchaseTotals?.first_payment_subs ?? 0).toLocaleString('en-US')} new paid subs`}
+            icon={DollarSign}
+          />
+          <StatsCard
+            title="ROAS (approx)"
+            value={roasOrDash(roasValue)}
+            subtitle={`revenue × ${ILS_PER_USD} (USD→ILS) ÷ spend`}
+            icon={Gauge}
+          />
+        </section>
+      )}
+
       {/* ---- Signups by platform ---- */}
       <section className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
         <header className="px-5 py-3 border-b border-gray-800 flex items-center gap-2">
@@ -370,7 +552,7 @@ export function AttributionTab() {
       </section>
 
       {/* ---- By campaign ---- */}
-      {by_campaign.length === 0 ? (
+      {!hasCampaignRows ? (
         <section className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
           <header className="px-5 py-3 border-b border-gray-800 flex items-center gap-2">
             <Target className="w-4 h-4 text-[#C9A646]" />
@@ -393,21 +575,64 @@ export function AttributionTab() {
                   <th className="px-5 py-2 font-medium">Campaign</th>
                   <th className="px-5 py-2 font-medium">Source</th>
                   <th className="px-5 py-2 font-medium text-right">Signups</th>
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">Spend</th>}
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">Cost/Signup</th>}
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">CAC</th>}
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">ROAS</th>}
                 </tr>
               </thead>
               <tbody>
-                {by_campaign.map((c, idx) => (
-                  <tr
-                    key={`${c.utm_campaign}-${c.utm_source}-${idx}`}
-                    className="border-b border-gray-900 last:border-0"
-                  >
-                    <td className="px-5 py-2.5 text-gray-200">{c.utm_campaign || '—'}</td>
-                    <td className="px-5 py-2.5 text-gray-400">{c.utm_source || '—'}</td>
-                    <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
-                      {c.signups.toLocaleString('en-US')}
-                    </td>
-                  </tr>
-                ))}
+                {by_campaign.map((c, idx) => {
+                  const cSpend = spendByCampaignName.get(c.utm_campaign) ?? 0;
+                  const cPurchase = campaignPurchaseByKey.get(`${c.utm_campaign}|${c.utm_source}`);
+                  const cCostPerSignup = ratio(cSpend, c.signups);
+                  const cCac = ratio(cSpend, cPurchase?.first_payment_subs ?? 0);
+                  const cRoas = ratio((cPurchase?.revenue ?? 0) * ILS_PER_USD, cSpend);
+                  return (
+                    <tr
+                      key={`${c.utm_campaign}-${c.utm_source}-${idx}`}
+                      className="border-b border-gray-900 last:border-0"
+                    >
+                      <td className="px-5 py-2.5 text-gray-200">{c.utm_campaign || '—'}</td>
+                      <td className="px-5 py-2.5 text-gray-400">{c.utm_source || '—'}</td>
+                      <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
+                        {c.signups.toLocaleString('en-US')}
+                      </td>
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-200">{shekel(cSpend)}</td>
+                      )}
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-400">
+                          {shekelOrDash(cCostPerSignup)}
+                        </td>
+                      )}
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-400">{shekelOrDash(cCac)}</td>
+                      )}
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-400">{roasOrDash(cRoas)}</td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {showSpend &&
+                  unattributedCampaigns.map((u, idx) => (
+                    <tr
+                      key={`unattributed-${u.campaign_name}-${idx}`}
+                      className="border-b border-gray-900 last:border-0"
+                    >
+                      <td className="px-5 py-2.5 text-gray-500 italic">
+                        {u.campaign_name || '—'}
+                        <span className="ml-2 text-xs text-gray-600">(unattributed spend)</span>
+                      </td>
+                      <td className="px-5 py-2.5 text-gray-600">—</td>
+                      <td className="px-5 py-2.5 text-right text-gray-600">—</td>
+                      <td className="px-5 py-2.5 text-right text-gray-400">{shekel(u.spend)}</td>
+                      <td className="px-5 py-2.5 text-right text-gray-600">—</td>
+                      <td className="px-5 py-2.5 text-right text-gray-600">—</td>
+                      <td className="px-5 py-2.5 text-right text-gray-600">—</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -439,6 +664,8 @@ export function AttributionTab() {
                   <th className="px-5 py-2 font-medium">Campaign</th>
                   <th className="px-5 py-2 font-medium">Source</th>
                   <th className="px-5 py-2 font-medium text-right">Signups</th>
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">Spend</th>}
+                  {showSpend && <th className="px-5 py-2 font-medium text-right">Cost/Signup</th>}
                   {showRevenue && <th className="px-5 py-2 font-medium text-right">Paid Subs</th>}
                   {showRevenue && <th className="px-5 py-2 font-medium text-right">Revenue</th>}
                   {showRevenue && <th className="px-5 py-2 font-medium text-right">ARPU</th>}
@@ -449,6 +676,8 @@ export function AttributionTab() {
                   const pu = adPurchaseByKey.get(`${a.utm_content}|${a.utm_campaign}|${a.utm_source}`);
                   const subs = pu?.subs ?? 0;
                   const rev = pu?.revenue ?? 0;
+                  const aSpend = spendByAdName.get(a.utm_content) ?? 0;
+                  const aCostPerSignup = ratio(aSpend, a.signups);
                   return (
                     <tr
                       key={`${a.utm_content}-${a.utm_campaign}-${idx}`}
@@ -460,6 +689,14 @@ export function AttributionTab() {
                       <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
                         {a.signups.toLocaleString('en-US')}
                       </td>
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-200">{shekel(aSpend)}</td>
+                      )}
+                      {showSpend && (
+                        <td className="px-5 py-2.5 text-right text-gray-400">
+                          {shekelOrDash(aCostPerSignup)}
+                        </td>
+                      )}
                       {showRevenue && (
                         <>
                           <td className="px-5 py-2.5 text-right text-gray-200">
