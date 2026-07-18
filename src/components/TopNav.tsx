@@ -15,6 +15,7 @@
 
 import { Settings, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
+import PromoOfferChip from '@/components/PromoOfferChip';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
@@ -142,6 +143,14 @@ export const TopNav = () => {
           >
             <Menu className="h-5 w-5" />
           </button>
+
+          {/* 🎁 Promo offer chip — BETA100 founding-beta offer. ml-auto pushes
+              it to the right of the left column (toward the centered search),
+              with a margin so it sits a touch left of the omnibox rather than
+              flush. */}
+          {accountType === 'free' && (
+            <PromoOfferChip audience="app" className="ml-auto mr-8 lg:mr-20" />
+          )}
         </div>
 
         {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
