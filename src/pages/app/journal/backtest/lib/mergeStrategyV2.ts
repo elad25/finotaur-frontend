@@ -37,6 +37,12 @@ export function mergeStrategyV2(
   if (partial.phases !== undefined && partial.phases.length > 0) {
     merged.phases = structuredClone(partial.phases);
   }
+  // compareSymbols (Increment 4a — SMT divergence): replaces wholesale like
+  // `phases`, for the same reason — a coherent list from the AI/server, not
+  // something to element-merge.
+  if (partial.compareSymbols !== undefined) {
+    merged.compareSymbols = structuredClone(partial.compareSymbols);
+  }
 
   if (partial.entry !== undefined) {
     merged.entry = { ...merged.entry, ...partial.entry };

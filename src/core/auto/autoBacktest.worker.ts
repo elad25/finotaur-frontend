@@ -8,7 +8,7 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition } from './types';
 import type { AutoBacktestResult } from './AutoBacktestEngine';
 import { runAutoBacktest } from './AutoBacktestEngine';
-import type { StrategyDefinitionV2 } from './v2/types';
+import type { StrategyDefinitionV2, TF } from './v2/types';
 import { runStrategyV2 } from './v2/StrategyEngine';
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,24 @@ interface RunMessage {
 interface RunV2Message {
   type: 'runV2';
   strategy: StrategyDefinitionV2;
-  candles: Candle[];
+  /**
+   * Legacy shape: a plain execution-timeframe candle array (single-timeframe
+   * strategies — unchanged since Increment 1/2). MTF shape (Increment 3): a
+   * map of candle series keyed by timeframe label, set by the caller
+   * (`autoBacktestRunner.ts` / `useAutoBacktestStore.ts`) whenever the
+   * strategy declares `timeframes.context`. `runStrategyV2` accepts either
+   * shape natively, so this handler passes it straight through unchanged —
+   * no branching needed here.
+   */
+  candles: Candle[] | Partial<Record<TF, Candle[]>>;
+  /**
+   * Compare-symbol candle series for `Condition{kind:'smt'}` conditions
+   * (Increment 4a — SMT divergence), keyed by symbol then timeframe. Set by
+   * the caller only when `strategy.compareSymbols` is non-empty AND the
+   * strategy contains an `smt` condition; passed straight through to
+   * `runStrategyV2`'s `RunStrategyV2Options.compareSeriesBySymbolTf`.
+   */
+  compareSeriesBySymbolTf?: Partial<Record<string, Partial<Record<TF, Candle[]>>>>;
 }
 
 interface ProgressMessage {
@@ -84,12 +101,13 @@ self.onmessage = (event: MessageEvent<WorkerInMessage>) => {
   }
 
   if (msg.type === 'runV2') {
-    const { strategy, candles } = msg;
+    const { strategy, candles, compareSeriesBySymbolTf } = msg;
     runStrategyV2(strategy, candles, {
       onProgress: (scanned: number, total: number, found: number) => {
         const progress: ProgressMessage = { type: 'progress', scanned, total, found };
         self.postMessage(progress);
       },
+      compareSeriesBySymbolTf,
     })
       .then((result) => {
         const done: DoneMessage = { type: 'done', result };

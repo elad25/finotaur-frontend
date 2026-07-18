@@ -13,8 +13,13 @@ import {
   selectSavedSetups,
   selectSavedRuns,
 } from '@/store/useAutoBacktestStore';
-import type { SetupDefinition } from '@/core/auto/types';
-import type { SavedRun } from '@/services/backtest/setupRepository';
+import {
+  isV2SetupDefinition,
+  setupTimeframe,
+  setupUpdatedAt,
+  type SavedRun,
+  type SavedSetupDefinition,
+} from '@/services/backtest/setupRepository';
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -37,14 +42,26 @@ function runWinRate(run: SavedRun): string {
 // Rows
 // ---------------------------------------------------------------------------
 
+/** Small pill badge — used to mark AI (v2) saved setups and to show the
+ *  Classic/AI engine badge on Recent runs. */
+function EngineBadge({ label }: { label: string }) {
+  return (
+    <span className="shrink-0 rounded-full border-[0.5px] border-gold-primary/40 bg-gold-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gold-primary">
+      {label}
+    </span>
+  );
+}
+
 function LibraryRow({
   title,
   subtitle,
+  badge,
   onLoad,
   onDelete,
 }: {
   title: string;
   subtitle: string;
+  badge?: string;
   onLoad: () => void;
   onDelete: () => void;
 }) {
@@ -56,7 +73,10 @@ function LibraryRow({
         className="min-w-0 flex-1 text-left"
         title="Load"
       >
-        <p className="truncate text-sm font-medium text-ink-primary">{title}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink-primary">
+          <span className="truncate">{title}</span>
+          {badge && <EngineBadge label={badge} />}
+        </p>
         <p className="truncate text-[11px] text-ink-tertiary">{subtitle}</p>
       </button>
       <button
@@ -79,7 +99,7 @@ function LibraryRow({
 // ---------------------------------------------------------------------------
 
 export function SavedSetupsPanel() {
-  const savedSetups: SetupDefinition[] = useAutoBacktestStore(selectSavedSetups);
+  const savedSetups: SavedSetupDefinition[] = useAutoBacktestStore(selectSavedSetups);
   const savedRuns: SavedRun[] = useAutoBacktestStore(selectSavedRuns);
   const saveCurrentSetup = useAutoBacktestStore((s) => s.saveCurrentSetup);
   const loadSetup = useAutoBacktestStore((s) => s.loadSetup);
@@ -103,13 +123,14 @@ export function SavedSetupsPanel() {
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            {savedSetups.map((s) => (
+            {savedSetups.map((setup) => (
               <LibraryRow
-                key={s.id}
-                title={s.name}
-                subtitle={`${s.instrument.symbol} · ${s.instrument.timeframe} · updated ${fmtDate(s.updatedAt)}`}
-                onLoad={() => loadSetup(s.id)}
-                onDelete={() => deleteSetup(s.id)}
+                key={setup.id}
+                title={setup.name}
+                badge={isV2SetupDefinition(setup) ? 'AI' : undefined}
+                subtitle={`${setup.instrument.symbol} · ${setupTimeframe(setup)} · updated ${fmtDate(setupUpdatedAt(setup))}`}
+                onLoad={() => loadSetup(setup.id)}
+                onDelete={() => deleteSetup(setup.id)}
               />
             ))}
           </div>
@@ -129,6 +150,7 @@ export function SavedSetupsPanel() {
               <LibraryRow
                 key={run.id}
                 title={`${run.symbol} · ${run.timeframe}`}
+                badge={isV2SetupDefinition(run.setupSnapshot) ? 'AI' : 'Classic'}
                 subtitle={`${runWinRate(run)} · ${fmtDate(run.createdAt)}`}
                 onLoad={() => loadRun(run.id)}
                 onDelete={() => deleteRun(run.id)}

@@ -13,7 +13,9 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/types';
 import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
-import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
+import type { StrategyDefinitionV2, TF } from '@/core/auto/v2/types';
+import { smtTfsUsed } from '@/core/auto/v2/ConditionCompiler';
+import { timeframeToMs } from '@/core/auto/MarketContext';
 import { getCandleSource, sourceForSymbol } from '@/services/backtest/candleSource';
 import { CandleFetchError } from '@/services/backtest/errors';
 import { runAutoBacktestInWorker, runStrategyV2InWorker } from '@/services/backtest/autoBacktestRunner';
@@ -27,7 +29,9 @@ import {
   deleteRun as repoDeleteRun,
   saveRun,
   buildSavedRun,
+  isV2SetupDefinition,
   type SavedRun,
+  type SavedSetupDefinition,
 } from '@/services/backtest/setupRepository';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +69,8 @@ export interface AutoBacktestState {
   progress: AutoBacktestProgress;
   result: AutoBacktestResult | null;
   error: string | null;
-  savedSetups: SetupDefinition[];
+  /** v1 SetupDefinitions and v2 StrategyDefinitionV2 templates — same library. */
+  savedSetups: SavedSetupDefinition[];
   savedRuns: SavedRun[];
   /** Index into result.trades of the highlighted trade (or null). */
   selectedTradeIndex: number | null;
@@ -123,6 +128,14 @@ export interface AutoBacktestActions {
    */
   runStrategyV2Backtest(def: StrategyDefinitionV2): Promise<void>;
   saveCurrentSetup(): Promise<void>;
+  /**
+   * Save the current v2 strategy (`state.strategyV2`) into the same
+   * `bt_setups` library as v1 "Saved setups" (Supabase-first, localStorage
+   * fallback). `name` overrides `definition.name` when provided; otherwise
+   * the strategy's own name is used. No-op (resolves immediately) when
+   * there is no v2 strategy to save.
+   */
+  saveStrategyV2AsTemplate(name?: string): Promise<void>;
   loadSetup(id: string): Promise<void>;
   deleteSetup(id: string): Promise<void>;
   loadRun(id: string): Promise<void>;
@@ -430,10 +443,56 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         // Same routing rule as runBacktest(): route by symbol, not by the
         // definition's declared instrument.source.
         const resolvedSource = sourceForSymbol(symbol);
+        const source = getCandleSource(resolvedSource);
 
-        let candles: Candle[];
+        // MTF (Increment 3): every context timeframe actually referenced by
+        // a phase needs its own candle series, fetched over the SAME date
+        // range as the execution series. Context series additionally get
+        // EXTRA LOOKBACK (120 context-bars, converted to ms via the same
+        // TF->ms map TimeframeSet/MarketContext use) so higher-TF structures
+        // (swings, FVGs, ...) already exist from the first execution bar
+        // rather than only forming partway through the requested window.
+        // Trades still only occur within [from, to] — the engine iterates
+        // EXECUTION bars, which are fetched with NO extra lead-in.
+        const LEAD_IN_BARS = 120;
+        const contextTfsUsed = Array.from(
+          new Set(
+            def.phases
+              .map((p) => p.timeframe)
+              .filter((tf): tf is TF => tf !== undefined && tf !== timeframe),
+          ),
+        );
+
+        // SMT divergence (Increment 4a): every timeframe an `smt` condition
+        // references needs the COMPARE symbol's own candle series too — same
+        // date range as the execution series for the execution TF, and the
+        // SAME extra-lead-in convention as context TFs above for a
+        // context-TF smt condition (its compare series' structures need to
+        // already be formed, identical reasoning to the traded side).
+        // Absent/empty for every strategy without an `smt` condition — no
+        // extra fetch, no overhead.
+        const smtTfs = smtTfsUsed(def);
+        const compareSymbol = def.compareSymbols?.[0];
+
+        const seriesByTf: Partial<Record<TF, Candle[]>> = {};
+        const compareSeriesBySymbolTf: Partial<Record<string, Partial<Record<TF, Candle[]>>>> = {};
         try {
-          candles = await getCandleSource(resolvedSource).getCandles(symbol, timeframe, from, to);
+          seriesByTf[timeframe] = await source.getCandles(symbol, timeframe, from, to);
+          for (const tf of contextTfsUsed) {
+            const leadInMs = (timeframeToMs(tf) ?? 0) * LEAD_IN_BARS;
+            seriesByTf[tf] = await source.getCandles(symbol, tf, from - leadInMs, to);
+          }
+          if (compareSymbol && smtTfs.length > 0) {
+            const compareSource = getCandleSource(sourceForSymbol(compareSymbol));
+            const compareByTf: Partial<Record<TF, Candle[]>> = {};
+            for (const tf of smtTfs) {
+              compareByTf[tf] =
+                tf === timeframe
+                  ? await compareSource.getCandles(compareSymbol, tf, from, to)
+                  : await compareSource.getCandles(compareSymbol, tf, from - (timeframeToMs(tf) ?? 0) * LEAD_IN_BARS, to);
+            }
+            compareSeriesBySymbolTf[compareSymbol] = compareByTf;
+          }
         } catch (err) {
           const message = mapCandleFetchErrorToMessage(err);
           set((state) => {
@@ -443,9 +502,31 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           return;
         }
 
+        const candles = seriesByTf[timeframe] ?? [];
         if (candles.length === 0) {
           set((state) => {
             state.error = 'No candle data returned for the selected range.';
+            state.status = 'error';
+          });
+          return;
+        }
+        const missingContextTf = contextTfsUsed.find((tf) => !seriesByTf[tf] || seriesByTf[tf]!.length === 0);
+        if (missingContextTf) {
+          set((state) => {
+            state.error = `No candle data returned for context timeframe "${missingContextTf}".`;
+            state.status = 'error';
+          });
+          return;
+        }
+        const missingSmtTf =
+          compareSymbol &&
+          smtTfs.find((tf) => {
+            const s = compareSeriesBySymbolTf[compareSymbol]?.[tf];
+            return !s || s.length === 0;
+          });
+        if (missingSmtTf) {
+          set((state) => {
+            state.error = `No candle data returned for compare symbol "${compareSymbol}" on timeframe "${missingSmtTf}".`;
             state.status = 'error';
           });
           return;
@@ -458,7 +539,10 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         try {
           const result = await runStrategyV2InWorker(
             def,
-            candles,
+            // Always the map shape — a single-TF strategy just has one key
+            // (the execution timeframe); `runStrategyV2` treats that
+            // identically to the legacy plain-array shape.
+            seriesByTf,
             (scanned, total, found) => {
               set((state) => {
                 state.progress = { scanned, total, found };
@@ -469,6 +553,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
                 'Running the backtest on the main thread (worker unavailable) — the UI may be less responsive on large datasets.'
               );
             },
+            Object.keys(compareSeriesBySymbolTf).length > 0 ? compareSeriesBySymbolTf : undefined,
           );
 
           // Same result field runBacktest() writes — the UI consumes v1 and
@@ -477,6 +562,10 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
             state.result = result;
             state.status = 'done';
           });
+
+          // Persist the run (Supabase-first, localStorage fallback) — mirrors
+          // runBacktest()'s persistence step (Increment 4b).
+          await persistStrategyV2Run(def, result, { symbol, timeframe, from, to });
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Backtest run failed.';
           set((state) => {
@@ -499,11 +588,28 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         });
       },
 
+      async saveStrategyV2AsTemplate(name) {
+        const { strategyV2 } = get();
+        if (!strategyV2) return;
+        const toSave: SavedSetupDefinition = name ? { ...strategyV2, name } : strategyV2;
+        await saveSetup(toSave);
+        const savedSetups = await listSetups();
+        set((state) => {
+          state.savedSetups = savedSetups;
+        });
+      },
+
       async loadSetup(id) {
         const found = await getSetup(id);
         if (!found) return;
         set((state) => {
-          state.currentSetup = found;
+          // v2 templates load into the AI-strategy slot; v1 setups load into
+          // the classic editing surface — mirrors loadRun()'s branch below.
+          if (isV2SetupDefinition(found)) {
+            state.strategyV2 = found;
+          } else {
+            state.currentSetup = found;
+          }
           state.result = null;
           state.error = null;
           state.status = 'idle';
@@ -528,7 +634,14 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         const found = await getRun(id);
         if (!found) return;
         set((state) => {
-          state.currentSetup = found.setupSnapshot;
+          // v2 runs restore into the AI-strategy slot; v1 runs restore into
+          // the classic setup slot. Instrument/timeframe are embedded in the
+          // definition itself (v2 has no separate store fields for them).
+          if (isV2SetupDefinition(found.setupSnapshot)) {
+            state.strategyV2 = found.setupSnapshot;
+          } else {
+            state.currentSetup = found.setupSnapshot;
+          }
           state.from = found.from;
           state.to = found.to;
           state.result = {
@@ -612,6 +725,40 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
 void useAutoBacktestStore.getState().refreshSaved();
 
 export default useAutoBacktestStore;
+
+// ---------------------------------------------------------------------------
+// v2 run persistence (Increment 4b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist a completed v2 run (Supabase-first, localStorage fallback) exactly
+ * like `runBacktest()` does for v1 — called from the success path of
+ * `runStrategyV2Backtest`. Defined at module scope, talking to the store
+ * purely through `useAutoBacktestStore.setState`/`getState` (the immer
+ * middleware makes `setState` accept the same draft-mutating recipes as the
+ * `set` passed into the creator), so `runStrategyV2Backtest` itself only
+ * needed a single extra call rather than a restructure.
+ */
+async function persistStrategyV2Run(
+  def: StrategyDefinitionV2,
+  result: AutoBacktestResult,
+  meta: { symbol: string; timeframe: string; from: number; to: number },
+): Promise<void> {
+  const run = buildSavedRun(def, result, meta);
+  useAutoBacktestStore.setState((state) => {
+    state.lastRunId = run.id;
+  });
+  const saveResult = await saveRun(run);
+  if (saveResult.ok && saveResult.storage === 'local') {
+    toast.warning('Run saved locally only — cloud sync failed');
+  } else if (saveResult.ok === false) {
+    toast.error('Run could not be saved — results will be lost on reload');
+  }
+  const savedRuns = await listRuns();
+  useAutoBacktestStore.setState((state) => {
+    state.savedRuns = savedRuns;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Selectors
