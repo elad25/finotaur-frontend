@@ -122,6 +122,70 @@ function ToggleSwitch({ active, onClick, label, disabled }: { active: boolean; o
   );
 }
 
+/**
+ * Live preview of one up + one down candle, rendered from the CURRENT
+ * settings (body colors, border/wick colors incl. inherit-from-body
+ * fallback, borders/wicks visibility, canvas background). Updates
+ * instantly as the user picks colors — sits to the right of the
+ * Candles-tab controls.
+ */
+function CandlePreview({ settings }: { settings: ChartSettingsDialogProps['settings'] }) {
+  const up = settings.candleUpColor;
+  const down = settings.candleDownColor;
+  const borderUp = settings.candleBorderUpColor ?? up;
+  const borderDown = settings.candleBorderDownColor ?? down;
+  const wickUp = settings.candleWickUpColor ?? up;
+  const wickDown = settings.candleWickDownColor ?? down;
+  const showBorders = settings.candleBordersVisible;
+  const showWicks = settings.candleWicksVisible;
+  return (
+    <div className="flex w-[116px] flex-shrink-0 flex-col items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#707070]">
+        Preview
+      </span>
+      <svg
+        viewBox="0 0 116 150"
+        className="w-full rounded-md border"
+        style={{ background: settings.backgroundColor, borderColor: 'rgba(201,166,70,0.15)' }}
+        role="img"
+        aria-label="Candle style preview — up and down candle"
+      >
+        {[30, 60, 90, 120].map((y) => (
+          <line key={y} x1={0} y1={y} x2={116} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+        ))}
+        {/* Up candle */}
+        {showWicks && <line x1={34} y1={16} x2={34} y2={132} stroke={wickUp} strokeWidth={2} />}
+        <rect
+          x={24}
+          y={42}
+          width={20}
+          height={62}
+          rx={1.5}
+          fill={up}
+          stroke={showBorders ? borderUp : 'none'}
+          strokeWidth={showBorders ? 1.5 : 0}
+        />
+        {/* Down candle */}
+        {showWicks && <line x1={82} y1={22} x2={82} y2={138} stroke={wickDown} strokeWidth={2} />}
+        <rect
+          x={72}
+          y={48}
+          width={20}
+          height={62}
+          rx={1.5}
+          fill={down}
+          stroke={showBorders ? borderDown : 'none'}
+          strokeWidth={showBorders ? 1.5 : 0}
+        />
+      </svg>
+      <div className="flex w-full text-[9px] text-[#707070]">
+        <span className="w-1/2 text-center">Up</span>
+        <span className="w-1/2 text-center">Down</span>
+      </div>
+    </div>
+  );
+}
+
 export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, onReset, assetClass }: ChartSettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<DialogTabId>('candles');
 
@@ -171,7 +235,8 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
           {/* Content — scrolls independently of the rail */}
           <div className="max-h-[65vh] flex-1 overflow-y-auto p-4">
             {activeTab === 'candles' && (
-              <div className="flex flex-col gap-4">
+              <div className="flex gap-4">
+                <div className="flex flex-1 flex-col gap-4">
                 <div>
                   <SectionLabel>Body</SectionLabel>
                   <div className="flex flex-wrap items-center gap-4">
@@ -237,6 +302,9 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
                     />
                   </div>
                 </div>
+                </div>
+
+                <CandlePreview settings={settings} />
               </div>
             )}
 

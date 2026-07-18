@@ -10,6 +10,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ds/Button";
 import { ColorSwatchPicker } from "@/pages/app/trading-arena/components/ColorSwatchPicker";
+import { ChartSettingsDialog } from "@/pages/app/trading-arena/components/ChartSettingsDialog";
+import { DEFAULT_CHART_STYLE, type ChartStyleSettings } from "@/pages/app/trading-arena/components/chartStyleSettings";
 import { Card, Eyebrow } from "@/components/ds/Card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Price, Change, Quote } from "@/components/ds/NumberDisplay";
@@ -29,6 +31,26 @@ function ColorPickerDemo() {
         up: {upColor} · down: {downColor}
       </span>
     </div>
+  );
+}
+
+/** Full ChartSettingsDialog harness — exercises tabs, pickers, and the live candle preview. */
+function ChartSettingsDialogDemo() {
+  const [open, setOpen] = useState(false);
+  const [settings, setSettings] = useState<ChartStyleSettings>(DEFAULT_CHART_STYLE);
+  return (
+    <>
+      <Button variant="goldOutline" onClick={() => setOpen(true)}>
+        Open full Chart Settings dialog
+      </Button>
+      <ChartSettingsDialog
+        open={open}
+        onOpenChange={setOpen}
+        settings={settings}
+        onChange={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
+        onReset={() => setSettings(DEFAULT_CHART_STYLE)}
+      />
+    </>
   );
 }
 
@@ -130,8 +152,9 @@ export default function DesignLab() {
           <Eyebrow>Trading Arena</Eyebrow>
           <h2 className="mt-ds-2 mb-ds-5 font-serif text-h2">ColorSwatchPicker (TV-style)</h2>
           <ColorPickerDemo />
-          <div className="mt-ds-5">
+          <div className="mt-ds-5 flex flex-wrap gap-ds-4">
             <ColorPickerInDialogDemo />
+            <ChartSettingsDialogDemo />
           </div>
         </section>
 
