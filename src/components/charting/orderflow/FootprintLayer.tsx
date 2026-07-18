@@ -360,21 +360,72 @@ export function FootprintLayer({
       // the magnifier used to fire anywhere above/below the candle at that
       // bar's time). Prefer the candlestick series' real OHLC high/low
       // (threaded in via the `bars` prop / barsRef — see FootprintLayerProps'
-      // `bars` doc comment) since it's exact; fall back to the footprint's
-      // own bin-price extent (`candle.bins` is sorted ascending by binPrice —
-      // see FlowCandleView's doc comment) for the rare case OHLC isn't loaded
-      // for this bar yet. A small tolerance (half a price-bin, or 0.1% of
-      // price, whichever is larger) keeps wick-edge hovers registering.
+      // `bars` doc comment) since it's exact; fall back to an explicit
+      // min/max scan over `candle.bins` — considering only bins with actual
+      // traded volume (see computeTradedBinExtent's doc comment for why: a
+      // sorted-array bins[0]/bins[last] shortcut would trust ordering that
+      // isn't defensive against a future zero-volume/placeholder bin) — for
+      // the rare case OHLC isn't loaded for this bar yet (observed
+      // specifically on the LAST/still-forming candle: its footprint-store
+      // candle can exist a frame or more before the candlestick series' own
+      // `bars` array has the corresponding live bar — see barsRef's doc
+      // comment in FinotaurChart.tsx and useOrderFlow.ts's independent
+      // trade-stream vs kline-stream subscriptions). If NEITHER source
+      // yields a reliable extent, fail closed (no magnifier) rather than
+      // guess. A small tolerance (half a price-bin, or 0.1% of price,
+      // whichever is larger) keeps wick-edge hovers registering.
       const ohlcBar = barsRef.current?.find((b) => (b.time as unknown as number) === timeSec);
       const rowSize = storeRef.current.getConfig().rowSize;
-      const low = ohlcBar ? ohlcBar.low : candle.bins[0].binPrice;
-      const high = ohlcBar ? ohlcBar.high : candle.bins[candle.bins.length - 1].binPrice + rowSize;
+      const extent = ohlcBar
+        ? { low: ohlcBar.low, high: ohlcBar.high }
+        : computeTradedBinExtent(candle, rowSize);
+      if (!extent) {
+        clearHoverTimer();
+        if (hoveredCandle !== null) setHoveredCandle(null);
+        return;
+      }
+      const { low, high } = extent;
       const tolerance = Math.max(rowSize / 2, Math.abs(high) * 0.001);
       const cursorPrice = series.coordinateToPrice(point.y);
       if (cursorPrice === null || cursorPrice < low - tolerance || cursorPrice > high + tolerance) {
         clearHoverTimer();
         if (hoveredCandle !== null) setHoveredCandle(null);
         return;
+      }
+
+      // X-axis containment check (defense-in-depth) — independent of the
+      // Y-extent test above. Re-derives the candle's own x-coordinate from
+      // the chart's OWN time scale and rejects the hover if the cursor's
+      // actual x isn't within (roughly) half a bar-width of it. This exists
+      // because the Y-test alone can't distinguish "extent is right, wrong
+      // time column" from "right column, right extent" — and the reported
+      // bug (magnifier firing for the last/developing candle even when the
+      // cursor is nowhere near its time column) is exactly that shape of
+      // failure. Bar spacing is measured from two adjacent bar coordinates
+      // when possible (accurate at any zoom) and only falls back to the
+      // time scale's own `barSpacing` option (which can lag mid-kinetic-zoom
+      // — see DepthMatrixLayer.tsx's note on the same option) when adjacent
+      // coordinates aren't resolvable (e.g. this candle sits at the very
+      // edge of loaded history). Both null-guarded — never throws.
+      const candleX = chart.timeScale().timeToCoordinate(timeSec as unknown as UTCTimestamp);
+      if (candleX !== null) {
+        const intervalSec = storeRef.current.getConfig().intervalSec;
+        let barSpacingPx: number | null = null;
+        if (intervalSec > 0) {
+          const xNext = chart.timeScale().timeToCoordinate((timeSec + intervalSec) as unknown as UTCTimestamp);
+          const xPrev = chart.timeScale().timeToCoordinate((timeSec - intervalSec) as unknown as UTCTimestamp);
+          if (xNext !== null) barSpacingPx = Math.abs((xNext as number) - (candleX as number));
+          else if (xPrev !== null) barSpacingPx = Math.abs((candleX as number) - (xPrev as number));
+        }
+        if (barSpacingPx === null) {
+          const optSpacing = chart.timeScale().options().barSpacing;
+          barSpacingPx = typeof optSpacing === 'number' && optSpacing > 0 ? optSpacing : null;
+        }
+        if (barSpacingPx !== null && Math.abs(point.x - (candleX as number)) > barSpacingPx * 0.6) {
+          clearHoverTimer();
+          if (hoveredCandle !== null) setHoveredCandle(null);
+          return;
+        }
       }
 
       // Already hovering (or already timing) the SAME candle — just refresh
@@ -1005,6 +1056,33 @@ function computeCandleRange(candle: FlowCandleView, rowSize: number): { low: num
   let low = Infinity;
   let high = -Infinity;
   for (const bin of candle.bins) {
+    if (bin.binPrice < low) low = bin.binPrice;
+    if (bin.binPrice + rowSize > high) high = bin.binPrice + rowSize;
+  }
+  return isFinite(low) && isFinite(high) ? { low, high } : null;
+}
+
+/**
+ * Magnifier hover fallback (used only when the candlestick series' own OHLC
+ * bar can't be matched for this candle's time — see the crosshair handler's
+ * doc comment above). Explicit min/max scan over `candle.bins`, skipping any
+ * bin with zero traded volume, rather than trusting `bins[0]`/`bins[last]`
+ * under the "sorted ascending by binPrice" assumption (FlowCandleView's own
+ * doc comment) — today's FlowBinStore never creates a zero-volume bin (see
+ * flowBinStore.ts's applySingleTrade, the only bin-creation path — a bin
+ * only exists once a real trade lands in it), but scanning defensively means
+ * this fallback stays correct even if a future store/hydrate/replay path
+ * ever seeds a placeholder bin, instead of silently inheriting a stale/wide
+ * ordering assumption. Distinct from computeCandleRange above (which is used
+ * for drawing and intentionally includes every bin) — the magnifier's hit
+ * test specifically wants "the range actually traded", not "every bin that
+ * exists for any reason".
+ */
+function computeTradedBinExtent(candle: FlowCandleView, rowSize: number): { low: number; high: number } | null {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const bin of candle.bins) {
+    if (bin.buyVol <= 0 && bin.sellVol <= 0) continue; // skip zero-volume/placeholder bins
     if (bin.binPrice < low) low = bin.binPrice;
     if (bin.binPrice + rowSize > high) high = bin.binPrice + rowSize;
   }
