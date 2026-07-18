@@ -9,6 +9,7 @@
 import { authFetch } from '@/utils/authFetch';
 import type { SetupDefinition } from '@/core/auto/types';
 import type { BacktestStatisticsLike } from '@/core/auto/AutoBacktestEngine';
+import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
 
 const API_HOST =
   import.meta.env.VITE_API_URL ||
@@ -35,6 +36,18 @@ export interface ResultAnalysis {
   weaknesses: string[];
   optimizationIdeas: Array<{ change: string; rationale: string }>;
   summary: string;
+}
+
+/**
+ * Shared envelope returned by both v2 strategy endpoints
+ * (parse-strategy-v2 and patch-strategy) — same shape either way, since a
+ * patch/refine is conceptually "parse again, but with prior context".
+ */
+export interface StrategyV2Envelope {
+  definition: Partial<StrategyDefinitionV2>;
+  assumptions: string[];
+  unsupported: string[];
+  validationErrors?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -116,4 +129,74 @@ export async function analyzeBacktestResult(
   }
 
   return json as ResultAnalysis;
+}
+
+/**
+ * Backend may wrap a response in { success, data } or return the shape
+ * directly — same convention as parseSetupFromText / analyzeBacktestResult
+ * above. Shared by the two v2 strategy endpoints below.
+ */
+function unwrapEnvelope<T>(json: unknown, fallbackErrorMessage: string): T {
+  if (
+    json !== null &&
+    typeof json === 'object' &&
+    'success' in json &&
+    'data' in json
+  ) {
+    const wrapped = json as { success: boolean; data: T; error?: string };
+    if (!wrapped.success) {
+      throw new Error(wrapped.error ?? fallbackErrorMessage);
+    }
+    return wrapped.data;
+  }
+  return json as T;
+}
+
+/**
+ * Calls POST /api/anthropic/backtest/parse-strategy-v2 with the user's
+ * plain-text strategy description (and optional symbol/timeframe hints) and
+ * returns a partial StrategyDefinitionV2 plus assumption/unsupported/
+ * validation-error lists. Mirrors parseSetupFromText's fetch/auth/error
+ * conventions.
+ */
+export async function parseStrategyV2FromText(
+  text: string,
+  opts?: { symbol?: string; timeframe?: string },
+): Promise<StrategyV2Envelope> {
+  const res = await authFetch(`${BACKTEST_BASE}/parse-strategy-v2`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, symbol: opts?.symbol, timeframe: opts?.timeframe }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Strategy parsing failed: ${res.status} ${res.statusText}`);
+  }
+
+  const json: unknown = await res.json();
+  return unwrapEnvelope<StrategyV2Envelope>(json, 'Strategy parsing failed');
+}
+
+/**
+ * Calls POST /api/anthropic/backtest/patch-strategy with the CURRENT
+ * StrategyDefinitionV2 and a plain-text delta description ("change target to
+ * 2R and add a London session filter"), returning an updated partial
+ * definition plus the same assumption/unsupported/validation-error lists.
+ */
+export async function patchStrategyV2(
+  previousDefinition: StrategyDefinitionV2,
+  deltaText: string,
+): Promise<StrategyV2Envelope> {
+  const res = await authFetch(`${BACKTEST_BASE}/patch-strategy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ previousDefinition, deltaText }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Strategy refine failed: ${res.status} ${res.statusText}`);
+  }
+
+  const json: unknown = await res.json();
+  return unwrapEnvelope<StrategyV2Envelope>(json, 'Strategy refine failed');
 }
