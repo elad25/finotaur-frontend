@@ -54,6 +54,14 @@ export interface PaperTradeRailProps {
   disabledDescription?: string;
   /** Optional pre-lifted session (DOM tab) — see the file header comment. Defaults to an internal instance when omitted. */
   session?: UseBacktestSessionReturn;
+  /**
+   * Optional controlled order quantity (ChartTab lifts it so the chart's
+   * right-click Buy/Sell menu and this rail share one qty). Both must be
+   * provided together; when omitted the rail keeps its own internal state
+   * (every other call site — unchanged behavior).
+   */
+  qty?: number;
+  onQtyChange?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function PaperTradeRail({
@@ -65,6 +73,8 @@ export function PaperTradeRail({
   disabledTitle = 'Paper trading unavailable',
   disabledDescription = 'This surface is visible, but order entry is disabled for the current mode.',
   session,
+  qty: qtyProp,
+  onQtyChange,
 }: PaperTradeRailProps) {
   // Called unconditionally (rules of hooks) even when a `session` prop is
   // supplied — see the file header comment for why this is safe.
@@ -86,8 +96,12 @@ export function PaperTradeRail({
 
   const activePos = state.activePosition;
 
-  // New NinjaTrader-style order panel local state.
-  const [qty, setQty] = useState(1);
+  // New NinjaTrader-style order panel local state. Qty is controllable via
+  // the qty/onQtyChange props (see PaperTradeRailProps) — internal state is
+  // the fallback for call sites that don't lift it.
+  const [internalQty, setInternalQty] = useState(1);
+  const qty = qtyProp ?? internalQty;
+  const setQty = onQtyChange ?? setInternalQty;
   // TIF is cosmetic for paper market/limit orders — display-only, not wired
   // into the engine (paper fills don't distinguish GTC vs Day).
   const [tif, setTif] = useState<'GTC' | 'Day'>('GTC');

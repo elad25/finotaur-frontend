@@ -649,6 +649,16 @@ export interface FinotaurChartProps {
    * override the inherited `cursor: none`. Used by Trading Arena tabs.
    */
   hideCursor?: boolean;
+  /**
+   * Fired on right-click over the chart pane INSTEAD of the browser's
+   * default context menu (preventDefault is called only when this prop is
+   * provided — all other callers keep the native menu). `price` is the
+   * series price at the clicked Y coordinate (null when the chart isn't
+   * ready or the click is outside the price scale's range); clientX/clientY
+   * are viewport coordinates for positioning a caller-rendered menu.
+   * Used by Trading Arena's ChartTab for the Buy/Sell/Settings menu.
+   */
+  onChartContextMenu?: (info: { price: number | null; clientX: number; clientY: number }) => void;
   /** Fired on fetch failure. Caller decides whether to render a fallback UI. */
   onError?: (err: Error) => void;
   /**
@@ -877,6 +887,7 @@ export function FinotaurChart({
   theme: themeProp = 'dark',
   height = 600,
   hideCursor = false,
+  onChartContextMenu,
   onError,
   focusRange,
   timeFitToken,
@@ -1982,6 +1993,25 @@ export function FinotaurChart({
         // Settings backgroundColor when set.
         background: effectiveChartStyle?.backgroundColor ?? themeTokens.background,
       }}
+      onContextMenu={
+        onChartContextMenu
+          ? (e) => {
+              e.preventDefault();
+              let price: number | null = null;
+              try {
+                const series = seriesRef.current;
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (series && rect) {
+                  const p = series.coordinateToPrice(e.clientY - rect.top);
+                  price = typeof p === 'number' && Number.isFinite(p) ? p : null;
+                }
+              } catch {
+                // Chart mid-teardown — menu still opens, just without a price.
+              }
+              onChartContextMenu({ price, clientX: e.clientX, clientY: e.clientY });
+            }
+          : undefined
+      }
     >
       {/* Brand bar — 1px gold accent at the top edge */}
       <div
