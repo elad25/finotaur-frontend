@@ -43,6 +43,7 @@ import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 import { BulkActions } from './tabs/tools/BulkActions';
 import { GDPRTools } from './tabs/tools/GDPRTools';
 import { AIUsageTab } from './tabs/AIUsageTab';
+import { CopilotEvalTab } from './tabs/CopilotEvalTab';
 import { AICommandCenterTab } from './tabs/AICommandCenterTab';
 import { CustomerVoiceTab } from './tabs/CustomerVoiceTab';
 import { FounderCockpitTab } from './tabs/FounderCockpitTab';
@@ -171,6 +172,7 @@ export function AdminCRMShell() {
           <Route path="analytics" element={<Lazy><Analytics /></Lazy>} />
           <Route path="analytics/top-traders" element={<Lazy><TopTraders /></Lazy>} />
           <Route path="analytics/ai-usage" element={<AIUsageTab />} />
+          <Route path="copilot-eval" element={<CopilotEvalTab />} />
 
           {/* SEO Analytics */}
           <Route path="seo" element={<SeoAnalyticsPage />} />
