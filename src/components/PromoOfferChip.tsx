@@ -216,8 +216,10 @@ export default function PromoOfferChip({ className, audience = 'app' }: PromoOff
           Portaled to <body>: both navbars that host the chip are
           `fixed ... backdrop-blur-xl`, and backdrop-filter creates a
           containing block — without the portal the modal's `fixed inset-0`
-          resolves against the 64px nav strip and renders clipped. */}
-      {createPortal(
+          resolves against the 64px nav strip and renders clipped.
+          Client-only: routes are prerendered via SSR, where `document` does
+          not exist. Nothing is lost — the popup only ever opens on click. */}
+      {typeof document !== 'undefined' && createPortal(
       <AnimatePresence>
         {open && (
           <>
