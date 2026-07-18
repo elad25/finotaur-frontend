@@ -77,25 +77,27 @@ function sortCalls(calls: SectorCall[]): SectorCall[] {
 
 interface Props {
   className?: string;
+  /** When true, renders without the PremiumFrame shell and footer link — for
+   *  hosting inside a panel that already provides its own frame (e.g. the
+   *  AI Recommendations drawer), so the content doesn't get double-boxed. */
+  frameless?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function AIRecommendationsCard({ className }: Props) {
+export function AIRecommendationsCard({ className, frameless = false }: Props) {
   const { brief, loading } = useSynthesisBrief();
   const { verdicts, loading: verdictsLoading } = useHoldingVerdicts();
 
   const calls = sortCalls(brief?.sector_calls ?? []).slice(0, 3);
   const topVerdicts = verdicts.slice(0, 5);
 
-  return (
-    <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
-      {/* pb-14 reserves space for footer; overflow-y-auto keeps card height reasonable when both sections render */}
-      <div className="flex flex-col flex-1 overflow-y-auto p-5 pb-14">
-        {/* Header */}
-        <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
-          AI RECOMMENDATIONS
-        </p>
+  const content = (
+    <>
+      {/* Header */}
+      <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
+        AI RECOMMENDATIONS
+      </p>
 
         {/* Rows — macro sector calls */}
         <div className="mt-4 flex flex-col gap-3">
@@ -167,6 +169,22 @@ export function AIRecommendationsCard({ className }: Props) {
             </Link>
           )}
         </div>
+    </>
+  );
+
+  if (frameless) {
+    return (
+      <div className={`flex flex-col flex-1 overflow-y-auto ${className ?? ''}`}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
+      {/* pb-14 reserves space for footer; overflow-y-auto keeps card height reasonable when both sections render */}
+      <div className="flex flex-col flex-1 overflow-y-auto p-5 pb-14">
+        {content}
       </div>
 
       {/* Footer */}

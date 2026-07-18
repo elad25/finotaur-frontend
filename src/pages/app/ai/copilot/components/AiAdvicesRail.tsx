@@ -13,6 +13,7 @@ import { PremiumFrame } from '../brief/PremiumFrame';
 import { useSynthesisBrief } from '../hooks/useSynthesisBrief';
 import { TICKER_TO_NAME } from '../utils/opportunityMapper';
 import { computePortfolioHealth, computeRiskAnalysis } from '../utils/portfolioRisk';
+import { relativeTime } from '../utils/relativeTime';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
 // ─── Section divider ──────────────────────────────────────────────────────────
@@ -65,21 +66,6 @@ function StatusDot({ tone }: { tone: StatusTone }) {
     tone === 'amber' ? 'bg-gold-primary' :
     'bg-[#C25450]';
   return <span className={`inline-block h-2 w-2 rounded-full flex-none ${bg}`} />;
-}
-
-// ─── Relative time ────────────────────────────────────────────────────────────
-
-function relativeTime(isoTs: string): string {
-  try {
-    const diff = Date.now() - new Date(isoTs).getTime();
-    const hrs = Math.floor(diff / 3_600_000);
-    if (hrs < 1) return 'just now';
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  } catch {
-    return '';
-  }
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
