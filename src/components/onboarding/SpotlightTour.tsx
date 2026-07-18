@@ -139,12 +139,14 @@ function SpotlightHighlight({ rect }: SpotlightProps) {
         width: w,
         height: h,
         // Mostly-transparent dim — the page stays visible; the spotlighted
-        // target is lit by a gold halo instead of drowned in black.
+        // target is lit by a translucent white halo (Elad 2026-07-18: not gold)
+        // instead of drowned in black.
+        background: 'rgba(255,255,255,0.08)',
         boxShadow:
-          '0 0 0 9999px rgba(0,0,0,0.35), 0 0 28px 6px rgba(201,166,70,0.45), inset 0 0 18px rgba(201,166,70,0.18)',
-        border: '2px solid #C9A646',
+          '0 0 0 9999px rgba(0,0,0,0.35), 0 0 28px 6px rgba(255,255,255,0.30), inset 0 0 18px rgba(255,255,255,0.14)',
+        border: '2px solid rgba(255,255,255,0.85)',
         borderRadius: 8,
-        filter: 'drop-shadow(0 0 12px rgba(201,166,70,0.65))',
+        filter: 'drop-shadow(0 0 12px rgba(255,255,255,0.45))',
         transition: SPOT_TRANSITION,
         zIndex: 9990,
       }}
