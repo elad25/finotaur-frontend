@@ -15,7 +15,11 @@ import { Field, NumberField, SelectField } from '@/components/backtest/auto/form
 import { useAutoBacktestStore } from '@/store/useAutoBacktestStore';
 import { makeDefaultSetup, type SessionFilter } from '@/core/auto/types';
 import { getContractSpec } from '@/core/auto/contractSpecs';
-import { parseSetupFromText } from '@/services/backtest/aiSetupService';
+import { parseSetupFromText, parseStrategyV2FromText, patchStrategyV2 } from '@/services/backtest/aiSetupService';
+import { makeDefaultStrategyV2, validateStrategyStructure, type TF } from '@/core/auto/v2/types';
+import { mergeStrategyV2 } from '../lib/mergeStrategyV2';
+import { diffStrategyV2Fields } from '../lib/diffStrategyV2';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Static option lists
@@ -133,12 +137,18 @@ const DEFAULT_CONTRACTS = 1;
 // Component
 // ---------------------------------------------------------------------------
 
+/** "Patterns (classic)" = v1 pattern-detection flow. "Strategy AI (beta)" = v2 generic rules engine. */
+type StrategyMode = 'patterns' | 'ai';
+const DEFAULT_STRATEGY_MODE: StrategyMode = 'ai';
+
 export function SetupInputForm() {
   const updateSetup = useAutoBacktestStore((s) => s.updateSetup);
   const applyAISetup = useAutoBacktestStore((s) => s.applyAISetup);
   const setInstrument = useAutoBacktestStore((s) => s.setInstrument);
   const runBacktest = useAutoBacktestStore((s) => s.runBacktest);
   const status = useAutoBacktestStore((s) => s.status);
+  const strategyV2 = useAutoBacktestStore((s) => s.strategyV2);
+  const setStrategyV2 = useAutoBacktestStore((s) => s.setStrategyV2);
 
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
@@ -151,11 +161,92 @@ export function SetupInputForm() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState<string[]>([]);
 
-  const isBusy = parsing || status === 'loading-data' || status === 'running';
+  // Strategy AI (v2) — mode toggle + review state.
+  const [mode, setMode] = useState<StrategyMode>(DEFAULT_STRATEGY_MODE);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiAssumptions, setAiAssumptions] = useState<string[]>([]);
+  const [aiUnsupported, setAiUnsupported] = useState<string[]>([]);
+  const [aiValidationErrors, setAiValidationErrors] = useState<string[]>([]);
+  const [aiDiff, setAiDiff] = useState<string[]>([]);
+
+  const isBusy = parsing || aiBusy || status === 'loading-data' || status === 'running';
   const canSubmit = strategyText.trim().length > 0 && !isBusy;
   const contractSpec = getContractSpec(symbol);
+  const submitLabel =
+    mode === 'patterns' ? 'Backtest strategy' : strategyV2 ? 'Refine' : 'Generate Strategy';
+
+  /** Switching modes invalidates whichever review state belonged to the
+   *  other mode, so AutoBacktest.tsx never shows a stale v2 summary while
+   *  the user is describing a v1 pattern setup (or vice versa). */
+  function handleModeChange(next: StrategyMode) {
+    if (next === mode) return;
+    setMode(next);
+    setStrategyV2(null);
+    setAiAssumptions([]);
+    setAiUnsupported([]);
+    setAiValidationErrors([]);
+    setAiDiff([]);
+    setAiError(null);
+    setParseError(null);
+    setUnsupported([]);
+  }
+
+  async function handleGenerateOrRefineStrategy() {
+    const trimmed = strategyText.trim();
+    if (!trimmed) return;
+
+    setAiBusy(true);
+    setAiError(null);
+    setAiAssumptions([]);
+    setAiUnsupported([]);
+    setAiValidationErrors([]);
+    setAiDiff([]);
+
+    try {
+      if (strategyV2) {
+        // Refine mode — patch the existing definition with a delta description.
+        const parsed = await patchStrategyV2(strategyV2, trimmed);
+        const merged = mergeStrategyV2(strategyV2, parsed.definition);
+        const structuralErrors = validateStrategyStructure(merged);
+        setAiDiff(diffStrategyV2Fields(strategyV2, merged));
+        setAiAssumptions(parsed.assumptions);
+        setAiUnsupported(parsed.unsupported);
+        setAiValidationErrors([...(parsed.validationErrors ?? []), ...structuralErrors]);
+        setStrategyV2(merged);
+      } else {
+        // Generate mode — parse fresh text onto a clean default strategy.
+        const base = makeDefaultStrategyV2(symbol, timeframe as TF);
+        const parsed = await parseStrategyV2FromText(trimmed, { symbol, timeframe });
+        const merged = mergeStrategyV2(base, parsed.definition);
+        // Sizing controls always win over the AI-inferred risk defaults —
+        // same discipline as the v1 path below.
+        merged.risk = {
+          ...merged.risk,
+          sizingMode,
+          riskPerTradePct: riskPct,
+          contracts: sizingMode === 'fixed-contracts' ? contracts : undefined,
+        };
+        const structuralErrors = validateStrategyStructure(merged);
+        setAiAssumptions(parsed.assumptions);
+        setAiUnsupported(parsed.unsupported);
+        setAiValidationErrors([...(parsed.validationErrors ?? []), ...structuralErrors]);
+        setStrategyV2(merged);
+      }
+      setStrategyText('');
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function handleSubmit() {
+    if (mode === 'ai') {
+      await handleGenerateOrRefineStrategy();
+      return;
+    }
+
     const trimmed = strategyText.trim();
     if (!trimmed) return;
 
@@ -204,11 +295,41 @@ export function SetupInputForm() {
 
   return (
     <Card padding="default">
-      <div className="mb-4">
-        <h3 className="text-base font-semibold text-ink-primary">Describe your strategy</h3>
-        <p className="mt-1 text-sm text-ink-tertiary">
-          Fill the basics, then describe the logic in plain English.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-ink-primary">Describe your strategy</h3>
+          <p className="mt-1 text-sm text-ink-tertiary">
+            Fill the basics, then describe the logic in plain English.
+          </p>
+        </div>
+
+        {/* Mode toggle — Patterns (v1) vs Strategy AI (v2), default Strategy AI. */}
+        <div className="flex gap-0.5 self-start rounded-lg bg-white/5 p-0.5">
+          <button
+            type="button"
+            onClick={() => handleModeChange('patterns')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              mode === 'patterns'
+                ? 'border border-gold-primary/40 bg-gold-primary/20 text-gold-primary'
+                : 'text-ink-secondary hover:text-ink-primary',
+            )}
+          >
+            Patterns (classic)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange('ai')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              mode === 'ai'
+                ? 'border border-gold-primary/40 bg-gold-primary/20 text-gold-primary'
+                : 'text-ink-secondary hover:text-ink-primary',
+            )}
+          >
+            Strategy AI (beta)
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -275,7 +396,13 @@ export function SetupInputForm() {
             onChange={(e) => setStrategyText(e.target.value)}
             disabled={isBusy}
             rows={4}
-            placeholder="e.g. Wait for a sweep of the Asian range high, then short when a market-structure shift confirms. Stop above the sweep high, target the Asian low. Mirror for longs."
+            placeholder={
+              mode === 'patterns'
+                ? 'e.g. Wait for a sweep of the Asian range high, then short when a market-structure shift confirms. Stop above the sweep high, target the Asian low. Mirror for longs.'
+                : strategyV2
+                  ? 'Refine: e.g. "change target to 2R and add a London session filter"'
+                  : 'e.g. "Long BTC on a 15m bullish FVG during the London session, stop below the swing low, target 2R"'
+            }
             className="w-full resize-none rounded-lg border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted transition-colors focus:border-gold-primary focus:outline-none disabled:opacity-50"
           />
         </Field>
@@ -284,7 +411,13 @@ export function SetupInputForm() {
       <div className="mt-4 flex items-center justify-end gap-3">
         {isBusy && (
           <span className="text-xs text-ink-tertiary animate-pulse">
-            {parsing ? 'Reading your strategy…' : 'Running backtest…'}
+            {parsing
+              ? 'Reading your strategy…'
+              : aiBusy
+                ? strategyV2
+                  ? 'Refining your strategy…'
+                  : 'Reading your strategy…'
+                : 'Running backtest…'}
           </span>
         )}
         <Button
@@ -294,17 +427,75 @@ export function SetupInputForm() {
           disabled={!canSubmit}
           onClick={() => void handleSubmit()}
         >
-          Backtest strategy
+          {submitLabel}
         </Button>
       </div>
 
-      {parseError && (
+      {mode === 'patterns' && parseError && (
         <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
           {parseError}
         </div>
       )}
 
-      {unsupported.length > 0 && (
+      {mode === 'ai' && aiError && (
+        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          {aiError}
+        </div>
+      )}
+
+      {mode === 'ai' && strategyV2 && !aiError && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+            Strategy generated. Review it below before running.
+          </div>
+
+          {aiDiff.length > 0 && (
+            <div className="rounded-lg border border-gold-border bg-gold-primary/10 px-3 py-2 text-xs text-gold-primary">
+              <p className="mb-1 font-semibold">Changed:</p>
+              <ul className="list-inside list-disc space-y-0.5">
+                {aiDiff.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiAssumptions.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+              <p className="mb-1 font-semibold">Assumptions made:</p>
+              <ul className="list-inside list-disc space-y-0.5">
+                {aiAssumptions.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiUnsupported.length > 0 && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              <p className="mb-1 font-semibold">Not supported (ignored):</p>
+              <ul className="list-inside list-disc space-y-0.5">
+                {aiUnsupported.map((u, i) => (
+                  <li key={i}>{u}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiValidationErrors.length > 0 && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              <p className="mb-1 font-semibold">Validation errors:</p>
+              <ul className="list-inside list-disc space-y-0.5">
+                {aiValidationErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'patterns' && unsupported.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
           <p className="mb-1 font-semibold">Not modeled:</p>
           <ul className="list-inside list-disc space-y-0.5">

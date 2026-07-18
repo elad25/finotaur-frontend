@@ -13,9 +13,10 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/types';
 import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
+import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
 import { getCandleSource, sourceForSymbol } from '@/services/backtest/candleSource';
 import { CandleFetchError } from '@/services/backtest/errors';
-import { runAutoBacktestInWorker } from '@/services/backtest/autoBacktestRunner';
+import { runAutoBacktestInWorker, runStrategyV2InWorker } from '@/services/backtest/autoBacktestRunner';
 import {
   listSetups,
   listRuns,
@@ -49,6 +50,13 @@ export interface AutoBacktestProgress {
 export interface AutoBacktestState {
   /** The setup currently being edited / run. */
   currentSetup: SetupDefinition;
+  /**
+   * v2 generic-rules-engine strategy definition, when the caller runs one
+   * via `runStrategyV2Backtest`. `null` when no v2 run has been made yet.
+   * Additive slot only — `currentSetup` (v1) remains the primary/default
+   * editing surface; this does not replace or restructure it.
+   */
+  strategyV2: StrategyDefinitionV2 | null;
   /** Range start, ms (Unix epoch). */
   from: number;
   /** Range end, ms (Unix epoch). */
@@ -72,6 +80,13 @@ export interface AutoBacktestState {
 
 export interface AutoBacktestActions {
   updateSetup(partial: Partial<SetupDefinition>): void;
+  /**
+   * Set (or clear) the v2 strategy slot directly, without running it. Used
+   * by the NL "Strategy AI" flow to stash a freshly parsed/refined
+   * definition for review (StrategyV2Summary) before the user hits Run.
+   * `runStrategyV2Backtest` also writes this field as part of running.
+   */
+  setStrategyV2(def: StrategyDefinitionV2 | null): void;
   /**
    * Deep-merge an AI-extracted partial SetupDefinition into the current setup.
    * - Scalar fields (direction, name, description) are replaced when present.
@@ -98,6 +113,15 @@ export interface AutoBacktestActions {
   setDateRange(from: number, to: number): void;
   /** Load candles → run in worker → save a SavedRun on success. */
   runBacktest(): Promise<void>;
+  /**
+   * v2 counterpart of `runBacktest`: loads candles for `def.instrument` /
+   * `def.timeframes.execution` over the store's existing `from`/`to` range,
+   * runs it via the v2 worker/runner, and writes into the SAME `result`
+   * field `runBacktest` uses — the UI consumes v1 and v2 results
+   * identically. No SavedRun persistence (v1-only shape) — out of scope for
+   * this increment.
+   */
+  runStrategyV2Backtest(def: StrategyDefinitionV2): Promise<void>;
   saveCurrentSetup(): Promise<void>;
   loadSetup(id: string): Promise<void>;
   deleteSetup(id: string): Promise<void>;
@@ -141,6 +165,7 @@ function mapCandleFetchErrorToMessage(err: unknown): string {
 
 const initialState: AutoBacktestState = {
   currentSetup: makeDefaultSetup('BTCUSDT', '15m'),
+  strategyV2: null,
   from: Date.now() - SIX_MONTHS_MS,
   to: Date.now(),
   status: 'idle',
@@ -223,6 +248,12 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
 
           // id, schemaVersion, createdAt are intentionally never overwritten.
           s.updatedAt = Date.now();
+        });
+      },
+
+      setStrategyV2(def) {
+        set((state) => {
+          state.strategyV2 = def;
         });
       },
 
@@ -375,6 +406,79 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         } catch (err) {
           const message =
             err instanceof Error ? err.message : 'Backtest run failed.';
+          set((state) => {
+            state.error = message;
+            state.status = 'error';
+          });
+        }
+      },
+
+      async runStrategyV2Backtest(def) {
+        const { from, to } = get();
+        const { symbol } = def.instrument;
+        const timeframe = def.timeframes.execution;
+
+        set((state) => {
+          state.strategyV2 = def;
+          state.status = 'loading-data';
+          state.error = null;
+          state.result = null;
+          state.progress = { scanned: 0, total: 0, found: 0 };
+          state.selectedTradeIndex = null;
+        });
+
+        // Same routing rule as runBacktest(): route by symbol, not by the
+        // definition's declared instrument.source.
+        const resolvedSource = sourceForSymbol(symbol);
+
+        let candles: Candle[];
+        try {
+          candles = await getCandleSource(resolvedSource).getCandles(symbol, timeframe, from, to);
+        } catch (err) {
+          const message = mapCandleFetchErrorToMessage(err);
+          set((state) => {
+            state.error = message;
+            state.status = 'error';
+          });
+          return;
+        }
+
+        if (candles.length === 0) {
+          set((state) => {
+            state.error = 'No candle data returned for the selected range.';
+            state.status = 'error';
+          });
+          return;
+        }
+
+        set((state) => {
+          state.status = 'running';
+        });
+
+        try {
+          const result = await runStrategyV2InWorker(
+            def,
+            candles,
+            (scanned, total, found) => {
+              set((state) => {
+                state.progress = { scanned, total, found };
+              });
+            },
+            () => {
+              toast.warning(
+                'Running the backtest on the main thread (worker unavailable) — the UI may be less responsive on large datasets.'
+              );
+            },
+          );
+
+          // Same result field runBacktest() writes — the UI consumes v1 and
+          // v2 results identically.
+          set((state) => {
+            state.result = result;
+            state.status = 'done';
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Backtest run failed.';
           set((state) => {
             state.error = message;
             state.status = 'error';

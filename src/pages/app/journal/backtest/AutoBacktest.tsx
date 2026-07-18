@@ -19,6 +19,7 @@
  */
 
 import { Card } from '@/components/ds/Card';
+import { Button } from '@/components/ds/Button';
 import {
   useAutoBacktestStore,
   selectAutoSetup,
@@ -30,6 +31,7 @@ import { TradeListTable } from '@/components/backtest/auto/TradeListTable';
 import { TradeDetailPanel } from '@/components/backtest/auto/TradeDetailPanel';
 import { SavedSetupsPanel } from '@/components/backtest/auto/SavedSetupsPanel';
 import { SetupInputForm } from './components/SetupInputForm';
+import { StrategyV2Summary } from './components/StrategyV2Summary';
 import { ResultsSummary } from './components/ResultsSummary';
 import { AIResultAnalysis } from './components/AIResultAnalysis';
 
@@ -52,8 +54,11 @@ export default function AutoBacktest() {
   const setup = useAutoBacktestStore(selectAutoSetup);
   const status = useAutoBacktestStore(selectAutoStatus);
   const result = useAutoBacktestStore(selectAutoResult);
+  const strategyV2 = useAutoBacktestStore((s) => s.strategyV2);
+  const runStrategyV2Backtest = useAutoBacktestStore((s) => s.runStrategyV2Backtest);
 
   const hasResult = status === 'done' && !!result;
+  const isRunning = status === 'loading-data' || status === 'running';
 
   const setupSummary = buildSetupSummary(setup);
 
@@ -72,6 +77,28 @@ export default function AutoBacktest() {
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="flex flex-col gap-6">
             <SetupInputForm />
+
+            {/* Strategy AI (v2) review — appears once a strategy has been
+                generated/refined; a distinct Run action runs it via the v2
+                engine instead of the v1 pattern-detection run. The v1
+                (Patterns) path is untouched: it parses and runs in one click
+                inside SetupInputForm, so strategyV2 stays null there. */}
+            {strategyV2 && (
+              <>
+                <StrategyV2Summary definition={strategyV2} />
+                <div className="flex justify-end">
+                  <Button
+                    variant="gold"
+                    size="lg"
+                    showArrow={false}
+                    disabled={isRunning}
+                    onClick={() => void runStrategyV2Backtest(strategyV2)}
+                  >
+                    {isRunning ? 'Running…' : 'Run backtest'}
+                  </Button>
+                </div>
+              </>
+            )}
 
             <RunProgress />
 
