@@ -20,6 +20,7 @@
 // =====================================================
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { X, Gift, Copy, Check, Clock, Ticket, Crown, ShieldCheck, Star } from 'lucide-react';
@@ -107,6 +108,21 @@ export default function PromoOfferChip({ className, audience = 'app' }: PromoOff
     }, 1000);
     return () => clearInterval(id);
   }, [remaining]);
+
+  // While the popup is open: lock background scroll and close on Escape.
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   const expired = remaining <= 0;
 
@@ -196,7 +212,14 @@ export default function PromoOfferChip({ className, audience = 'app' }: PromoOff
         </span>
       </motion.button>
 
-      {/* ── Popup ─────────────────────────────────────────────────── */}
+      {/* ── Popup ─────────────────────────────────────────────────────
+          Portaled to <body>: both navbars that host the chip are
+          `fixed ... backdrop-blur-xl`, and backdrop-filter creates a
+          containing block — without the portal the modal's `fixed inset-0`
+          resolves against the 64px nav strip and renders clipped.
+          Client-only: routes are prerendered via SSR, where `document` does
+          not exist. Nothing is lost — the popup only ever opens on click. */}
+      {typeof document !== 'undefined' && createPortal(
       <AnimatePresence>
         {open && (
           <>
@@ -215,13 +238,13 @@ export default function PromoOfferChip({ className, audience = 'app' }: PromoOff
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-[210] flex items-center justify-center p-4"
+              className="fixed inset-0 z-[210] flex items-center justify-center overflow-y-auto overscroll-contain p-4"
             >
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-label={`${OFFER.title} offer`}
-                className="relative w-full max-w-md overflow-hidden rounded-2xl"
+                className="relative my-auto w-full max-w-md overflow-hidden rounded-2xl"
                 style={{
                   background:
                     'linear-gradient(135deg, rgba(18,16,12,0.98) 0%, rgba(10,10,10,0.99) 100%)',
@@ -385,7 +408,9 @@ export default function PromoOfferChip({ className, audience = 'app' }: PromoOff
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body,
+      )}
     </>
   );
 }
