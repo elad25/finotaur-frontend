@@ -37,6 +37,7 @@ import { ColorSwatchPicker } from './ColorSwatchPicker';
 import {
   BACKGROUND_PRESETS,
   TIMEZONE_OPTIONS,
+  buildThemeSwitchPatch,
   type ChartStyleSettings,
   type CrosshairStyle,
   type PriceAxisFontSize,
@@ -155,7 +156,15 @@ function CandlePreview({ settings }: { settings: ChartSettingsDialogProps['setti
         aria-label="Candle style preview — up and down candle"
       >
         {[30, 60, 90, 120].map((y) => (
-          <line key={y} x1={0} y1={y} x2={116} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+          <line
+            key={y}
+            x1={0}
+            y1={y}
+            x2={116}
+            y2={y}
+            stroke={settings.theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)'}
+            strokeWidth={1}
+          />
         ))}
         {/* Up candle */}
         {showWicks && <line x1={34} y1={16} x2={34} y2={132} stroke={wickUp} strokeWidth={2} />}
@@ -314,6 +323,30 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
 
             {activeTab === 'canvas' && (
               <div className="flex flex-col gap-4">
+                <div>
+                  <SectionLabel>Theme</SectionLabel>
+                  <div className="flex items-center gap-1" role="group" aria-label="Chart theme">
+                    <button
+                      type="button"
+                      aria-pressed={settings.theme !== 'light'}
+                      onClick={() => onChange(buildThemeSwitchPatch('dark'))}
+                      className={pillClass(settings.theme !== 'light')}
+                    >
+                      Dark
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={settings.theme === 'light'}
+                      onClick={() => onChange(buildThemeSwitchPatch('light'))}
+                      className={pillClass(settings.theme === 'light')}
+                    >
+                      Light
+                    </button>
+                  </div>
+                </div>
+
+                <SectionDivider />
+
                 <div>
                   <SectionLabel>Background</SectionLabel>
                   <div className="flex flex-col gap-2">

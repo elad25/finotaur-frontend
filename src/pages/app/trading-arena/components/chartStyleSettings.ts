@@ -15,6 +15,7 @@
 // approximate hex.
 
 import { createContext } from 'react';
+import type { ChartTheme } from '@/components/charting/types';
 
 // ═══════════════════════════════════════════════════════════════
 // Candle color presets — swatch row, no free color picker (per spec)
@@ -151,6 +152,12 @@ export interface ChartStyleSettings {
   candleWickDownColor?: string;
 
   // CANVAS
+  /**
+   * Chart theme — 'dark' (FINOTAUR default) or 'light' (TradingView-style
+   * white canvas with near-black axis text). Drives FinotaurChart's base
+   * theme (pickTheme) via ChartStyleContext; switching remounts the chart.
+   */
+  theme: ChartTheme;
   backgroundColor: string;
   gridVerticalVisible: boolean;
   gridHorizontalVisible: boolean;
@@ -198,6 +205,7 @@ export const DEFAULT_CHART_STYLE: ChartStyleSettings = {
   candleBordersVisible: true,
   candleWicksVisible: true,
 
+  theme: 'dark',
   backgroundColor: BACKGROUND_PRESETS[0].color,
   gridVerticalVisible: true,
   gridHorizontalVisible: true,
@@ -215,6 +223,42 @@ export const DEFAULT_CHART_STYLE: ChartStyleSettings = {
   // comment above. Defaulted off since it no longer drives any rendering.
   footprintOnZoom: false,
 };
+
+// ═══════════════════════════════════════════════════════════════
+// Theme switch — one-click Dark/Light with TradingView-default colors
+// ═══════════════════════════════════════════════════════════════
+/**
+ * The settings patch applied when the user flips the Canvas-tab Theme
+ * control. Per Elad (2026-07-18): Light mode ships TradingView's defaults —
+ * white canvas, near-black scales (FinotaurChart's FINOTAUR_LIGHT_THEME),
+ * TV teal/red candles. Dark restores the FINOTAUR defaults. Per-element
+ * border/wick overrides are cleared on switch so candles snap to the new
+ * palette; the user can re-customize afterwards.
+ */
+export function buildThemeSwitchPatch(theme: ChartTheme): Partial<ChartStyleSettings> {
+  if (theme === 'light') {
+    return {
+      theme,
+      backgroundColor: '#ffffff',
+      candleUpColor: '#26a69a',
+      candleDownColor: '#ef5350',
+      candleBorderUpColor: undefined,
+      candleBorderDownColor: undefined,
+      candleWickUpColor: undefined,
+      candleWickDownColor: undefined,
+    };
+  }
+  return {
+    theme,
+    backgroundColor: BACKGROUND_PRESETS[0].color,
+    candleUpColor: CANDLE_COLOR_PRESETS[0].up,
+    candleDownColor: CANDLE_COLOR_PRESETS[0].down,
+    candleBorderUpColor: undefined,
+    candleBorderDownColor: undefined,
+    candleWickUpColor: undefined,
+    candleWickDownColor: undefined,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Sanitize — never trust localStorage JSON shape, degrade per-field
@@ -236,6 +280,7 @@ function asOneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: 
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
 }
 
+const CHART_THEME_VALUES: ChartTheme[] = ['dark', 'light'];
 const CROSSHAIR_STYLE_VALUES: CrosshairStyle[] = ['solid', 'dashed', 'hidden'];
 const FONT_SIZE_VALUES: PriceAxisFontSize[] = [11, 12, 13];
 const TIMEZONE_VALUES: ChartTimezone[] = TIMEZONE_OPTIONS.map((o) => o.value);
@@ -312,6 +357,7 @@ export function sanitizeChartStyleSettings(raw: unknown, fallback: ChartStyleSet
     candleWickUpColor: asOptionalHexColor(p.candleWickUpColor, fallback.candleWickUpColor),
     candleWickDownColor: asOptionalHexColor(p.candleWickDownColor, fallback.candleWickDownColor),
 
+    theme: asOneOf(p.theme, CHART_THEME_VALUES, fallback.theme),
     backgroundColor: asHexColor(p.backgroundColor, fallback.backgroundColor),
     gridVerticalVisible: asBool(p.gridVerticalVisible, fallback.gridVerticalVisible),
     gridHorizontalVisible: asBool(p.gridHorizontalVisible, fallback.gridHorizontalVisible),
