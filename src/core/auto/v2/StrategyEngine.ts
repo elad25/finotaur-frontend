@@ -100,6 +100,7 @@ import { computeRLadderAggregate } from '../rLadderAnalysis';
 import type { AutoPosition } from '../signalToPosition';
 import { LevelBank } from './LevelBank';
 import { EventBank } from './EventBank';
+import { IndicatorBank } from './IndicatorBank';
 import {
   compileStrategy,
   strategyNeedsIndicators,
@@ -412,12 +413,15 @@ export async function runStrategyV2(
 // ----------------------------------------------------------------------------
 
 /**
- * Dynamically (and lazily) import `./IndicatorBank` ONLY when the strategy
- * actually references an `Operand{src:'indicator'}` leaf. Guarded: any
- * import failure surfaces as a clear "indicators not available" error rather
- * than an opaque module-resolution crash. Strategies that never reference an
- * indicator (the majority of ConditionCompiler/StrategyEngine unit tests in
- * this PR) never touch this path at all.
+ * Construct an IndicatorBank ONLY when the strategy actually references an
+ * `Operand{src:'indicator'}` leaf — indicator series precompute lazily inside
+ * the bank, so strategies without indicators pay nothing.
+ *
+ * NOTE: this MUST be a static import. A dynamic `import('./IndicatorBank')`
+ * here forces code-splitting inside the Web Worker bundle, and Vite builds
+ * workers as IIFE — Rollup then fails the whole production build with
+ * "UMD and IIFE output formats are not supported for code-splitting builds"
+ * (observed on the Cloudflare Pages build of this branch, 2026-07-17).
  */
 async function maybeLoadIndicatorBank(
   def: StrategyDefinitionV2,
@@ -425,16 +429,7 @@ async function maybeLoadIndicatorBank(
   timezone: string,
 ): Promise<IndicatorBankLike | undefined> {
   if (!strategyNeedsIndicators(def)) return undefined;
-  try {
-    const mod = await import('./IndicatorBank');
-    return new mod.IndicatorBank(candles, { timezone });
-  } catch (err) {
-    throw new Error(
-      `runStrategyV2: strategy "${def.id}" uses an indicator Operand but ` +
-        `IndicatorBank is not available (${err instanceof Error ? err.message : String(err)}). ` +
-        'indicators not available.',
-    );
-  }
+  return new IndicatorBank(candles, { timezone });
 }
 
 // ----------------------------------------------------------------------------
