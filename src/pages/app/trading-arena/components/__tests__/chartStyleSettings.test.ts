@@ -117,6 +117,7 @@ describe('sanitizeChartStyleSettings', () => {
       candleBorderDownColor: '#ef4444',
       candleWickUpColor: '#16a34acc',
       candleWickDownColor: '#dc2626cc',
+      theme: 'light',
       backgroundColor: '#16181d',
       gridVerticalVisible: false,
       gridHorizontalVisible: false,

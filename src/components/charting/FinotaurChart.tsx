@@ -134,7 +134,9 @@ const FINOTAUR_LIGHT_THEME = {
   grid:              '#e1e3eb',
   border:            '#d1d4dc',
   text:              '#131722',
-  textAxis:          '#787b86',
+  // Per Elad (2026-07-18): light mode = "white and black on the scales" —
+  // axis tick labels use TV's near-black text, not the softer gray.
+  textAxis:          '#131722',
   candleUp:          '#26a69a',
   candleDown:        '#ef5350',
   candleWickUp:      '#26a69a',
@@ -872,7 +874,7 @@ export function FinotaurChart({
   markers,
   markerIcons,
   indicators,
-  theme = 'dark',
+  theme: themeProp = 'dark',
   height = 600,
   hideCursor = false,
   onError,
@@ -904,14 +906,19 @@ export function FinotaurChart({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  // Active theme tokens — derived once, used by both JSX and effects.
-  const themeTokens = pickTheme(theme);
   // Chart Settings (Trading Arena's Chart ▾ menu) — explicit prop wins,
   // otherwise fall back to ChartStyleContext (undefined outside the Arena's
   // provider tree, so this is a no-op for every other caller). See the
   // `chartStyle` prop doc comment above for the full rationale.
   const contextChartStyle = useContext(ChartStyleContext);
   const effectiveChartStyle = chartStyle ?? contextChartStyle;
+  // Arena Chart Settings' Dark/Light theme wins over the caller prop —
+  // every non-Arena caller (no chartStyle/context) keeps the prop's value
+  // (default 'dark') untouched. A change here remounts the chart (see the
+  // mount effect's [theme] dep), swapping every base color atomically.
+  const theme = effectiveChartStyle?.theme ?? themeProp;
+  // Active theme tokens — derived once, used by both JSX and effects.
+  const themeTokens = pickTheme(theme);
   /**
    * Mirrors the footprint's zoom-driven detail stage (see FootprintLayer's
    * onStageChange) purely so WallHeatLayer can be told how tall the
