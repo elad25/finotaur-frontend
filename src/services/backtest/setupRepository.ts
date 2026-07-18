@@ -24,6 +24,67 @@ import type {
   RMultipleDistribution,
 } from '@/core/auto/AutoBacktestEngine';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
+import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
+
+// ---------------------------------------------------------------------------
+// v1 / v2 setup discriminator (Increment 4b — v2 persistence)
+// ---------------------------------------------------------------------------
+
+/**
+ * A definition persisted through this repository — either a v1
+ * `SetupDefinition` (schemaVersion 1, pattern-detector engine) or a v2
+ * `StrategyDefinitionV2` (schemaVersion 2, generic rules engine —
+ * Increment 4b). Both are plain, JSON-serializable objects that round-trip
+ * through the SAME `bt_setups.definition` / `bt_runs.setup_snapshot` jsonb
+ * columns and the same localStorage fallback keys — no migration needed.
+ * `schemaVersion` is the sole discriminator; see {@link isV2SetupDefinition}.
+ */
+export type SavedSetupDefinition = SetupDefinition | StrategyDefinitionV2;
+
+/**
+ * True when `def` is a v2 (generic rules-engine) `StrategyDefinitionV2`.
+ * v1 `SetupDefinition`s always populate `schemaVersion: 1`; a legacy or
+ * corrupted record with NO `schemaVersion` field at all is treated as v1 —
+ * "absent -> v1" is the backward-compat contract for this discriminator.
+ */
+export function isV2SetupDefinition(
+  def: SavedSetupDefinition,
+): def is StrategyDefinitionV2 {
+  return (def as { schemaVersion?: number }).schemaVersion === 2;
+}
+
+/**
+ * Read the execution timeframe from either shape. v1 stores it on
+ * `instrument.timeframe`; v2 stores it on `timeframes.execution` (its
+ * `instrument` has no `timeframe` field — see `InstrumentRefV2`).
+ */
+export function setupTimeframe(def: SavedSetupDefinition): string {
+  return isV2SetupDefinition(def) ? def.timeframes.execution : def.instrument.timeframe;
+}
+
+/**
+ * Read `updatedAt` from either shape. v1's canonical type always declares
+ * it. v2's canonical type (owned by `core/auto/v2/types.ts`) has no such
+ * field, so the repository stamps it as an extra JSON property whenever it
+ * persists a v2 definition (see {@link stampUpdatedAt}); this accessor reads
+ * that stamp defensively — 0 for a v2 def that was never saved yet.
+ */
+export function setupUpdatedAt(def: SavedSetupDefinition): number {
+  const v = (def as { updatedAt?: unknown }).updatedAt;
+  return typeof v === 'number' ? v : 0;
+}
+
+/**
+ * Return `def` with `updatedAt` set to `at`. For v1 this is a plain,
+ * type-safe override (the field is part of `SetupDefinition`). For v2 it
+ * attaches an extra property outside `StrategyDefinitionV2`'s canonical
+ * shape — a single, well-contained cast at the seam where we intentionally
+ * extend a type we don't own with repository-only metadata, rather than
+ * scattering casts across every call site.
+ */
+function stampUpdatedAt(def: SavedSetupDefinition, at: number): SavedSetupDefinition {
+  return { ...def, updatedAt: at } as SavedSetupDefinition;
+}
 
 // ---------------------------------------------------------------------------
 // SavedRun shape
@@ -32,8 +93,8 @@ import type { AutoPosition } from '@/core/auto/signalToPosition';
 /** A persisted snapshot of a completed run. */
 export interface SavedRun {
   id: string;
-  /** Immutable snapshot of the setup at run time. */
-  setupSnapshot: SetupDefinition;
+  /** Immutable snapshot of the setup at run time (v1 or v2 — see {@link SavedSetupDefinition}). */
+  setupSnapshot: SavedSetupDefinition;
   symbol: string;
   timeframe: string;
   /** Range start, ms (Unix epoch). */
@@ -42,6 +103,8 @@ export interface SavedRun {
   to: number;
   statistics: BacktestStatisticsLike;
   equityCurve: EquityCurvePoint[];
+  /** Always empty for v2 runs — v2's rules engine doesn't produce v1-shaped
+   *  pattern-zone Detections (see `StrategyEngine.ts`'s result). */
   detections: Detection[];
   trades: AutoPosition[];
   rMultipleDistribution?: RMultipleDistribution;
@@ -55,7 +118,13 @@ export interface SavedRun {
 const SETUPS_KEY = 'finotaur.autobt.setups.v1';
 const RUNS_KEY = 'finotaur.autobt.runs.v1';
 const MAX_RUNS = 50;
-const ENGINE_VERSION = 'auto-v1';
+const ENGINE_VERSION_V1 = 'auto-v1';
+const ENGINE_VERSION_V2 = 'auto-v2';
+
+/** `bt_runs.engine_version` for a given setup snapshot. */
+function engineVersionForSnapshot(def: SavedSetupDefinition): string {
+  return isV2SetupDefinition(def) ? ENGINE_VERSION_V2 : ENGINE_VERSION_V1;
+}
 
 // ---------------------------------------------------------------------------
 // ID generation (no external deps)
@@ -125,26 +194,27 @@ function writeJSON(key: string, value: unknown): boolean {
 
 // --- setups (local) -------------------------------------------------------
 
-function localListSetups(): SetupDefinition[] {
-  const map = readJSON<Record<string, SetupDefinition>>(SETUPS_KEY, {});
-  return Object.values(map).sort((a, b) => b.updatedAt - a.updatedAt);
+function localListSetups(): SavedSetupDefinition[] {
+  const map = readJSON<Record<string, SavedSetupDefinition>>(SETUPS_KEY, {});
+  return Object.values(map).sort((a, b) => setupUpdatedAt(b) - setupUpdatedAt(a));
 }
 
-function localGetSetup(id: string): SetupDefinition | null {
-  const map = readJSON<Record<string, SetupDefinition>>(SETUPS_KEY, {});
+function localGetSetup(id: string): SavedSetupDefinition | null {
+  const map = readJSON<Record<string, SavedSetupDefinition>>(SETUPS_KEY, {});
   return map[id] ?? null;
 }
 
-function localSaveSetup(setup: SetupDefinition): SetupDefinition {
-  const map = readJSON<Record<string, SetupDefinition>>(SETUPS_KEY, {});
-  const saved = { ...setup, updatedAt: Date.now() };
-  map[setup.id] = saved;
+/** Assumes `setup` is already stamped (see {@link stampUpdatedAt}) — both
+ *  call sites in `saveSetup` stamp before calling this. */
+function localSaveSetup(setup: SavedSetupDefinition): SavedSetupDefinition {
+  const map = readJSON<Record<string, SavedSetupDefinition>>(SETUPS_KEY, {});
+  map[setup.id] = setup;
   writeJSON(SETUPS_KEY, map);
-  return saved;
+  return setup;
 }
 
 function localDeleteSetup(id: string): void {
-  const map = readJSON<Record<string, SetupDefinition>>(SETUPS_KEY, {});
+  const map = readJSON<Record<string, SavedSetupDefinition>>(SETUPS_KEY, {});
   delete map[id];
   writeJSON(SETUPS_KEY, map);
 }
@@ -183,13 +253,13 @@ interface BtSetupRow {
   id: string;
   name: string;
   schema_version: number;
-  definition: SetupDefinition;
+  definition: SavedSetupDefinition;
   is_shared: boolean;
   updated_at: string;
 }
 
-/** The `definition` jsonb IS the SetupDefinition; we re-stamp id/name from the row. */
-function rowToSetup(row: BtSetupRow): SetupDefinition {
+/** The `definition` jsonb IS the (v1 or v2) definition; we re-stamp id/name from the row. */
+function rowToSetup(row: BtSetupRow): SavedSetupDefinition {
   return {
     ...row.definition,
     id: row.id,
@@ -199,7 +269,7 @@ function rowToSetup(row: BtSetupRow): SetupDefinition {
 
 interface BtRunRow {
   id: string;
-  setup_snapshot: SetupDefinition;
+  setup_snapshot: SavedSetupDefinition;
   symbol: string;
   timeframe: string;
   from_ts: number | string;
@@ -344,7 +414,7 @@ const EMPTY_R_DISTRIBUTION: RMultipleDistribution = {
 // ===========================================================================
 
 /** Return all saved setups, newest first. Falls back to localStorage. */
-export async function listSetups(): Promise<SetupDefinition[]> {
+export async function listSetups(): Promise<SavedSetupDefinition[]> {
   const userId = await getUserId();
   if (!userId) return localListSetups();
   try {
@@ -362,7 +432,7 @@ export async function listSetups(): Promise<SetupDefinition[]> {
 }
 
 /** Return a single setup by id, or null. Falls back to localStorage. */
-export async function getSetup(id: string): Promise<SetupDefinition | null> {
+export async function getSetup(id: string): Promise<SavedSetupDefinition | null> {
   const userId = await getUserId();
   if (!userId) return localGetSetup(id);
   try {
@@ -380,17 +450,19 @@ export async function getSetup(id: string): Promise<SetupDefinition | null> {
 }
 
 /**
- * Upsert a setup. Bumps `updatedAt` to now. Persists the full SetupDefinition
- * as the `definition` jsonb. Falls back to localStorage on failure / no auth.
+ * Upsert a setup (v1 or v2). Bumps `updatedAt` to now. Persists the full
+ * definition as the `definition` jsonb — v1 and v2 use the same column,
+ * discriminated by the `schemaVersion` field inside it. Falls back to
+ * localStorage on failure / no auth.
  */
-export async function saveSetup(setup: SetupDefinition): Promise<SetupDefinition> {
-  const stamped: SetupDefinition = { ...setup, updatedAt: Date.now() };
+export async function saveSetup(setup: SavedSetupDefinition): Promise<SavedSetupDefinition> {
+  const stamped = stampUpdatedAt(setup, Date.now());
   const userId = await getUserId();
   if (!userId) return localSaveSetup(stamped);
   // `bt_setups.id` is uuid; legacy `setup_*` ids (from makeDefaultSetup) must be
   // upgraded to a UUID on first cloud save so the upsert targets the PK column.
   const dbId = isUuid(stamped.id) ? stamped.id : makeId();
-  const persisted: SetupDefinition = { ...stamped, id: dbId };
+  const persisted: SavedSetupDefinition = { ...stamped, id: dbId };
   try {
     const { data, error } = await supabase
       .from('bt_setups')
@@ -402,7 +474,7 @@ export async function saveSetup(setup: SetupDefinition): Promise<SetupDefinition
           schema_version: persisted.schemaVersion,
           definition: persisted,
           is_shared: false,
-          updated_at: new Date(persisted.updatedAt).toISOString(),
+          updated_at: new Date(setupUpdatedAt(persisted)).toISOString(),
         },
         { onConflict: 'id' },
       )
@@ -599,7 +671,7 @@ export async function saveRun(run: SavedRun): Promise<SaveRunResult> {
         statistics: run.statistics,
         equity_curve: run.equityCurve,
         r_multiple_distribution: run.rMultipleDistribution ?? EMPTY_R_DISTRIBUTION,
-        engine_version: ENGINE_VERSION,
+        engine_version: engineVersionForSnapshot(run.setupSnapshot),
       })
       .select('id')
       .single();
@@ -671,17 +743,20 @@ export async function deleteRun(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Build a SavedRun from the engine result + run metadata.
+ * Build a SavedRun from the engine result + run metadata. `setup` may be a
+ * v1 `SetupDefinition` or a v2 `StrategyDefinitionV2` — the engine used to
+ * produce `result` is inferred from `setup.schemaVersion` when the run is
+ * later persisted (see {@link engineVersionForSnapshot}).
  * @param meta.from / meta.to  range bounds in ms (Unix epoch)
  */
 export function buildSavedRun(
-  setup: SetupDefinition,
+  setup: SavedSetupDefinition,
   result: AutoBacktestResult,
   meta: { symbol: string; timeframe: string; from: number; to: number },
 ): SavedRun {
   return {
     id: makeId(),
-    setupSnapshot: JSON.parse(JSON.stringify(setup)) as SetupDefinition,
+    setupSnapshot: JSON.parse(JSON.stringify(setup)) as SavedSetupDefinition,
     symbol: meta.symbol,
     timeframe: meta.timeframe,
     from: meta.from,

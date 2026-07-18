@@ -101,16 +101,23 @@ import type { AutoPosition } from '../signalToPosition';
 import { LevelBank } from './LevelBank';
 import { EventBank } from './EventBank';
 import { IndicatorBank } from './IndicatorBank';
+import { TimeframeSet } from './TimeframeSet';
+import { alignCompareSeries } from './SmtBank';
 import {
   compileStrategy,
-  strategyNeedsIndicators,
+  strategyNeedsIndicatorsForTf,
+  smtTfsUsed,
   type CompiledPhase,
   type CompiledStrategy,
+  type ConditionBanks,
   type IndicatorBankLike,
+  type MtfContext,
   type RuntimeState,
+  type SmtCompareBank,
+  type SmtContext,
 } from './ConditionCompiler';
 import { buildSignalV2, type TradeSignalV2 } from './SignalBuilderV2';
-import { validateStrategyStructure, type AnchorKind, type StrategyDefinitionV2 } from './types';
+import { validateStrategyStructure, type AnchorKind, type StrategyDefinitionV2, type TF } from './types';
 
 // ----------------------------------------------------------------------------
 // Narrow structural views of the reused engines — same pattern as v1's
@@ -147,6 +154,18 @@ interface StatsEngineView {
 
 export interface RunStrategyV2Options {
   onProgress?: (scanned: number, total: number, found: number) => void;
+  /**
+   * Compare-symbol candle series for `Condition{kind:'smt'}` conditions
+   * (Increment 4a — SMT divergence), keyed by symbol then by timeframe:
+   * `compareSeriesBySymbolTf[compareSymbol][tf]`. Required (per timeframe an
+   * `smt` condition references — see `smtTfsUsed`) whenever `def.
+   * compareSymbols` is non-empty AND the definition contains an `smt`
+   * condition; omitted (or `undefined`) for every strategy without one — no
+   * compare-symbol `LevelBank`, no alignment array, zero overhead. Keyed by
+   * symbol (rather than a bare per-TF map) so a future increment can raise
+   * `MAX_COMPARE_SYMBOLS` above 1 without another shape change.
+   */
+  compareSeriesBySymbolTf?: Partial<Record<string, Partial<Record<TF, Candle[]>>>>;
 }
 
 // ----------------------------------------------------------------------------
@@ -178,7 +197,15 @@ interface OpenPositionV2 extends AutoPosition {
 
 export async function runStrategyV2(
   def: StrategyDefinitionV2,
-  candles: Candle[],
+  /**
+   * Legacy (Increment 1/2) shape: a plain execution-timeframe candle array —
+   * unchanged, byte-identical behavior for every single-timeframe strategy.
+   * Increment 3 (MTF) shape: a map of candle series keyed by timeframe
+   * label, MUST include an entry for `def.timeframes.execution` plus one
+   * entry per timeframe named in `def.timeframes.context` that at least one
+   * phase actually references (see `contextTfsUsed` below).
+   */
+  candlesInput: Candle[] | Partial<Record<TF, Candle[]>>,
   opts: RunStrategyV2Options = {},
 ): Promise<AutoBacktestResult> {
   const structuralErrors = validateStrategyStructure(def);
@@ -189,12 +216,104 @@ export async function runStrategyV2(
     );
   }
 
+  // Normalize the legacy array shape into the { [execTf]: candles } map
+  // shape — one code path below regardless of which shape the caller used.
+  const seriesByTf: Partial<Record<TF, Candle[]>> = Array.isArray(candlesInput)
+    ? { [def.timeframes.execution]: candlesInput }
+    : candlesInput;
+
+  const candles = seriesByTf[def.timeframes.execution];
+  if (!candles || candles.length === 0) {
+    throw new Error(
+      `runStrategyV2: no (non-empty) candle series supplied for the execution timeframe ` +
+        `"${def.timeframes.execution}".`,
+    );
+  }
+
   const timezone = def.filters.session?.timezone ?? 'UTC';
   const levels = new LevelBank(candles, { timezone });
   const events = new EventBank(candles, {});
-  const indicators = await maybeLoadIndicatorBank(def, candles, timezone);
+  const indicators = await maybeLoadIndicatorBank(def, candles, timezone, def.timeframes.execution);
 
-  const compiled = compileStrategy(def, candles, { levels, events, indicators });
+  // ---------------------------------------------------------------------
+  // MTF wiring (Increment 3) — built ONLY when at least one phase declares
+  // a context timeframe. Zero overhead for every single-timeframe strategy
+  // (no TimeframeSet, no extra banks, `mtf` stays `undefined` and
+  // `compileStrategy`/`captureAnchors` take their Increment 1/2 codepaths).
+  // ---------------------------------------------------------------------
+  const contextTfsUsed = Array.from(
+    new Set(
+      def.phases
+        .map((p) => p.timeframe)
+        .filter((tf): tf is TF => tf !== undefined && tf !== def.timeframes.execution),
+    ),
+  );
+
+  let mtf: MtfContext | undefined;
+  if (contextTfsUsed.length > 0) {
+    const contextSeries: Partial<Record<TF, Candle[]>> = { [def.timeframes.execution]: candles };
+    for (const tf of contextTfsUsed) {
+      const s = seriesByTf[tf];
+      if (!s || s.length === 0) {
+        throw new Error(
+          `runStrategyV2: strategy "${def.id}" has a phase declaring context timeframe "${tf}" ` +
+            'but no candle series was supplied for it.',
+        );
+      }
+      contextSeries[tf] = s;
+    }
+    const timeframeSet = new TimeframeSet(contextSeries, def.timeframes.execution);
+
+    const banksByTf = new Map<TF, ConditionBanks>();
+    for (const tf of contextTfsUsed) {
+      const tfCandles = timeframeSet.series(tf);
+      const tfLevels = new LevelBank(tfCandles, { timezone });
+      const tfEvents = new EventBank(tfCandles, {});
+      const tfIndicators = await maybeLoadIndicatorBank(def, tfCandles, timezone, tf);
+      banksByTf.set(tf, { levels: tfLevels, events: tfEvents, indicators: tfIndicators });
+    }
+    mtf = { timeframeSet, banksByTf };
+  }
+
+  // ---------------------------------------------------------------------
+  // SMT divergence wiring (Increment 4a) — built ONLY when at least one
+  // phase's condition tree contains an `smt` leaf. Zero overhead for every
+  // strategy without one (no compare-symbol LevelBank, no alignment array,
+  // `smtCtx` stays `undefined` and `compileStrategy`'s Increment 1-3
+  // codepaths are unaffected).
+  // ---------------------------------------------------------------------
+  const smtTfs = smtTfsUsed(def);
+  let smtCtx: SmtContext | undefined;
+  if (smtTfs.length > 0) {
+    const compareSymbol = def.compareSymbols?.[0];
+    if (!compareSymbol) {
+      // validateStrategyStructure (called above) already rejects an `smt`
+      // condition with an empty compareSymbols — this is a defensive
+      // safety net, never expected to actually trigger.
+      throw new Error(
+        `runStrategyV2: strategy "${def.id}" has an 'smt' condition but declares no compareSymbols.`,
+      );
+    }
+    const compareBySymbol = opts.compareSeriesBySymbolTf?.[compareSymbol];
+    const banksByTf = new Map<TF, SmtCompareBank>();
+    for (const tf of smtTfs) {
+      const tradedTfCandles = tf === def.timeframes.execution ? candles : mtf!.timeframeSet.series(tf);
+      const compareCandles = compareBySymbol?.[tf];
+      if (!compareCandles || compareCandles.length === 0) {
+        throw new Error(
+          `runStrategyV2: strategy "${def.id}" has an 'smt' condition on timeframe "${tf}" ` +
+            `referencing compareSymbol "${compareSymbol}" but no compare candle series was supplied ` +
+            `for it (opts.compareSeriesBySymbolTf["${compareSymbol}"]["${tf}"]).`,
+        );
+      }
+      const compareLevels = new LevelBank(compareCandles, { timezone });
+      const alignment = alignCompareSeries(tradedTfCandles, compareCandles);
+      banksByTf.set(tf, { candles: compareCandles, levels: compareLevels, alignment });
+    }
+    smtCtx = { banksByTf };
+  }
+
+  const compiled = compileStrategy(def, candles, { levels, events, indicators }, mtf, smtCtx);
 
   // Reused verbatim from v1: ATR (trailing 'atr' mode), confirmed-swing
   // helpers (trailing 'swing' mode + the 'counterSwing' anchor), and
@@ -285,7 +404,7 @@ export async function runStrategyV2(
     }
     if (candidateDirection === null) candidateDirection = resolved;
 
-    captureAnchors(phase, i, candidateDirection, runtimeState, mctx, candles);
+    captureAnchors(phase, i, candidateDirection, runtimeState, mctx, candles, def.timeframes.execution, mtf?.timeframeSet);
 
     if (phaseIdx === compiled.phases.length - 1) {
       const signal = buildSignalV2(compiled, candles, i, runtimeState, candidateDirection, mctx.atr);
@@ -427,8 +546,13 @@ async function maybeLoadIndicatorBank(
   def: StrategyDefinitionV2,
   candles: Candle[],
   timezone: string,
+  /** Which timeframe `candles` belongs to — Increment 3 (MTF): only phases
+   *  whose EFFECTIVE timeframe equals `tf` are scanned for indicator refs,
+   *  so each timeframe's IndicatorBank is built independently and only when
+   *  actually needed for THAT timeframe. */
+  tf: TF,
 ): Promise<IndicatorBankLike | undefined> {
-  if (!strategyNeedsIndicators(def)) return undefined;
+  if (!strategyNeedsIndicatorsForTf(def, tf)) return undefined;
   return new IndicatorBank(candles, { timezone });
 }
 
@@ -443,9 +567,35 @@ function captureAnchors(
   state: RuntimeState,
   mctx: MarketContext,
   candles: Candle[],
+  executionTf: TF,
+  /** Present only when the strategy has at least one context-TF phase
+   *  (Increment 3 — MTF); `undefined` for every single-timeframe run. */
+  timeframeSet: TimeframeSet | undefined,
 ): void {
   if (phase.capture.length === 0) return;
-  const candle = candles[i];
+
+  // Price-based anchors (triggerPrice/triggerBarHigh/triggerBarLow/
+  // wickExtreme) read the candle THIS PHASE actually fired on: the
+  // execution candle when the phase runs on the execution timeframe, or
+  // the phase's own context-TF candle (via TimeframeSet.alignedIndex)
+  // otherwise. counterSwing intentionally ALWAYS uses the EXECUTION
+  // MarketContext's confirmed-swing timeline regardless of phase.timeframe
+  // — a deliberate simplification (documented in StrategyEngine.ts's module
+  // doc): stop/target management happens at execution granularity, so the
+  // "nearest confirmed swing against the trade direction" is most useful
+  // measured on the SAME series the trade will actually be managed on.
+  let candle: Candle;
+  if (phase.timeframe === executionTf || !timeframeSet) {
+    candle = candles[i];
+  } else {
+    const j = timeframeSet.alignedIndex(phase.timeframe, i);
+    // `j` is guaranteed >= 0 here: this function only runs after
+    // `phase.when.test(i, state)` returned true, and a context-TF
+    // condition's wrapped `test` already returns false whenever `j === -1`
+    // (see ConditionCompiler.ts's `wrapContextCondition`). The fallback
+    // below is defensive only — it should never actually be reached.
+    candle = j >= 0 ? timeframeSet.series(phase.timeframe)[j] : candles[i];
+  }
   const values: Partial<Record<AnchorKind, number>> = state.anchors.get(phase.id) ?? {};
 
   for (const kind of phase.capture) {

@@ -29,6 +29,7 @@ import type {
   SessionFilter,
 } from '../types';
 import type { Timeframe } from '../../../components/ReplayChart/types';
+import { timeframeToMs } from '../MarketContext';
 
 // ----------------------------------------------------------------------------
 // Structural caps — the "bounded condition tree" contract.
@@ -45,6 +46,26 @@ export const MAX_DEPTH = 3;
 
 /** Maximum children an `and`/`or` node may have. */
 export const MAX_CHILDREN = 5;
+
+/**
+ * Maximum number of HIGHER-timeframe context series a strategy may declare
+ * in `timeframes.context` (Increment 3 — MTF phase sequencing).
+ */
+export const MAX_CONTEXT_TIMEFRAMES = 2;
+
+/**
+ * Maximum number of DISTINCT timeframes a strategy may reference in total —
+ * `execution` plus every entry in `timeframes.context`.
+ */
+export const MAX_TOTAL_TIMEFRAMES = 3;
+
+/**
+ * Maximum number of correlated compare-instruments a strategy may declare in
+ * `StrategyDefinitionV2.compareSymbols` (Increment 4a — SMT divergence).
+ * Capped at 1 this increment; every `Condition{kind:'smt'}.compareSymbol`
+ * must be one of these entries — see {@link validateStrategyStructure}.
+ */
+export const MAX_COMPARE_SYMBOLS = 1;
 
 /**
  * Timeframe label. Re-exported from the chart layer's `Timeframe` union
@@ -64,15 +85,27 @@ export interface InstrumentRefV2 {
 }
 
 /**
- * Timeframe configuration for a strategy. Only `execution` is consumed by
- * Increment 1/2 (the phase engine and the banks operate on a single candle
- * series). `context` (higher-timeframe confirmation series) is modeled now
- * so the schema doesn't need a breaking change later, but no engine code
- * reads it until Increment 3 — it is accepted and round-trips, nothing more.
+ * Timeframe configuration for a strategy. `execution` is the primary series
+ * the phase engine advances bar-by-bar and the ONLY series entry/stop/exit
+ * management ever reads (positions are always managed at execution
+ * granularity — see `StrategyEngine.ts` module doc).
+ *
+ * `context` (Increment 3 — MTF phase sequencing) lists every HIGHER
+ * timeframe a `PhaseV2.timeframe` references — e.g. `['4h']` for a strategy
+ * whose phase 1 evaluates on the 4-hour series while later phases and
+ * entry/stop/exits stay on `execution`. Constraints (enforced by
+ * {@link validateStrategyStructure}):
+ *  - at most {@link MAX_CONTEXT_TIMEFRAMES} entries;
+ *  - each entry's duration must be STRICTLY HIGHER than `execution`'s;
+ *  - every `PhaseV2.timeframe` that isn't `execution` must appear here;
+ *  - `execution` + `context` together may name at most
+ *    {@link MAX_TOTAL_TIMEFRAMES} distinct timeframes.
+ * Absent/empty `context` (the Increment 1/2 shape) means every phase runs on
+ * `execution` — unchanged, byte-identical behavior.
  */
 export interface TimeframesV2 {
   execution: TF;
-  /** Reserved for Increment 3 (multi-timeframe context). Ignored until then. */
+  /** Higher timeframes referenced by `PhaseV2.timeframe` — see above. */
   context?: TF[];
 }
 
@@ -126,6 +159,14 @@ export interface AnchorRef {
  * (Increment 1, this same commit) resolves every variant EXCEPT
  * `phaseAnchor`, which requires live phase-execution state from the
  * PhaseEngine (Increment 3) and is out of scope for a candles-only bank.
+ *
+ * MTF NOTE (Increment 3): a `phaseAnchor` captured by a phase running on a
+ * CONTEXT timeframe (`PhaseV2.timeframe` set to a non-execution TF) still
+ * resolves to a plain PRICE — anchors are TF-AGNOSTIC by construction (see
+ * `AnchorCapture`/`RuntimeState.anchors`, a bare `phaseId -> price` map with
+ * no timeframe tag). A later phase referencing that anchor via `phaseAnchor`
+ * (on execution or on another context TF) reads the SAME price value
+ * regardless of which timeframe originally captured it.
  *
  * `orMinutes` is only consulted by `openingRangeHigh`/`openingRangeLow`; it
  * is typed on the shared branch (rather than duplicated per-member) to keep
@@ -217,6 +258,35 @@ export type Condition =
        *  pattern-detector vocabulary. */
       pattern: PatternParams;
       interaction: 'priceInZone' | 'tap' | 'closeInside';
+    }
+  | {
+      kind: 'smt';
+      /**
+       * The correlated instrument to compare against (e.g. `'MES'` when the
+       * strategy trades `'MNQ'`). MUST appear in
+       * `StrategyDefinitionV2.compareSymbols` and MUST differ from
+       * `instrument.symbol` — see {@link validateStrategyStructure}.
+       */
+      compareSymbol: string;
+      /**
+       * The structural reference level BOTH symbols are tested against, on
+       * the SAME timeframe as this condition's phase. `swingHigh`/
+       * `prevDayHigh` pair with `divergence: 'bearish'` (a sweep at highs);
+       * `swingLow`/`prevDayLow` pair with `divergence: 'bullish'` (a sweep
+       * at lows) — {@link validateStrategyStructure} rejects any other
+       * pairing. Resolved via `LevelBank` (the same causal level series
+       * `Operand{src:'level'}`/`levelInteraction` use) on each symbol's own
+       * series — see `SmtBank.ts`.
+       */
+      reference: { type: 'swingHigh' | 'swingLow' | 'prevDayHigh' | 'prevDayLow' };
+      /**
+       * `'bearish'`: the TRADED symbol sweeps a HIGH (reference) while the
+       * compare symbol FAILS to sweep its own corresponding high — a
+       * classic smart-money divergence that arms SHORT candidates only.
+       * `'bullish'`: the mirror image at LOWS — arms LONG candidates only.
+       * See `SmtBank.ts` for the exact per-bar window/firing semantics.
+       */
+      divergence: 'bullish' | 'bearish';
     };
 
 export type CompareOp = 'gt' | 'lt' | 'gte' | 'lte' | 'crossesAbove' | 'crossesBelow';
@@ -243,6 +313,19 @@ export interface PhaseV2 {
   /** Unique (within the strategy) phase id, referenced by later phases'
    *  `phaseAnchor` LevelRefs/AnchorRefs and by entry/stop/exits. */
   id: string;
+  /**
+   * The timeframe this phase's `when`/`invalidateIf` evaluate on (Increment 3
+   * — MTF phase sequencing). Absent (default) means the strategy's
+   * `timeframes.execution` — byte-identical to Increment 1/2 behavior. When
+   * set to a HIGHER timeframe, it MUST appear in `timeframes.context` (see
+   * {@link validateStrategyStructure}); the compiler then evaluates this
+   * phase's condition tree against THAT timeframe's own candle series,
+   * fired-once per newly-CLOSED context bar — see `ConditionCompiler.ts`
+   * (`wrapContextCondition`) and `TimeframeSet.ts` for the exact causal
+   * closed-bar semantics. `within.bars` still counts EXECUTION bars
+   * regardless of this field (see `StrategyEngine.ts` module doc).
+   */
+  timeframe?: TF;
   /** Condition tree that must evaluate true for this phase to complete. */
   when: ConditionNode;
   /** Optional bar budget: if the phase hasn't completed within this many
@@ -348,6 +431,15 @@ export interface StrategyDefinitionV2 {
   filters: FiltersV2;
   /** Reuses v1's RiskConfig verbatim (sizing, commission, slippage, ...). */
   risk: RiskConfig;
+  /**
+   * Correlated instruments referenced by `Condition{kind:'smt'}` leaves
+   * (Increment 4a — SMT divergence). At most {@link MAX_COMPARE_SYMBOLS}
+   * entries this increment. Absent/empty for every strategy without an
+   * `smt` condition — byte-identical behavior: no compare-series fetch, no
+   * compare-symbol `LevelBank`, no `SmtContext` construction (see
+   * `StrategyEngine.ts` / `useAutoBacktestStore.ts`).
+   */
+  compareSymbols?: string[];
 }
 
 // ============================================================================
@@ -375,6 +467,13 @@ export interface StrategyDefinitionV2 {
  *     phase id — ordering is not required there.
  *  5. `crossesAbove`/`crossesBelow` compares reject an operand pair that is
  *     `const` vs `const` (two constants can never cross).
+ *  6. (Increment 4a — SMT divergence) Every `Condition{kind:'smt'}` leaf:
+ *     `compareSymbols` is non-empty and has at most {@link MAX_COMPARE_SYMBOLS}
+ *     entries; the leaf's `compareSymbol` is one of `compareSymbols`; the
+ *     leaf's `compareSymbol` differs from `instrument.symbol`; and
+ *     `divergence` is coherent with `reference.type` (`'bearish'` requires
+ *     `'swingHigh'`/`'prevDayHigh'`, `'bullish'` requires `'swingLow'`/
+ *     `'prevDayLow'`).
  */
 export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
   const errors: string[] = [];
@@ -419,6 +518,97 @@ export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
       errors.push(`phases[${idx}].within.bars must be > 0`);
     }
   });
+
+  // ---------------------------------------------------------------------
+  // Timeframe validation (Increment 3 — MTF phase sequencing).
+  // ---------------------------------------------------------------------
+  const executionTf = def.timeframes.execution;
+  const contextTfs = def.timeframes.context ?? [];
+  if (contextTfs.length > MAX_CONTEXT_TIMEFRAMES) {
+    errors.push(
+      `timeframes.context has ${contextTfs.length} entries (max ${MAX_CONTEXT_TIMEFRAMES})`,
+    );
+  }
+  const distinctTfs = new Set<TF>([executionTf, ...contextTfs]);
+  if (distinctTfs.size > MAX_TOTAL_TIMEFRAMES) {
+    errors.push(
+      `strategy references ${distinctTfs.size} distinct timeframes (execution + context, ` +
+        `max ${MAX_TOTAL_TIMEFRAMES})`,
+    );
+  }
+  const executionTfMs = timeframeToMs(executionTf);
+  for (const ctxTf of contextTfs) {
+    const ctxTfMs = timeframeToMs(ctxTf);
+    if (executionTfMs === undefined || ctxTfMs === undefined) {
+      errors.push(
+        `timeframes: cannot compare durations for execution "${executionTf}" vs context ` +
+          `"${ctxTf}" (unrecognized timeframe label)`,
+      );
+    } else if (ctxTfMs <= executionTfMs) {
+      errors.push(
+        `timeframes.context "${ctxTf}" must be a STRICTLY HIGHER timeframe than ` +
+          `execution "${executionTf}"`,
+      );
+    }
+  }
+  const contextTfSet = new Set<TF>(contextTfs);
+  def.phases.forEach((phase, idx) => {
+    if (phase.timeframe === undefined || phase.timeframe === executionTf) return;
+    if (!contextTfSet.has(phase.timeframe)) {
+      errors.push(
+        `phases[${idx}].timeframe "${phase.timeframe}" is neither the execution timeframe ` +
+          `("${executionTf}") nor declared in timeframes.context`,
+      );
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // SMT divergence validation (Increment 4a).
+  // ---------------------------------------------------------------------
+  const compareSymbols = def.compareSymbols ?? [];
+  if (compareSymbols.length > MAX_COMPARE_SYMBOLS) {
+    errors.push(
+      `compareSymbols has ${compareSymbols.length} entries (max ${MAX_COMPARE_SYMBOLS} this increment)`,
+    );
+  }
+  const compareSymbolSet = new Set(compareSymbols);
+  const smtLeaves: Array<{ path: string; cond: Extract<Condition, { kind: 'smt' }> }> = [];
+  def.phases.forEach((phase, idx) => {
+    collectConditionSmtLeaves(phase.when, `phases[${idx}].when`, smtLeaves);
+    if (phase.invalidateIf) {
+      collectConditionSmtLeaves(phase.invalidateIf, `phases[${idx}].invalidateIf`, smtLeaves);
+    }
+  });
+  for (const { path, cond } of smtLeaves) {
+    if (compareSymbols.length === 0) {
+      errors.push(`${path}: 'smt' condition requires a non-empty compareSymbols on the strategy`);
+    } else if (!compareSymbolSet.has(cond.compareSymbol)) {
+      errors.push(
+        `${path}: compareSymbol "${cond.compareSymbol}" is not declared in compareSymbols ` +
+          `(${compareSymbols.join(', ') || '<empty>'})`,
+      );
+    }
+    if (cond.compareSymbol === def.instrument.symbol) {
+      errors.push(
+        `${path}: compareSymbol "${cond.compareSymbol}" must differ from instrument.symbol ` +
+          `("${def.instrument.symbol}")`,
+      );
+    }
+    const isHighRef = cond.reference.type === 'swingHigh' || cond.reference.type === 'prevDayHigh';
+    const isLowRef = cond.reference.type === 'swingLow' || cond.reference.type === 'prevDayLow';
+    if (cond.divergence === 'bearish' && !isHighRef) {
+      errors.push(
+        `${path}: divergence 'bearish' requires reference.type 'swingHigh' or 'prevDayHigh' ` +
+          `(got "${cond.reference.type}")`,
+      );
+    }
+    if (cond.divergence === 'bullish' && !isLowRef) {
+      errors.push(
+        `${path}: divergence 'bullish' requires reference.type 'swingLow' or 'prevDayLow' ` +
+          `(got "${cond.reference.type}")`,
+      );
+    }
+  }
 
   // Strategy-level phaseAnchor references: must exist, ordering not required.
   const globalAnchorRefs: Array<{ path: string; ref: AnchorRef | undefined }> = [
@@ -548,7 +738,29 @@ function collectConditionLevelRefs(
   } else if (node.kind === 'levelInteraction') {
     out.push({ ref: node.level, subPath: `${path}.level` });
   }
-  // 'event' and 'patternActive' leaves carry no LevelRef.
+  // 'event', 'patternActive' and 'smt' leaves carry no LevelRef.
+}
+
+/** Collect every `Condition{kind:'smt'}` leaf reachable from a ConditionNode,
+ *  with its path — used by {@link validateStrategyStructure} (Increment 4a). */
+function collectConditionSmtLeaves(
+  node: ConditionNode,
+  path: string,
+  out: Array<{ path: string; cond: Extract<Condition, { kind: 'smt' }> }>,
+): void {
+  if ('op' in node) {
+    if (node.op === 'not') {
+      collectConditionSmtLeaves(node.child, `${path}.child`, out);
+    } else {
+      node.children.forEach((child, i) =>
+        collectConditionSmtLeaves(child, `${path}.children[${i}]`, out),
+      );
+    }
+    return;
+  }
+  if (node.kind === 'smt') {
+    out.push({ path, cond: node });
+  }
 }
 
 // ============================================================================

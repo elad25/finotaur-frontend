@@ -9,7 +9,7 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
 import type { WorkerOutMessage } from '@/core/auto/autoBacktest.worker';
-import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
+import type { StrategyDefinitionV2, TF } from '@/core/auto/v2/types';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -108,9 +108,25 @@ async function syncFallback(
  */
 export function runStrategyV2InWorker(
   strategy: StrategyDefinitionV2,
-  candles: Candle[],
+  /**
+   * Legacy shape: a plain execution-timeframe candle array (single-timeframe
+   * strategies). MTF shape (Increment 3): a map of candle series keyed by
+   * timeframe label — `useAutoBacktestStore.ts`'s `runStrategyV2Backtest`
+   * builds this map whenever the strategy declares `timeframes.context`.
+   * Passed straight through to the worker/`runStrategyV2` — see
+   * `autoBacktest.worker.ts`'s `RunV2Message` doc.
+   */
+  candles: Candle[] | Partial<Record<TF, Candle[]>>,
   onProgress?: (scanned: number, total: number, found: number) => void,
   onWorkerFallback?: () => void,
+  /**
+   * Compare-symbol candle series for `Condition{kind:'smt'}` conditions
+   * (Increment 4a — SMT divergence), keyed by symbol then timeframe. Set by
+   * `useAutoBacktestStore.ts`'s `runStrategyV2Backtest` whenever `strategy.
+   * compareSymbols` is non-empty AND the strategy contains an `smt`
+   * condition; passed straight through to the worker/`runStrategyV2`.
+   */
+  compareSeriesBySymbolTf?: Partial<Record<string, Partial<Record<TF, Candle[]>>>>,
 ): Promise<AutoBacktestResult> {
   let worker: Worker;
   try {
@@ -120,7 +136,7 @@ export function runStrategyV2InWorker(
     );
   } catch {
     onWorkerFallback?.();
-    return syncFallbackV2(strategy, candles, onProgress);
+    return syncFallbackV2(strategy, candles, onProgress, compareSeriesBySymbolTf);
   }
 
   return new Promise<AutoBacktestResult>((resolve, reject) => {
@@ -149,15 +165,16 @@ export function runStrategyV2InWorker(
       reject(new Error(`Worker error: ${err.message ?? 'unknown'}`));
     };
 
-    worker.postMessage({ type: 'runV2', strategy, candles });
+    worker.postMessage({ type: 'runV2', strategy, candles, compareSeriesBySymbolTf });
   });
 }
 
 async function syncFallbackV2(
   strategy: StrategyDefinitionV2,
-  candles: Candle[],
+  candles: Candle[] | Partial<Record<TF, Candle[]>>,
   onProgress?: (scanned: number, total: number, found: number) => void,
+  compareSeriesBySymbolTf?: Partial<Record<string, Partial<Record<TF, Candle[]>>>>,
 ): Promise<AutoBacktestResult> {
   const { runStrategyV2 } = await import('@/core/auto/v2/StrategyEngine');
-  return runStrategyV2(strategy, candles, { onProgress });
+  return runStrategyV2(strategy, candles, { onProgress, compareSeriesBySymbolTf });
 }

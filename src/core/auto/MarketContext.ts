@@ -376,7 +376,14 @@ const TIMEFRAME_TO_MS: Record<string, number> = {
   '1w': 7 * 24 * 60 * 60_000,
 };
 
-function timeframeToMs(tf?: string): number | undefined {
+/**
+ * Resolve a timeframe label to its duration in milliseconds via the known
+ * {@link TIMEFRAME_TO_MS} map, or `undefined` if the label isn't recognized.
+ * Exported (Increment 3 — MTF) so `v2/TimeframeSet.ts` and `v2/types.ts` use
+ * the SAME duration source as this module's own HTF-bias closed-bar rule,
+ * rather than maintaining a second, potentially-drifting timeframe map.
+ */
+export function timeframeToMs(tf?: string): number | undefined {
   if (!tf) return undefined;
   return TIMEFRAME_TO_MS[tf];
 }
@@ -386,9 +393,10 @@ function timeframeToMs(tf?: string): number | undefined {
  * open times. Used only as a fallback when the timeframe label isn't in the
  * known map above -- median is resistant to the occasional large gap
  * (weekend/holiday/missing bar) that would otherwise skew a mean or a
- * first-delta sample toward an unrepresentative duration.
+ * first-delta sample toward an unrepresentative duration. Exported
+ * (Increment 3 — MTF) for the same reason as {@link timeframeToMs}.
  */
-function medianDeltaMs(candles: Candle[]): number {
+export function medianDeltaMs(candles: Candle[]): number {
   if (candles.length < 2) return 0;
   const deltas: number[] = [];
   for (let i = 1; i < candles.length; i++) {

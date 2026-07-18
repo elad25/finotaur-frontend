@@ -5,7 +5,9 @@
 // Rendered by AutoBacktest.tsx between the NL card and the Run action.
 // ============================================================================
 
+import { toast } from 'sonner';
 import { Card } from '@/components/ds/Card';
+import { Button } from '@/components/ds/Button';
 import { useAutoBacktestStore } from '@/store/useAutoBacktestStore';
 import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
 import { describeExits, describeFilters, describePhase, describeStop } from '../lib/describeCondition';
@@ -46,17 +48,37 @@ function formatRiskChip(definition: StrategyDefinitionV2): string {
 export function StrategyV2Summary({ definition }: StrategyV2SummaryProps) {
   const from = useAutoBacktestStore((s) => s.from);
   const to = useAutoBacktestStore((s) => s.to);
+  const saveStrategyV2AsTemplate = useAutoBacktestStore((s) => s.saveStrategyV2AsTemplate);
 
   const dateRangeLabel = `${new Date(from).toLocaleDateString()} – ${new Date(to).toLocaleDateString()}`;
   const sessionLabel = definition.filters.session?.enabled
     ? definition.filters.session.windows.map((w) => `${w.start}-${w.end}`).join(', ') || 'Session filter'
     : 'Full session (24h)';
 
+  async function handleSaveAsTemplate() {
+    try {
+      await saveStrategyV2AsTemplate();
+      toast.success(`Saved template "${definition.name}"`);
+    } catch {
+      toast.error('Failed to save template');
+    }
+  }
+
   return (
     <Card padding="default">
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold text-gold-primary">Strategy review</h3>
-        <p className="mt-1 text-xs text-ink-tertiary">{definition.name}</p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gold-primary">Strategy review</h3>
+          <p className="mt-1 truncate text-xs text-ink-tertiary">{definition.name}</p>
+        </div>
+        <Button
+          variant="goldOutline"
+          size="sm"
+          onClick={handleSaveAsTemplate}
+          className="shrink-0"
+        >
+          Save as template
+        </Button>
       </div>
 
       {/* Chips row — TradeZella-style compact tags */}
