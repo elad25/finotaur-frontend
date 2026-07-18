@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ds/Button";
 import { Wordmark } from "@/components/ds/Wordmark";
+import { BetaOfferBanner } from "@/components/promo/BetaOfferBanner";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -61,6 +62,7 @@ const Navbar = () => {
         isScrolled && "bg-black/85"
       )}
     >
+      <BetaOfferBanner variant="landing" />
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}

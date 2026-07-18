@@ -15,6 +15,7 @@
 
 import { Settings, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
+import { BetaOfferBanner } from '@/components/promo/BetaOfferBanner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
@@ -110,6 +111,7 @@ export const TopNav = () => {
         backgroundColor: '#0A0A0A',
       }}
     >
+      {accountType === 'free' && <BetaOfferBanner variant="app" />}
       {/*
         3-column grid layout:
           col 1 (1fr)  — left cluster: logo + hamburger, left-aligned
