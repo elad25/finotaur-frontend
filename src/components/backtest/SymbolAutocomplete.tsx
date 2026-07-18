@@ -20,6 +20,7 @@ export function SymbolAutocomplete({
   onSelect,
   variant = 'toolbar',
   compact = false,
+  light = false,
   filterToAssetClass = false,
   filterSymbols,
 }: {
@@ -29,6 +30,12 @@ export function SymbolAutocomplete({
   variant?: 'toolbar' | 'field';
   /** Toolbar-variant only: a tighter, narrower input for cramped headers. */
   compact?: boolean;
+  /**
+   * Toolbar-variant only: light-gray pill + white dropdown for hosts whose
+   * chrome is light-themed (Trading Arena's chart Light Mode). Default false
+   * — every existing call site keeps today's dark styling.
+   */
+  light?: boolean;
   filterToAssetClass?: boolean;
   /** Optional extra predicate applied on top of `filterToAssetClass` — e.g.
    *  restricting futures suggestions to symbols with a populated data cache. */
@@ -123,18 +130,22 @@ export function SymbolAutocomplete({
         className={
           variant === 'field'
             ? 'w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium uppercase text-white placeholder:normal-case placeholder:text-gray-600 focus:border-[#C9A646] focus:outline-none'
-            : `${compact ? 'w-[68px] px-2 py-1 text-xs' : 'w-32 px-3 py-1.5 text-sm'} rounded-md border border-zinc-800 bg-zinc-900 font-medium uppercase text-zinc-200 placeholder:normal-case placeholder:text-zinc-600 focus:border-[#C9A646] focus:outline-none`
+            : `${compact ? 'w-[68px] px-2 py-1 text-xs' : 'w-32 px-3 py-1.5 text-sm'} rounded-md border font-medium uppercase placeholder:normal-case focus:border-[#C9A646] focus:outline-none ${
+                light
+                  ? 'border-[#dfe3ea] bg-[#eef1f5] text-[#131722] placeholder:text-[#8a8d98]'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-200 placeholder:text-zinc-600'
+              }`
         }
       />
       {open && (
-        <div className={`absolute left-0 top-full ${variant === 'field' ? 'z-[10001]' : 'z-30'} mt-1 max-h-72 ${variant === 'field' ? 'w-full' : 'w-64'} overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl`}>
+        <div className={`absolute left-0 top-full ${variant === 'field' ? 'z-[10001]' : 'z-30'} mt-1 max-h-72 ${variant === 'field' ? 'w-full' : 'w-64'} overflow-y-auto rounded-md border shadow-2xl ${light ? 'border-[#e0e3eb] bg-white' : 'border-zinc-800 bg-zinc-950'}`}>
           {matches.length === 0 ? (
             <button
               type="button"
               // onMouseDown (not onClick) fires before the input blur that would
               // otherwise close the dropdown and drop the click.
               onMouseDown={(e) => { e.preventDefault(); commitRaw(); }}
-              className="block w-full px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900"
+              className={`block w-full px-3 py-2 text-left text-xs ${light ? 'text-[#6a6d78] hover:bg-[rgba(0,0,0,0.04)]' : 'text-zinc-400 hover:bg-zinc-900'}`}
             >
               Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeSymbolAuto(query) || '—'}</span> as a custom symbol
             </button>
@@ -146,14 +157,14 @@ export function SymbolAutocomplete({
                 onMouseDown={(e) => { e.preventDefault(); commit(m); }}
                 onMouseEnter={() => setHighlight(i)}
                 className={`flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left transition-colors ${
-                  i === highlight ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
+                  i === highlight ? 'bg-[#C9A646]/10' : light ? 'hover:bg-[rgba(0,0,0,0.04)]' : 'hover:bg-zinc-900'
                 }`}
               >
-                <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
+                <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : light ? 'text-[#131722]' : 'text-zinc-200'}`}>
                   {m.ticker}
                 </span>
-                <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">{m.assetClass}</span>
-                <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
+                <span className={`rounded px-1 text-[9px] uppercase tracking-wider ${light ? 'bg-[#e9ecf1] text-[#6a6d78]' : 'bg-zinc-800 text-zinc-500'}`}>{m.assetClass}</span>
+                <span className={`truncate text-[11px] ${light ? 'text-[#6a6d78]' : 'text-zinc-500'}`}>{m.label}</span>
               </button>
             ))
           )}

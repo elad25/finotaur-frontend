@@ -344,6 +344,7 @@ export default function TradingArena() {
             onSelect={handleSymbolSelect}
             variant="toolbar"
             compact
+            light={light}
             filterToAssetClass={false}
           />
 
@@ -381,7 +382,7 @@ export default function TradingArena() {
         {/* Right: broker connect entry point + real-account selector (display/context only — see accountId comment above) */}
         <div className="ml-auto flex flex-shrink-0 items-center gap-2">
           <ArenaBrokerConnect />
-          <AccountSelector value={accountId} onChange={setAccountId} />
+          <AccountSelector value={accountId} onChange={setAccountId} light={light} />
         </div>
       </header>
 

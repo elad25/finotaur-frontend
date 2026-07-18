@@ -23,9 +23,15 @@ function accountTag(p: Pick<Portfolio, 'environment' | 'source'>): string {
 export function AccountSelector({
   value,
   onChange,
+  light = false,
 }: {
   value: string | null;
   onChange: (id: string) => void;
+  /**
+   * Light-gray pill + white dropdown when the Arena chrome is light-themed
+   * (chart Light Mode). Default false — dark styling identical to today.
+   */
+  light?: boolean;
 }) {
   const { portfolios, isLoading } = usePortfolios();
   const [open, setOpen] = useState(false);
@@ -64,31 +70,33 @@ export function AccountSelector({
           if (isLoading) return;
           setOpen((o) => !o);
         }}
-        className={`flex items-center gap-1.5 rounded-md border bg-zinc-900 px-3 py-1.5 text-sm font-medium transition-colors ${
-          open ? 'border-[#C9A646]' : 'border-zinc-800'
+        className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+          light ? 'bg-[#eef1f5]' : 'bg-zinc-900'
+        } ${
+          open ? 'border-[#C9A646]' : light ? 'border-[#dfe3ea]' : 'border-zinc-800'
         } ${
           isLoading
-            ? 'cursor-default text-zinc-600'
+            ? light ? 'cursor-default text-[#8a8d98]' : 'cursor-default text-zinc-600'
             : hasAccounts
-              ? 'text-zinc-200 hover:border-zinc-700'
-              : 'text-zinc-600 hover:border-zinc-700'
+              ? light ? 'text-[#131722] hover:border-[#c9cdd6]' : 'text-zinc-200 hover:border-zinc-700'
+              : light ? 'text-[#8a8d98] hover:border-[#c9cdd6]' : 'text-zinc-600 hover:border-zinc-700'
         }`}
       >
         <span className="max-w-[140px] truncate">{triggerLabel}</span>
         {selected && !isLoading && (
-          <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">
+          <span className={`rounded px-1 text-[9px] uppercase tracking-wider ${light ? 'bg-[#e9ecf1] text-[#6a6d78]' : 'bg-zinc-800 text-zinc-500'}`}>
             {accountTag(selected)}
           </span>
         )}
         <ChevronDown
-          className={`h-3 w-3 flex-shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-3 w-3 flex-shrink-0 transition-transform ${light ? 'text-[#8a8d98]' : 'text-zinc-500'} ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+        <div className={`absolute right-0 top-full z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border shadow-2xl ${light ? 'border-[#e0e3eb] bg-white' : 'border-zinc-800 bg-zinc-950'}`}>
           {!hasAccounts ? (
-            <p className="px-3 py-2 text-[11px] text-zinc-500">
+            <p className={`px-3 py-2 text-[11px] ${light ? 'text-[#6a6d78]' : 'text-zinc-500'}`}>
               Connect an account in the Journal.
             </p>
           ) : (
@@ -98,11 +106,15 @@ export function AccountSelector({
                 type="button"
                 onClick={() => { onChange(p.id); setOpen(false); }}
                 className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left transition-colors ${
-                  p.id === selected?.id ? 'bg-[#C9A646]/10 text-[#C9A646]' : 'text-zinc-200 hover:bg-zinc-900'
+                  p.id === selected?.id
+                    ? 'bg-[#C9A646]/10 text-[#C9A646]'
+                    : light
+                      ? 'text-[#131722] hover:bg-[rgba(0,0,0,0.04)]'
+                      : 'text-zinc-200 hover:bg-zinc-900'
                 }`}
               >
                 <span className="truncate text-sm font-medium">{p.name}</span>
-                <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">
+                <span className={`rounded px-1 text-[9px] uppercase tracking-wider ${light ? 'bg-[#e9ecf1] text-[#6a6d78]' : 'bg-zinc-800 text-zinc-500'}`}>
                   {accountTag(p)}
                 </span>
               </button>
