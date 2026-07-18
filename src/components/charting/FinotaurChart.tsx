@@ -584,11 +584,13 @@ export interface MarkerIcon {
 }
 
 /**
- * Seconds per `Interval` — used ONLY to gauge whether a chart's rolling `to`
+ * Seconds per `Interval` — used to gauge whether a chart's rolling `to`
  * window sits at the live edge (within ~2 bar-durations of "now") before
- * offering a `dataSource.subscribeBars()` live hookup. Not used for any bar
- * math elsewhere in this component — each data source keeps its own
- * authoritative interval-seconds mapping (see BinanceSource / AggregatingSource).
+ * offering a `dataSource.subscribeBars()` live hookup, and (see the left-pan
+ * backfill effect below) to size each backfill chunk's requested span. Each
+ * data source keeps its own authoritative interval-seconds mapping (see
+ * BinanceSource / AggregatingSource) — this map is only an approximation for
+ * gauging/sizing, never load-bearing for correctness of the actual fetch.
  */
 const LIVE_EDGE_INTERVAL_SECONDS: Record<Interval, number> = {
   '1s': 1,
@@ -870,6 +872,23 @@ export interface FinotaurChartProps {
    * either way.
    */
   chartStyle?: ChartStyleSettings;
+  /**
+   * Enables left-pan backfill: as the user pans/zooms toward the left edge
+   * of the loaded bars, fetches one further-back chunk from `dataSource`
+   * and prepends it, preserving the user's visible logical range.
+   *
+   * 🔴 Default `false` — a COMPLETE no-op for every existing caller
+   * (Backtest/Journal/Scanner/FuturesChartTab). Currently opted into ONLY by
+   * Trading Arena's ChartTab for crypto symbols (paired with
+   * BinanceSource's chunked getBars() and ChartTab's interval-aware initial
+   * window — see that file's header comment). Non-crypto callers keep their
+   * existing fixed-window, no-backfill behavior.
+   *
+   * Stops permanently for the session once a backfill chunk returns 0 bars
+   * (no more history) — silent, no UI indicator. Only one backfill request
+   * is ever in flight at a time.
+   */
+  enableBackfill?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -913,6 +932,7 @@ export function FinotaurChart({
   volumeBubbles,
   depthProfile,
   chartStyle,
+  enableBackfill = false,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -942,6 +962,16 @@ export function FinotaurChart({
   const [footprintDetailStage, setFootprintDetailStage] = useState<FootprintDetailLevel>('hidden');
   /** Latest bars fetched, kept so the indicators effect can recompute on toggle. */
   const barsRef = useRef<Bar[]>([]);
+  /**
+   * Left-pan backfill state (see `enableBackfill` prop). `noMore` is set
+   * permanently (per symbol/interval/dataSource) once a backfill chunk
+   * returns 0 bars — no further requests are attempted until the dataset
+   * changes. `inFlight` guards a single concurrent backfill request;
+   * `debounceTimer` coalesces rapid pan/zoom events into one request.
+   */
+  const backfillNoMoreRef = useRef(false);
+  const backfillInFlightRef = useRef(false);
+  const backfillDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Active series per indicator type — survives bar refetch.
    * Multi-series indicators (MACD = line+signal+histogram, BBANDS = middle+upper+lower)
@@ -1624,6 +1654,116 @@ export function FinotaurChart({
     // refreshToken: deliberate extra dep (undefined for every caller except
     // FuturesChartTab) — see the prop doc comment on FinotaurChartProps.
   }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, refreshToken]);
+
+  // ─── Left-pan backfill (older history) — see `enableBackfill` prop ────
+  // As the user pans/zooms toward the left edge of the loaded bars, fetches
+  // one further-back chunk and prepends it to barsRef.current, preserving
+  // the user's current visible logical range (setData resets bar indices to
+  // 0..N-1, so the captured range is shifted by however many bars were
+  // prepended before being restored).
+  //
+  // Subscribes once per symbol/interval/dataSource (gated on `barCount > 0`
+  // rather than the raw count so it doesn't resubscribe on every subsequent
+  // backfill/live-tick bar-count change — same idiom as the sizing effect
+  // above). Resets backfill state (noMore / inFlight / debounce) on that
+  // same transition, so a fresh dataset always gets a clean slate.
+  useEffect(() => {
+    if (!enableBackfill) return;
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    backfillNoMoreRef.current = false;
+    backfillInFlightRef.current = false;
+    if (backfillDebounceRef.current) {
+      clearTimeout(backfillDebounceRef.current);
+      backfillDebounceRef.current = null;
+    }
+
+    const BACKFILL_TRIGGER_BARS = 20; // fetch once the left edge is within this many bars
+    const BACKFILL_CHUNK_BARS = 500;
+    const BACKFILL_DEBOUNCE_MS = 150;
+    const intervalSec = LIVE_EDGE_INTERVAL_SECONDS[interval] ?? 60;
+
+    const runBackfill = () => {
+      if (backfillInFlightRef.current || backfillNoMoreRef.current) return;
+      const bars = barsRef.current;
+      const oldest = bars[0];
+      if (!oldest) return;
+      backfillInFlightRef.current = true;
+
+      const chunkTo = (Number(oldest.time) - 1) as unknown as UTCTimestamp;
+      const chunkFrom = (Number(oldest.time) - intervalSec * BACKFILL_CHUNK_BARS) as unknown as UTCTimestamp;
+
+      dataSource
+        .getBars(symbol, interval, chunkFrom, chunkTo)
+        .then((olderBars: Bar[]) => {
+          backfillInFlightRef.current = false;
+          if (olderBars.length === 0) {
+            // Truly no data returned for the requested range — no more history.
+            backfillNoMoreRef.current = true;
+            return;
+          }
+          const currentSeries = seriesRef.current;
+          if (!currentSeries) return;
+
+          // Dedupe boundary overlap: drop any older-chunk bar whose time is
+          // not strictly before the current oldest loaded bar (a clamped
+          // AggregatingSource chunk, or an inclusive endpoint from the base
+          // source, can otherwise repeat the boundary bar). A chunk that
+          // dedupes down to nothing is NOT the same as "no more history" —
+          // only the empty-response case above sets backfillNoMoreRef.
+          const existingOldestTime = Number(barsRef.current[0]?.time ?? Infinity);
+          const filtered = olderBars.filter((b) => Number(b.time) < existingOldestTime);
+          if (filtered.length === 0) return;
+
+          // Capture the visible logical range BEFORE mutating series data —
+          // setData re-indexes bars to 0..N-1, so the same logical range
+          // would point at different bars unless shifted by the prepend count.
+          const beforeRange = chart.timeScale().getVisibleLogicalRange();
+
+          const merged = [...filtered, ...barsRef.current];
+          barsRef.current = merged;
+          currentSeries.setData(merged);
+          setBarCount(merged.length);
+
+          if (beforeRange) {
+            const shift = filtered.length;
+            chart.timeScale().setVisibleLogicalRange({
+              from: beforeRange.from + shift,
+              to: beforeRange.to + shift,
+            });
+          }
+        })
+        .catch(() => {
+          // Silent/best-effort — a network hiccup just means older bars
+          // aren't visible yet; the next left-pan retries the same request.
+          backfillInFlightRef.current = false;
+        });
+    };
+
+    const handleRangeChange = (range: { from: number; to: number } | null) => {
+      if (!range) return;
+      if (range.from > BACKFILL_TRIGGER_BARS) return; // not near the left edge yet
+      if (backfillDebounceRef.current) clearTimeout(backfillDebounceRef.current);
+      backfillDebounceRef.current = setTimeout(runBackfill, BACKFILL_DEBOUNCE_MS);
+    };
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleRangeChange);
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
+      if (backfillDebounceRef.current) {
+        clearTimeout(backfillDebounceRef.current);
+        backfillDebounceRef.current = null;
+      }
+    };
+    // barCount > 0: subscribe once data first loads for this symbol/interval/
+    // dataSource, not on every subsequent bar-count change (backfill prepends
+    // and live-tick appends both bump barCount) — mirrors the sizing effect's
+    // `!!footprint`-style boolean-gate idiom above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableBackfill, symbol, interval, dataSource, barCount > 0]);
 
   // ─── Apply markers ──────────────────────────────────────────
   useEffect(() => {

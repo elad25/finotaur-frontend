@@ -19,9 +19,14 @@
  *     ...                 // unused
  *   ]
  *
- * Binance returns max 1000 bars per request. Our pickInterval() in
- * dataSources/index.ts keeps every typical trade window comfortably under that
- * cap, so we don't paginate in Phase 0.
+ * Binance returns max 1000 bars per request (MAX_BARS). For ranges that need
+ * more history than that (e.g. Trading Arena's crypto backfill — see
+ * FinotaurChart's left-pan backfill + ChartTab's interval-aware initial
+ * window), getBars() issues sequential chunked requests, advancing
+ * `startTime` past the last bar received each time, up to a hard total cap
+ * (MAX_TOTAL_BARS) to protect perf. A chunk shorter than MAX_BARS means
+ * Binance has no more data in range — chunking stops early rather than
+ * requesting empty pages.
  */
 
 import type { UTCTimestamp } from 'lightweight-charts';
@@ -32,6 +37,14 @@ import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3/klines';
 const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
 const MAX_BARS = 1000;
+/**
+ * Hard cap on total bars returned by a single getBars() call, across every
+ * chunk. Protects perf (chart render + indicator recompute cost) for very
+ * wide backfill/history requests — callers wanting more history make
+ * additional getBars() calls (e.g. FinotaurChart's left-pan backfill fetches
+ * one further-back chunk at a time).
+ */
+const MAX_TOTAL_BARS = 3000;
 
 /** Reconnect backoff: 1s doubling to a 15s cap, reset to 0 on a successful open. */
 const RECONNECT_BASE_MS = 1_000;
@@ -105,46 +118,65 @@ export class BinanceSource implements ChartDataSource {
       if (cached) return cached;
     }
 
-    const url = new URL(BINANCE_BASE_URL);
-    url.searchParams.set('symbol', symbol.toUpperCase());
-    url.searchParams.set('interval', binanceInterval);
-    url.searchParams.set('startTime', String(Number(from) * 1000));
-    url.searchParams.set('endTime', String(Number(to) * 1000));
-    url.searchParams.set('limit', String(MAX_BARS));
-
-    const resp = await fetchWithTimeout(url.toString(), undefined, 15000);
-    if (!resp.ok) {
-      throw new Error(`BinanceSource: HTTP ${resp.status} ${resp.statusText} for ${symbol}`);
-    }
-
-    const raw = (await resp.json()) as unknown;
-    if (!Array.isArray(raw)) {
-      throw new Error('BinanceSource: malformed payload (not an array)');
-    }
-
+    // ─── Chunked sequential fetch ─────────────────────────────
+    // A single request maxes out at MAX_BARS; wider ranges (e.g. crypto
+    // backfill) walk forward chunk-by-chunk, advancing startTime past the
+    // last bar received. Stops early when a chunk returns fewer than
+    // MAX_BARS bars (Binance has no more data in range) or the total cap is
+    // hit.
     const seen = new Set<number>();
     const bars: Bar[] = [];
-    for (const k of raw) {
-      if (!Array.isArray(k) || k.length < 6) continue;
-      // Binance gives ms — lightweight-charts wants seconds.
-      const timeSec = Math.floor(Number(k[0]) / 1000);
-      if (!Number.isFinite(timeSec) || seen.has(timeSec)) continue;
-      seen.add(timeSec);
-      const open = Number(k[1]);
-      const high = Number(k[2]);
-      const low = Number(k[3]);
-      const close = Number(k[4]);
-      const volume = Number(k[5]);
-      if (![open, high, low, close].every(Number.isFinite)) continue;
-      bars.push({
-        time: timeSec as UTCTimestamp,
-        open,
-        high,
-        low,
-        close,
-        volume: Number.isFinite(volume) ? volume : undefined,
-      });
+    let chunkStartMs = Number(from) * 1000;
+    const endMs = Number(to) * 1000;
+
+    while (chunkStartMs < endMs && bars.length < MAX_TOTAL_BARS) {
+      const url = new URL(BINANCE_BASE_URL);
+      url.searchParams.set('symbol', symbol.toUpperCase());
+      url.searchParams.set('interval', binanceInterval);
+      url.searchParams.set('startTime', String(chunkStartMs));
+      url.searchParams.set('endTime', String(endMs));
+      url.searchParams.set('limit', String(MAX_BARS));
+
+      const resp = await fetchWithTimeout(url.toString(), undefined, 15000);
+      if (!resp.ok) {
+        throw new Error(`BinanceSource: HTTP ${resp.status} ${resp.statusText} for ${symbol}`);
+      }
+
+      const raw = (await resp.json()) as unknown;
+      if (!Array.isArray(raw)) {
+        throw new Error('BinanceSource: malformed payload (not an array)');
+      }
+      if (raw.length === 0) break; // no more data in range
+
+      let lastTimeSec = -Infinity;
+      for (const k of raw) {
+        if (!Array.isArray(k) || k.length < 6) continue;
+        // Binance gives ms — lightweight-charts wants seconds.
+        const timeSec = Math.floor(Number(k[0]) / 1000);
+        if (!Number.isFinite(timeSec)) continue;
+        if (timeSec > lastTimeSec) lastTimeSec = timeSec;
+        if (seen.has(timeSec)) continue; // dedupe chunk-boundary overlap
+        seen.add(timeSec);
+        const open = Number(k[1]);
+        const high = Number(k[2]);
+        const low = Number(k[3]);
+        const close = Number(k[4]);
+        const volume = Number(k[5]);
+        if (![open, high, low, close].every(Number.isFinite)) continue;
+        bars.push({
+          time: timeSec as UTCTimestamp,
+          open,
+          high,
+          low,
+          close,
+          volume: Number.isFinite(volume) ? volume : undefined,
+        });
+      }
+
+      if (raw.length < MAX_BARS || !Number.isFinite(lastTimeSec)) break; // last page
+      chunkStartMs = (lastTimeSec + 1) * 1000; // advance past the last bar received
     }
+
     bars.sort((a, b) => (a.time as number) - (b.time as number));
 
     if (bars.length > 0) setCached(cacheKey, bars);
