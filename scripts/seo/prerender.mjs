@@ -51,6 +51,11 @@ const MARKETING_ROUTES = [
   "/best-trading-journal-for-prop-firm",
   "/ai-trading-journal",
   "/journal-copier",
+  "/best-trading-journal",
+  "/tradezella-alternative",
+  "/finotaur-vs-tradezella",
+  "/finotaur-vs-tradersync",
+  "/finotaur-vs-tradesviz",
 ];
 
 const BASE_OUT = path.resolve(REPO_ROOT, OUT_DIR);

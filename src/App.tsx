@@ -136,6 +136,12 @@ const BestTradingJournalTradovate = lazy(() => import("@/pages/BestTradingJourna
 const BestTradingJournalFutures = lazy(() => import("@/pages/BestTradingJournalFutures"));
 const BestTradingJournalPropFirm = lazy(() => import("@/pages/BestTradingJournalPropFirm"));
 const AITradingJournal = lazy(() => import("@/pages/AITradingJournal"));
+// GEO / comparison pages (Wave 3)
+const BestTradingJournal = lazy(() => import("@/pages/compare/BestTradingJournal"));
+const TradeZellaAlternative = lazy(() => import("@/pages/compare/TradeZellaAlternative"));
+const FinotaurVsTradeZella = lazy(() => import("@/pages/compare/FinotaurVsTradeZella"));
+const FinotaurVsTraderSync = lazy(() => import("@/pages/compare/FinotaurVsTraderSync"));
+const FinotaurVsTradesViz = lazy(() => import("@/pages/compare/FinotaurVsTradesViz"));
 const ReviewsPage = lazy(() => import("@/pages/ReviewsPage"));
 const FAQPage = lazy(() => import("@/pages/learn/FAQPage"));
 const LearnIndexPage = lazy(() => import("@/pages/learn/LearnIndexPage"));
@@ -520,6 +526,12 @@ function AppContent() {
         <Route path="/best-trading-journal-for-futures" element={<SuspenseRoute><BestTradingJournalFutures /></SuspenseRoute>} />
         <Route path="/best-trading-journal-for-prop-firm" element={<SuspenseRoute><BestTradingJournalPropFirm /></SuspenseRoute>} />
         <Route path="/ai-trading-journal" element={<SuspenseRoute><AITradingJournal /></SuspenseRoute>} />
+        {/* GEO / comparison pages (Wave 3) */}
+        <Route path="/best-trading-journal" element={<SuspenseRoute><BestTradingJournal /></SuspenseRoute>} />
+        <Route path="/tradezella-alternative" element={<SuspenseRoute><TradeZellaAlternative /></SuspenseRoute>} />
+        <Route path="/finotaur-vs-tradezella" element={<SuspenseRoute><FinotaurVsTradeZella /></SuspenseRoute>} />
+        <Route path="/finotaur-vs-tradersync" element={<SuspenseRoute><FinotaurVsTraderSync /></SuspenseRoute>} />
+        <Route path="/finotaur-vs-tradesviz" element={<SuspenseRoute><FinotaurVsTradesViz /></SuspenseRoute>} />
         <Route path="/reviews" element={<SuspenseRoute><ReviewsPage /></SuspenseRoute>} />
         <Route path="/faq" element={<SuspenseRoute><FAQPage /></SuspenseRoute>} />
         <Route path="/learn" element={<SuspenseRoute><LearnIndexPage /></SuspenseRoute>} />
