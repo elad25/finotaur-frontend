@@ -17,13 +17,15 @@ import { SectorExposureCard } from './components/SectorExposureCard';
 // Row 3
 import { TopOpportunitiesCompactCard } from './components/TopOpportunitiesCompactCard';
 import { RiskAlertsCard } from './components/RiskAlertsCard';
-import { AIRecommendationsCard } from './components/AIRecommendationsCard';
+import { RecentTransactionsCard } from './components/RecentTransactionsCard';
 
 // Globe hero (Row 1 middle)
 import { GlobeHero } from './components/GlobeHero';
 
 // AI Advices slide-out drawer
 import { AiAdvicesDrawer } from './components/AiAdvicesDrawer';
+// AI Recommendations slide-out drawer (replaces the Row 3 AIRecommendationsCard slot)
+import { AIRecommendationsDrawer } from './components/AIRecommendationsDrawer';
 
 // ─── AiBrainPanel (Row 1 middle — unchanged from original) ───────────────────
 
@@ -71,6 +73,7 @@ export function FinotaurCopilotDashboard() {
           />
         </div>
         <AiAdvicesDrawer snapshot={snapshot} />
+        <AIRecommendationsDrawer />
       </ErrorBoundary>
     );
   }
@@ -86,6 +89,7 @@ export function FinotaurCopilotDashboard() {
           />
         </div>
         <AiAdvicesDrawer snapshot={snapshot} />
+        <AIRecommendationsDrawer />
       </ErrorBoundary>
     );
   }
@@ -126,7 +130,7 @@ export function FinotaurCopilotDashboard() {
           </ErrorBoundary>
         </div>
 
-        {/* ROW 3 — Top Opportunities | Risk Alerts | AI Recommendations (3 equal cols) */}
+        {/* ROW 3 — Top Opportunities | Risk Alerts | Recent Transactions (3 equal cols) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <ErrorBoundary boundary="copilot-opportunities">
             <TopOpportunitiesCompactCard />
@@ -136,8 +140,8 @@ export function FinotaurCopilotDashboard() {
             <RiskAlertsCard snapshot={snapshot} />
           </ErrorBoundary>
 
-          <ErrorBoundary boundary="copilot-recommendations">
-            <AIRecommendationsCard />
+          <ErrorBoundary boundary="copilot-transactions">
+            <RecentTransactionsCard />
           </ErrorBoundary>
         </div>
 
@@ -145,6 +149,8 @@ export function FinotaurCopilotDashboard() {
 
       {/* AI Advices slide-out drawer — fixed overlay, always mounted */}
       <AiAdvicesDrawer snapshot={snapshot} />
+      {/* AI Recommendations slide-out drawer — fixed overlay, always mounted */}
+      <AIRecommendationsDrawer />
     </ErrorBoundary>
   );
 }

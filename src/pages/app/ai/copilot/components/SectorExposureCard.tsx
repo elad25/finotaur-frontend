@@ -13,7 +13,7 @@ import { PremiumFrame } from '../brief/PremiumFrame';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
 // ─── Palette — monochrome gold ramp (design system forbids green) ────────────
-// Ranked by slice dominance: chartData is sorted largest-first, so index 0
+// Ranked by slice dominance: donutData is sorted largest-first, so index 0
 // (the largest slice) gets the brightest gold and each subsequent rank steps
 // down through darker gold/neutral tones.
 
@@ -22,11 +22,19 @@ const GOLD_RAMP: string[] = ['#E8C766', '#C9A646', '#A88838', '#7A6528', '#4d422
 const colourForIndex = (index: number): string =>
   GOLD_RAMP[index] ?? GOLD_RAMP[GOLD_RAMP.length - 1];
 
+// Dim neutral dot colour for legend rows sitting at 0% allocation.
+const ZERO_DOT_COLOUR = 'rgba(255, 255, 255, 0.1)';
+
+// ─── Core asset classes — always shown in the legend, in this fixed order ────
+// Even when a class has no holdings (0%), it still renders as a muted row.
+
+const CORE_ASSET_CLASSES = ['Stocks', 'ETFs', 'Options', 'Bonds', 'Futures', 'Cash'] as const;
+
 // ─── Map assetClass codes to display labels (same as AssetClassAllocationCard) ─
 
 function bucketAssetClass(cls: string | undefined): string {
   const c = (cls ?? '').toUpperCase();
-  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'Equities';
+  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'Stocks';
   if (c === 'ETF')                                      return 'ETFs';
   if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS')   return 'Options';
   if (c === 'FUT' || c === 'FUTURES')                   return 'Futures';
@@ -76,11 +84,28 @@ export function SectorExposureCard({ snapshot, className }: Props) {
     groups.set(label, (groups.get(label) ?? 0) + Math.max(h.marketValue, 0));
   }
 
-  const chartData = Array.from(groups.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }));
+  // Donut slices — non-zero classes only (never render a 0-value Cell),
+  // ranked largest-first so slice colour = rank in the gold ramp.
+  const donutData = Array.from(groups.entries())
+    .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }))
+    .filter((entry) => entry.value > 0)
+    .sort((a, b) => b.value - a.value);
 
-  const isEmpty = chartData.length === 0;
+  // Slice colour lookup, keyed by label, matching each Cell's rank index.
+  const colourByName = new Map(donutData.map((entry, i) => [entry.name, colourForIndex(i)]));
+
+  // Legend — fixed core classes (always shown, even at 0%), then any
+  // non-core class (Crypto, Commodities, Other, …) appended only when > 0%.
+  const legendCore = CORE_ASSET_CLASSES.map((name) => {
+    const value = groups.get(name) ?? 0;
+    return { name, value, pct: (value / total) * 100 };
+  });
+  const legendNonCore = donutData.filter(
+    (entry) => !(CORE_ASSET_CLASSES as readonly string[]).includes(entry.name)
+  );
+  const legendData = [...legendCore, ...legendNonCore];
+
+  const isEmpty = groups.size === 0;
 
   return (
     <PremiumFrame className={`flex flex-col h-full min-h-[280px] ${className ?? ''}`}>
@@ -107,7 +132,7 @@ export function SectorExposureCard({ snapshot, className }: Props) {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={chartData}
+                    data={donutData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
@@ -122,7 +147,7 @@ export function SectorExposureCard({ snapshot, className }: Props) {
                     labelLine={false}
                     isAnimationActive={false}
                   >
-                    {chartData.map((entry, i) => (
+                    {donutData.map((entry, i) => (
                       <Cell key={entry.name} fill={colourForIndex(i)} />
                     ))}
                   </Pie>
@@ -154,20 +179,30 @@ export function SectorExposureCard({ snapshot, className }: Props) {
 
             {/* Legend — centered wrap row below donut */}
             <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2">
-              {chartData.slice(0, 6).map((item, i) => (
-                <li key={item.name} className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block rounded-[2px] flex-none"
-                    style={{ width: 8, height: 8, background: colourForIndex(i) }}
-                  />
-                  <span className="text-[11px] text-ink-secondary">
-                    {item.name}
-                  </span>
-                  <span className="font-mono text-[11px] font-semibold text-ink-primary tabular-nums">
-                    {item.pct.toFixed(0)}%
-                  </span>
-                </li>
-              ))}
+              {legendData.map((item) => {
+                const isZero = item.value <= 0;
+                const dotColour = isZero ? ZERO_DOT_COLOUR : colourByName.get(item.name);
+                return (
+                  <li key={item.name} className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block rounded-[2px] flex-none"
+                      style={{ width: 8, height: 8, background: dotColour }}
+                    />
+                    <span className="text-[11px] text-ink-secondary">
+                      {item.name}
+                    </span>
+                    <span
+                      className={`font-mono text-[11px] tabular-nums ${
+                        isZero
+                          ? 'text-ink-secondary'
+                          : 'font-semibold text-ink-primary'
+                      }`}
+                    >
+                      {isZero ? '0%' : `${item.pct.toFixed(0)}%`}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
