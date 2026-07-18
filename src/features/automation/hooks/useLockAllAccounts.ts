@@ -126,12 +126,21 @@ async function setKillSwitchForAllPortfolios(
   }
 }
 
+/** Only real `portfolios` rows have UUID ids. Synthetic entries built by
+ * usePortfolios (`broker_*` journal accounts, `trado_*` fallbacks,
+ * `manual-default`) have no DB row and no agent kill-switch to sync —
+ * updating them fails with `invalid input syntax for type uuid`. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useLockAllAccounts() {
   const { id: userId } = useEffectiveUser();
   const { portfolios } = usePortfolios();
   const qc = useQueryClient();
 
-  const tradeablePortfolios = portfolios.filter((p) => p.is_active);
+  const tradeablePortfolios = portfolios.filter(
+    (p) => p.is_active && UUID_RE.test(p.id),
+  );
 
   const mutation = useMutation({
     mutationFn: async (killSwitchActive: boolean) => {
