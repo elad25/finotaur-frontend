@@ -115,7 +115,17 @@ export class AggregatingSource implements ChartDataSource {
     private readonly base: ChartDataSource,
     private readonly targetSeconds: number,
     private readonly baseInterval: Interval,
-  ) {}
+  ) {
+    // Only expose subscribeBars when the wrapped base implements it — assigned
+    // as an instance property (not a prototype method) so callers that check
+    // `dataSource.subscribeBars` for truthiness correctly see `undefined` when
+    // the base has no live feed (Yahoo, Databento), zero behavior change there.
+    if (this.base.subscribeBars) {
+      this.subscribeBars = this.subscribeToBase.bind(this);
+    }
+  }
+
+  subscribeBars?: ChartDataSource['subscribeBars'];
 
   async getBars(
     symbol: string,
@@ -130,5 +140,74 @@ export class AggregatingSource implements ChartDataSource {
 
     const baseBars = await this.base.getBars(symbol, this.baseInterval, clampedFrom, to);
     return aggregateBars(baseBars, this.targetSeconds);
+  }
+
+  /**
+   * Live decorator counterpart to `getBars`'s aggregation: subscribes to the
+   * base source's NATIVE interval and re-buckets each incoming base bar into
+   * the current target-interval bucket, matching `aggregateBars`' binning
+   * math exactly (`bucketStart = floor(barTime / targetSeconds) * targetSeconds`).
+   *
+   * Base bars UPDATE IN PLACE while a native candle is forming (same `time`,
+   * growing high/low/volume) — so volume is tracked per base-bar-time in a
+   * Map and summed on every emit, rather than naively accumulated, to avoid
+   * double-counting repeated updates to the same base bar.
+   *
+   * Emits the updated aggregate bar on every base update (not just on bucket
+   * rollover) so the forming target-interval candle stays live too.
+   */
+  private subscribeToBase(
+    symbol: string,
+    _interval: Interval,
+    onBar: (bar: Bar) => void,
+  ): () => void {
+    const baseSubscribe = this.base.subscribeBars;
+    if (!baseSubscribe) return () => {};
+
+    let bucketStart: number | null = null;
+    let open = 0;
+    let high = -Infinity;
+    let low = Infinity;
+    let close = 0;
+    let volumeByBaseTime = new Map<number, number | undefined>();
+
+    return baseSubscribe.call(this.base, symbol, this.baseInterval, (bar: Bar) => {
+      const t = Number(bar.time);
+      if (!Number.isFinite(t)) return;
+      const bStart = Math.floor(t / this.targetSeconds) * this.targetSeconds;
+
+      if (bucketStart === null || bStart !== bucketStart) {
+        // New bucket — reset accumulators (bucket rollover).
+        bucketStart = bStart;
+        open = bar.open;
+        high = bar.high;
+        low = bar.low;
+        close = bar.close;
+        volumeByBaseTime = new Map([[t, bar.volume]]);
+      } else {
+        high = Math.max(high, bar.high);
+        low = Math.min(low, bar.low);
+        close = bar.close;
+        volumeByBaseTime.set(t, bar.volume);
+      }
+
+      let volume = 0;
+      let hasVolume = false;
+      for (const v of volumeByBaseTime.values()) {
+        if (v !== undefined) {
+          volume += v;
+          hasVolume = true;
+        }
+      }
+
+      onBar({
+        time: bucketStart as UTCTimestamp,
+        open,
+        high,
+        low,
+        close,
+        volume: hasVolume ? volume : undefined,
+      });
+    });
   }
 }

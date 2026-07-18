@@ -30,7 +30,38 @@ import { getCached, makeCacheKey, setCached } from './cache';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3/klines';
+const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
 const MAX_BARS = 1000;
+
+/** Reconnect backoff: 1s doubling to a 15s cap, reset to 0 on a successful open. */
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 15_000;
+
+/**
+ * A request whose `to` is within this many seconds of "now" is a live-edge
+ * (rolling) window — the client cache's 5-min TTL is too stale for it (a
+ * remount would otherwise render up-to-5-min-old candles as the chart's
+ * starting state, then wait for the live WS subscription to catch up).
+ * Historical windows (trade-detail dialogs) are unaffected — they still read
+ * the cache normally.
+ */
+const LIVE_EDGE_CACHE_BYPASS_SEC = 120;
+
+/**
+ * Shape of a Binance single-stream kline WS event
+ * (`wss://stream.binance.com:9443/ws/<symbol>@kline_<interval>`).
+ * Only the fields we read are declared.
+ */
+interface BinanceKlineWsEvent {
+  k?: {
+    t: number; // kline open time, ms
+    o: string;
+    h: string;
+    l: string;
+    c: string;
+    v: string;
+  };
+}
 
 /** Map our internal interval names to Binance's accepted values. */
 const INTERVAL_MAP: Record<Interval, string | null> = {
@@ -63,9 +94,16 @@ export class BinanceSource implements ChartDataSource {
     // ─── Client-side LRU cache check ─────────────────────────
     // Binance is free + fast but every fetch still costs a network round-trip
     // and contributes to the per-IP rate limit. Cache avoids both.
+    // Live-edge requests (rolling "now" windows, e.g. the Trading Arena Chart
+    // tab) bypass the CACHE READ so a fresh mount never shows up-to-5-min-old
+    // candles as the starting state — still written to cache below so a
+    // historical re-read of the same key elsewhere can still hit it.
     const cacheKey = makeCacheKey('binance', symbol, interval, Number(from), Number(to));
-    const cached = getCached<Bar[]>(cacheKey);
-    if (cached) return cached;
+    const isLiveEdge = Number(to) >= Math.floor(Date.now() / 1000) - LIVE_EDGE_CACHE_BYPASS_SEC;
+    if (!isLiveEdge) {
+      const cached = getCached<Bar[]>(cacheKey);
+      if (cached) return cached;
+    }
 
     const url = new URL(BINANCE_BASE_URL);
     url.searchParams.set('symbol', symbol.toUpperCase());
@@ -111,5 +149,107 @@ export class BinanceSource implements ChartDataSource {
 
     if (bars.length > 0) setCached(cacheKey, bars);
     return bars;
+  }
+
+  /**
+   * Live last-bar subscription via Binance's kline WebSocket stream. Emits on
+   * every tick (not only `k.x`-closed candles) so the caller sees the
+   * currently-forming candle update in near-real-time.
+   *
+   * Auto-reconnects with exponential backoff (1s doubling to 15s), resetting
+   * the backoff on a successful open. Fully tears down (timer + socket) when
+   * the returned unsubscribe function is called. No-op safely (returns a
+   * harmless unsubscribe) if the interval isn't a valid kline stream interval
+   * or `WebSocket` isn't available in the runtime.
+   */
+  subscribeBars(
+    symbol: string,
+    interval: Interval,
+    onBar: (bar: Bar) => void,
+  ): () => void {
+    const binanceInterval = INTERVAL_MAP[interval];
+    if (!binanceInterval || typeof WebSocket === 'undefined') {
+      return () => {};
+    }
+
+    const streamName = `${symbol.toLowerCase()}@kline_${binanceInterval}`;
+    let ws: WebSocket | null = null;
+    let unsubscribed = false;
+    let reconnectAttempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleReconnect = () => {
+      if (unsubscribed) return;
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
+
+    const connect = () => {
+      if (unsubscribed) return;
+      reconnectTimer = null;
+
+      const socket = new WebSocket(`${BINANCE_WS_BASE}/${streamName}`);
+      ws = socket;
+
+      socket.onopen = () => {
+        if (unsubscribed || socket !== ws) return;
+        reconnectAttempt = 0; // reset backoff on successful open
+      };
+
+      socket.onmessage = (evt: MessageEvent) => {
+        if (unsubscribed || socket !== ws) return;
+        try {
+          const msg = JSON.parse(evt.data as string) as BinanceKlineWsEvent;
+          const k = msg.k;
+          if (!k) return;
+
+          const timeSec = Math.floor(Number(k.t) / 1000);
+          if (!Number.isFinite(timeSec)) return;
+          const open = Number(k.o);
+          const high = Number(k.h);
+          const low = Number(k.l);
+          const close = Number(k.c);
+          const volume = Number(k.v);
+          if (![open, high, low, close].every(Number.isFinite)) return;
+
+          onBar({
+            time: timeSec as UTCTimestamp,
+            open,
+            high,
+            low,
+            close,
+            volume: Number.isFinite(volume) ? volume : undefined,
+          });
+        } catch {
+          // malformed message — ignore, matches BinanceTradeSource's convention
+        }
+      };
+
+      socket.onerror = () => {
+        if (unsubscribed || socket !== ws) return;
+        socket.close();
+      };
+
+      socket.onclose = () => {
+        if (unsubscribed || socket !== ws) return;
+        scheduleReconnect();
+      };
+    };
+
+    connect();
+
+    return () => {
+      unsubscribed = true;
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      const socket = ws;
+      ws = null;
+      if (socket && socket.readyState < WebSocket.CLOSING) {
+        socket.close();
+      }
+    };
   }
 }
