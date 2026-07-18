@@ -69,6 +69,11 @@ const PRESERVED_ENTRIES = [
   { loc: "/learn/find-your-trading-leaks",       lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
   { loc: "/learn/win-rate-profit-factor-expectancy", lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
   { loc: "/learn/is-a-trading-journal-worth-it", lastmod: TODAY, changefreq: "monthly", priority: "0.7" },
+  { loc: "/best-trading-journal",                lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/tradezella-alternative",               lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/finotaur-vs-tradezella",               lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/finotaur-vs-tradersync",               lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/finotaur-vs-tradesviz",                lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
 ];
 
 // ---------------------------------------------------------------------------

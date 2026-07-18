@@ -23,6 +23,8 @@ import {
   TrendingUp,
   Building2,
   Repeat,
+  ListChecks,
+  ArrowLeftRight,
 } from "lucide-react";
 
 import Navbar from "@/components/landing-new/Navbar";
@@ -133,6 +135,42 @@ const PRODUCT_PAGES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Compare pages — the 5 GEO comparison pages (Wave 3)
+// ---------------------------------------------------------------------------
+const COMPARE_PAGES = [
+  {
+    Icon: ListChecks,
+    title: "Best Trading Journal (2026)",
+    description: "An honest, six-product comparison with a full feature and pricing table.",
+    path: "/best-trading-journal",
+  },
+  {
+    Icon: ArrowLeftRight,
+    title: "TradeZella Alternative",
+    description: "Why traders look for a TradeZella alternative, and how Finotaur compares.",
+    path: "/tradezella-alternative",
+  },
+  {
+    Icon: ArrowLeftRight,
+    title: "Finotaur vs TradeZella",
+    description: "A feature-by-feature comparison covering pricing, AI, and trade copiers.",
+    path: "/finotaur-vs-tradezella",
+  },
+  {
+    Icon: ArrowLeftRight,
+    title: "Finotaur vs TraderSync",
+    description: "How the two journals compare on pricing, Tradovate sync, and prop-risk tools.",
+    path: "/finotaur-vs-tradersync",
+  },
+  {
+    Icon: ArrowLeftRight,
+    title: "Finotaur vs TradesViz",
+    description: "Free plans, Tradovate auto-sync, AI analysis, and trade copier, compared.",
+    path: "/finotaur-vs-tradesviz",
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
 export default function LearnIndexPage() {
@@ -158,7 +196,7 @@ export default function LearnIndexPage() {
           {
             "@context": "https://schema.org",
             "@type": "ItemList",
-            itemListElement: [...GUIDES, ...PRODUCT_PAGES].map((item, idx) => ({
+            itemListElement: [...GUIDES, ...PRODUCT_PAGES, ...COMPARE_PAGES].map((item, idx) => ({
               "@type": "ListItem",
               position: idx + 1,
               name: item.title,
@@ -233,12 +271,35 @@ export default function LearnIndexPage() {
       </SectionShell>
 
       {/* ================================================================
+          SECTION 3B — COMPARE
+      ================================================================ */}
+      <SectionShell atmosphere="subtle">
+        <SectionEyebrow>COMPARE</SectionEyebrow>
+
+        <SectionTitle as="h2" gradient="white">
+          Compare Finotaur
+        </SectionTitle>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-ds-5 mt-ds-7 max-w-6xl mx-auto">
+          {COMPARE_PAGES.map(({ Icon, title, description, path }) => (
+            <Link key={path} to={path} className="block h-full">
+              <Card variant="default" padding="default" className="h-full transition-transform hover:-translate-y-0.5">
+                <Icon className="w-6 h-6 text-gold-primary mb-ds-3" />
+                <h3 className="font-wordmark font-medium text-lg text-ink-primary">{title}</h3>
+                <p className="text-ink-secondary text-[14px] leading-relaxed mt-ds-2">{description}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </SectionShell>
+
+      {/* ================================================================
           SECTION 4 — FINAL CTA
       ================================================================ */}
       <SectionShell atmosphere="full" beam={true}>
         <SectionEyebrow>GET STARTED</SectionEyebrow>
 
-        <SectionTitle as="h2" size="lg" gradient="split">
+        <SectionTitle as="h2" size="large" gradient="split">
           Put these guides into practice
         </SectionTitle>
 

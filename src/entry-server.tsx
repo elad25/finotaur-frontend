@@ -23,6 +23,13 @@ import BestTradingJournalPropFirm from '@/pages/BestTradingJournalPropFirm';
 import AITradingJournal from '@/pages/AITradingJournal';
 import JournalCopierPage from '@/pages/JournalCopierPage';
 
+// GEO / comparison pages (Wave 3) — same minimal SSR stack, no auth/query context.
+import BestTradingJournal from '@/pages/compare/BestTradingJournal';
+import TradeZellaAlternative from '@/pages/compare/TradeZellaAlternative';
+import FinotaurVsTradeZella from '@/pages/compare/FinotaurVsTradeZella';
+import FinotaurVsTraderSync from '@/pages/compare/FinotaurVsTraderSync';
+import FinotaurVsTradesViz from '@/pages/compare/FinotaurVsTradesViz';
+
 export interface SsrHelmetStrings {
   title: string;
   meta: string;
@@ -68,6 +75,13 @@ export function render(url: string): SsrResult {
           <Route path="/best-trading-journal-for-prop-firm" element={<BestTradingJournalPropFirm />} />
           <Route path="/ai-trading-journal" element={<AITradingJournal />} />
           <Route path="/journal-copier" element={<JournalCopierPage />} />
+
+          {/* GEO / comparison routes (Wave 3) */}
+          <Route path="/best-trading-journal" element={<BestTradingJournal />} />
+          <Route path="/tradezella-alternative" element={<TradeZellaAlternative />} />
+          <Route path="/finotaur-vs-tradezella" element={<FinotaurVsTradeZella />} />
+          <Route path="/finotaur-vs-tradersync" element={<FinotaurVsTraderSync />} />
+          <Route path="/finotaur-vs-tradesviz" element={<FinotaurVsTradesViz />} />
         </Routes>
       </StaticRouter>
     </HelmetProvider>
