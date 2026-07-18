@@ -74,6 +74,7 @@ import { PaperTradeRail } from '../components/PaperTradeRail';
 import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
   resolveIntervalPlan,
+  intervalToSeconds,
   type ArenaInterval,
   type CandleSourceKind,
 } from '../utils/intervals';
@@ -106,9 +107,29 @@ interface ChartTabProps {
 }
 
 // Rolling 24-hour window for the chart (from = now − 24h, to = now).
+// Used for every NON-crypto asset class (unchanged — futures/stocks/forex
+// keep this exact fixed window; see cryptoInitialWindow below for crypto).
 function nowWindow(): { from: number; to: number } {
   const to = Math.floor(Date.now() / 1000);
   const from = to - 24 * 60 * 60;
+  return { from, to };
+}
+
+// Crypto-only initial window: a fixed 24h clock window showed almost no
+// history on higher timeframes (e.g. ~96 bars on 15m, far fewer on 1h/4h)
+// and left the chart empty when panning left. For crypto, size the initial
+// request to roughly TARGET_INITIAL_BARS bars of the active interval instead
+// — paired with FinotaurChart's left-pan backfill (enableBackfill prop
+// below), which fetches further history as the user pans further left.
+// Span is capped so extreme combos (e.g. a custom multi-day interval) don't
+// request centuries of history in one shot.
+const TARGET_INITIAL_BARS = 500;
+const MAX_INITIAL_SPAN_SECONDS = 400 * 24 * 60 * 60; // 400 days safety cap
+
+function cryptoInitialWindow(intervalSeconds: number): { from: number; to: number } {
+  const to = Math.floor(Date.now() / 1000);
+  const span = Math.min(intervalSeconds * TARGET_INITIAL_BARS, MAX_INITIAL_SPAN_SECONDS);
+  const from = to - span;
   return { from, to };
 }
 
@@ -384,9 +405,17 @@ export function ChartTab({
   volumeProfileEnabled,
   onOpenSettings,
 }: ChartTabProps) {
-  const { from, to } = useMemo(nowWindow, [symbol, interval]);
-
   const isCrypto = assetClass === 'crypto';
+
+  // `symbol` is kept as a dependency (unused inside the callback itself)
+  // deliberately — it re-anchors the window to a fresh "now" on symbol
+  // switch, matching this memo's pre-existing intent before this window
+  // became interval-aware.
+  const { from, to } = useMemo(
+    () => (isCrypto ? cryptoInitialWindow(intervalToSeconds(interval)) : nowWindow()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [symbol, interval, isCrypto],
+  );
 
   // Chart ▾ Chart Settings (see chartStyleSettings.ts) — read directly via
   // context (ChartTab sits inside TradingArena.tsx's ChartStyleContext.Provider)
@@ -595,6 +624,7 @@ export function ChartTab({
             theme="dark"
             height="100%"
             showRefocusButton
+            enableBackfill={isCrypto}
             sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
           />
         </div>
