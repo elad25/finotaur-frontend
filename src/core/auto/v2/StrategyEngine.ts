@@ -353,6 +353,17 @@ export async function runStrategyV2(
   let open: OpenPositionV2 | null = null;
   let pending: TradeSignalV2 | null = null;
 
+  // Diagnostic counters (AutoBacktestResult.skippedSignals) — see that
+  // field's doc comment in AutoBacktestEngine.ts. `zeroSize` counts a
+  // signal that expired (never filled) having been rejected on sizing
+  // grounds at least once; `expired` counts every pending signal that ran
+  // out its validForBars window without ever being considered fillable
+  // (price never touched it, or every touch was gated off by session/
+  // maxTradesPerDay/dailyLossStop).
+  let skippedZeroSize = 0;
+  let skippedExpired = 0;
+  let pendingSawZeroSize = false;
+
   // Phase state machine (single live SetupInstance).
   let phaseIdx = 0;
   let runtimeState: RuntimeState = { anchors: new Map(), scratch: new Map() };
@@ -408,7 +419,10 @@ export async function runStrategyV2(
 
     if (phaseIdx === compiled.phases.length - 1) {
       const signal = buildSignalV2(compiled, candles, i, runtimeState, candidateDirection, mctx.atr);
-      if (signal) pending = signal;
+      if (signal) {
+        pending = signal;
+        pendingSawZeroSize = false;
+      }
       resetAttempt(i + 1);
     } else {
       phaseIdx += 1;
@@ -474,6 +488,12 @@ export async function runStrategyV2(
     // (b) Attempt to fill the pending signal.
     if (pending && !open) {
       if (i - pending.armIndex > pending.validForBars) {
+        // Unfillable within its window — expires and unblocks the machine
+        // (see StrategyEngine.ts module doc: the machine only ever pauses
+        // while `pending` is set, so clearing it here is what lets phase 0
+        // start evaluating again on THIS SAME bar, in step (c) below).
+        if (pendingSawZeroSize) skippedZeroSize += 1;
+        else skippedExpired += 1;
         pending = null;
       } else {
         const canConsider =
@@ -483,15 +503,19 @@ export async function runStrategyV2(
           (maxTradesPerDay === undefined || tradesOpenedToday < maxTradesPerDay);
 
         if (canConsider) {
-          const filled = attemptFill(pending, candle, i, balance, sizingMode, engineCtx);
-          if (filled) {
-            open = filled;
+          const attempt = attemptFill(pending, candle, i, balance, sizingMode, engineCtx);
+          if (attempt.kind === 'filled') {
+            open = attempt.position;
             tradesOpenedToday += 1;
             pending = null;
+          } else if (attempt.kind === 'zero-size') {
+            // Sizing rejected this bar (e.g. stop too wide for the risk
+            // budget) — keep the signal pending, it may still fill on a
+            // later, tighter bar within validForBars. Remembered for the
+            // skippedSignals.zeroSize diagnostic if it never does.
+            pendingSawZeroSize = true;
           }
-          // else: sizing rejected this bar (e.g. stop too wide for the risk
-          // budget) — keep the signal pending, it may still fill on a later,
-          // tighter bar within validForBars.
+          // 'no-touch': price condition not met this bar — no state change.
         }
       }
     }
@@ -524,6 +548,7 @@ export async function runStrategyV2(
     equityCurve: statistics.equityCurve ?? [],
     rMultipleDistribution,
     rLadder: { perR },
+    skippedSignals: { zeroSize: skippedZeroSize, expired: skippedExpired },
   };
 }
 
@@ -650,6 +675,14 @@ interface EngineCtx {
   mctx: MarketContext;
 }
 
+/** Outcome of one bar's fill attempt against a pending signal — see
+ *  `StrategyEngine.ts`'s `skippedSignals` counters for why this is tagged
+ *  rather than a bare nullable return. */
+type AttemptFillResult =
+  | { kind: 'filled'; position: OpenPositionV2 }
+  | { kind: 'zero-size' }
+  | { kind: 'no-touch' };
+
 function attemptFill(
   pending: TradeSignalV2,
   candle: Candle,
@@ -657,10 +690,10 @@ function attemptFill(
   balance: number,
   sizingMode: 'risk-pct' | 'fixed-contracts',
   ctx: EngineCtx,
-): OpenPositionV2 | null {
+): AttemptFillResult {
   const side: 'buy' | 'sell' = pending.direction === 'long' ? 'buy' : 'sell';
   const fill = ctx.orderEngine.getExecutionPrice(candle, pending.orderType, pending.entryPrice, side);
-  if (fill === null) return null;
+  if (fill === null) return { kind: 'no-touch' };
 
   let fillPrice: number;
   let size: number;
@@ -678,20 +711,20 @@ function attemptFill(
       stopDistancePoints,
       pointValue: ctx.contractSpec.pointValue,
     });
-    if (!sizing) return null;
+    if (!sizing) return { kind: 'zero-size' };
     size = sizing.contracts;
   } else {
     fillPrice = ctx.slippagePct > 0 ? ctx.orderEngine.applySlippage(fill, ctx.slippagePct, side) : fill;
     size = ctx.orderEngine.calculatePositionSize(balance, fillPrice, pending.stopLoss, ctx.def.risk.riskPerTradePct);
   }
-  if (size <= 0) return null;
+  if (size <= 0) return { kind: 'zero-size' };
 
   const entryTime = Math.floor(candleTimeMs(candle) / 1000);
   const risk = Math.abs(fillPrice - pending.stopLoss);
   const reward = Math.abs(pending.takeProfit - fillPrice);
   const pointValue = ctx.contractSpec?.pointValue ?? 1;
 
-  return {
+  const position: OpenPositionV2 = {
     symbol: ctx.def.instrument.symbol,
     type: pending.direction,
     entryPrice: fillPrice,
@@ -708,6 +741,7 @@ function attemptFill(
     partialsTriggered: new Set<number>(),
     realizedFromPartials: 0,
   };
+  return { kind: 'filled', position };
 }
 
 // ----------------------------------------------------------------------------

@@ -311,6 +311,91 @@ export function smtTfsUsed(def: StrategyDefinitionV2): TF[] {
 }
 
 // ----------------------------------------------------------------------------
+// Required-anchor safety net
+// ----------------------------------------------------------------------------
+
+/**
+ * PRODUCTION BUG FIX (2026-07-18): `PhaseV2.capture` is how a phase declares
+ * "compute this AnchorKind when I complete" — but nothing previously forced
+ * that declaration to actually cover what `entry`/`stop`/`exits` go on to
+ * reference. A definition with e.g. `entry: { orderType: 'limit',
+ * priceAnchor: { phaseId: 'p1', anchor: 'triggerPrice' } }` and `stop: {
+ * basis: 'wick' }` but NO `capture` on phase `p1` compiled and ran without
+ * error — `state.anchors` simply never got an entry, `resolveEntry`/
+ * `resolveStop` read NaN, `buildSignalV2` returned null on every single
+ * completed attempt, and the strategy silently produced ZERO trades despite
+ * its `when` condition firing on real, tradeable setups (see
+ * `prodData.regression.test.ts`: 51 phase completions on the real MNQ 5m
+ * fixture, 0 trades, before this fix). This is exactly the shape an
+ * AI-authored StrategyDefinitionV2 partial can omit.
+ *
+ * This function computes, PER PHASE ID, the AnchorKinds that are
+ * STRUCTURALLY required for the strategy to be resolvable at all, so
+ * `compileStrategy` can union them into that phase's effective `capture`
+ * list regardless of what the author explicitly declared. Two categories:
+ *
+ *  1. UNAMBIGUOUS (always safe to inject): any `AnchorRef` in
+ *     `entry.priceAnchor` / `stop.phaseRef` (basis 'phaseAnchor') /
+ *     `exits.target.level` (a `phaseAnchor` LevelRef) names an EXACT
+ *     `phaseId` + `anchor` — inject `anchor` into exactly that phase's
+ *     required set. There is no author intent this could contradict: the
+ *     reference already commits to that specific phase.
+ *
+ *  2. AMBIGUOUS-BUT-DEFAULTABLE (`stop.basis: 'wick' | 'structure'`): these
+ *     bases resolve via `findAnchorAcrossPhases`, which searches EVERY
+ *     phase's captured anchors from LAST to FIRST — the definition never
+ *     names which phase should supply 'wickExtreme'/'counterSwing'. To
+ *     avoid overriding a strategy that DELIBERATELY captures the anchor on
+ *     an earlier phase (and deliberately omits it from the last phase), we
+ *     only inject onto the LAST phase when NO phase anywhere already
+ *     declares that anchor kind — i.e. only when the omission would
+ *     otherwise be a guaranteed dead end. This mirrors the convention every
+ *     existing strategy in this codebase already follows (e.g.
+ *     `strategyEngine.test.ts`'s `flagshipDef`, which captures
+ *     `wickExtreme` on its one-and-only, last phase).
+ */
+function requiredAnchorsByPhase(def: StrategyDefinitionV2): Map<string, Set<AnchorKind>> {
+  const required = new Map<string, Set<AnchorKind>>();
+  const add = (phaseId: string, anchor: AnchorKind): void => {
+    let set = required.get(phaseId);
+    if (!set) {
+      set = new Set<AnchorKind>();
+      required.set(phaseId, set);
+    }
+    set.add(anchor);
+  };
+
+  // Category 1 — unambiguous, phaseId-qualified AnchorRefs.
+  if (def.entry.orderType === 'limit' && def.entry.priceAnchor) {
+    add(def.entry.priceAnchor.phaseId, def.entry.priceAnchor.anchor);
+  }
+  if (def.stop.basis === 'phaseAnchor' && def.stop.phaseRef) {
+    add(def.stop.phaseRef.phaseId, def.stop.phaseRef.anchor);
+  }
+  if (def.exits.target.basis === 'level' && def.exits.target.level?.type === 'phaseAnchor') {
+    add(def.exits.target.level.phaseId, def.exits.target.level.anchor);
+  }
+
+  // Category 2 — basis-only anchors resolved via findAnchorAcrossPhases
+  // (last-phase-to-first search); default onto the LAST phase ONLY if no
+  // phase anywhere already declares the anchor.
+  if (def.phases.length > 0) {
+    const lastPhaseId = def.phases[def.phases.length - 1].id;
+    const anyPhaseDeclares = (anchor: AnchorKind): boolean =>
+      def.phases.some((p) => (p.capture ?? []).some((c) => c.anchor === anchor));
+
+    if (def.stop.basis === 'wick' && !anyPhaseDeclares('wickExtreme')) {
+      add(lastPhaseId, 'wickExtreme');
+    }
+    if (def.stop.basis === 'structure' && !anyPhaseDeclares('counterSwing')) {
+      add(lastPhaseId, 'counterSwing');
+    }
+  }
+
+  return required;
+}
+
+// ----------------------------------------------------------------------------
 // Public: compileStrategy
 // ----------------------------------------------------------------------------
 
@@ -414,6 +499,20 @@ export function compileStrategy(
   const executionTf = def.timeframes.execution;
   const executionCtx = makeCompileCtx(candles, banks, 'exec', executionTf);
 
+  // Required-anchor safety net (fixes the "0 trades on real data" class of
+  // bug — see requiredAnchorsByPhase doc below): a phase's declared
+  // `capture` list is UNIONED with whatever entry/stop/exits structurally
+  // need from that phase, so an author (human or AI-generated definition)
+  // that wires up `entry.priceAnchor`/`stop.basis:'wick'`/etc. WITHOUT also
+  // remembering to declare the matching `capture` entry still gets a
+  // resolvable anchor instead of a silently-null signal on every attempt.
+  const requiredAnchors = requiredAnchorsByPhase(def);
+  const captureFor = (phase: (typeof def.phases)[number]): AnchorKind[] => {
+    const declared = new Set<AnchorKind>((phase.capture ?? []).map((c) => c.anchor));
+    for (const kind of requiredAnchors.get(phase.id) ?? []) declared.add(kind);
+    return Array.from(declared);
+  };
+
   const phases: CompiledPhase[] = def.phases.map((phase, idx) => {
     const phaseTf = phase.timeframe;
     const isContextPhase = phaseTf !== undefined && phaseTf !== executionTf;
@@ -428,7 +527,7 @@ export function compileStrategy(
           ? compileNode(phase.invalidateIf, executionCtx, `phases[${idx}].invalidateIf`)
           : undefined,
         withinBars: phase.within?.bars,
-        capture: (phase.capture ?? []).map((c) => c.anchor),
+        capture: captureFor(phase),
         timeframe: executionTf,
       };
     }
@@ -469,7 +568,7 @@ export function compileStrategy(
         ? wrapContextCondition(nativeInvalidateIf, phaseTf!, mtf.timeframeSet)
         : undefined,
       withinBars: phase.within?.bars,
-      capture: (phase.capture ?? []).map((c) => c.anchor),
+      capture: captureFor(phase),
       timeframe: phaseTf!,
     };
   });
