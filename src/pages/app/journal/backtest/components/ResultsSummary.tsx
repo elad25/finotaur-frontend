@@ -42,6 +42,7 @@ import {
   selectAutoResult,
   selectAutoSetup,
   selectAutoRunId,
+  selectEffectiveInstrument,
 } from '@/store/useAutoBacktestStore';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
 import {
@@ -49,7 +50,11 @@ import {
   type BacktestStatisticsLike,
   type RMultipleDistribution,
 } from '@/core/auto/AutoBacktestEngine';
-import { saveAutoBacktestTradesToJournal } from '@/lib/backtest/autoJournaling';
+import {
+  saveAutoBacktestTradesToJournal,
+  runContextFromSetup,
+  type AutoJournalRunContext,
+} from '@/lib/backtest/autoJournaling';
 
 // ---------------------------------------------------------------------------
 // Secondary R:R what-if model constants (fixed-risk normalization only)
@@ -448,7 +453,12 @@ function RDistributionChart({ dist }: { dist: RMultipleDistribution }) {
 export function ResultsSummary() {
   const result = useAutoBacktestStore(selectAutoResult);
   const setup = useAutoBacktestStore(selectAutoSetup);
+  const strategyV2 = useAutoBacktestStore((s) => s.strategyV2);
   const runId = useAutoBacktestStore(selectAutoRunId);
+  // The instrument the CURRENT result actually ran with — see
+  // LastRunInstrument in the store; falls back to `setup.instrument` only
+  // when no run has completed yet.
+  const instrument = useAutoBacktestStore(selectEffectiveInstrument);
   const from = useAutoBacktestStore((s) => s.from);
   const to = useAutoBacktestStore((s) => s.to);
   const { id: userId } = useEffectiveUser();
@@ -460,6 +470,18 @@ export function ResultsSummary() {
     () => (result?.trades ?? []).filter((t) => t.exitPrice != null && t.status === 'closed'),
     [result],
   );
+
+  // Engine-agnostic journal-save context — sourced from `instrument`
+  // (the run's ACTUAL instrument), never from the v1 `setup` slot alone.
+  // A v2 run must save its trades under its own symbol/name, not whatever
+  // `currentSetup` happens to hold (which can be a stale, unrelated
+  // previous v1 run — the same bug class as the chart/caption fix above).
+  const journalRunContext: AutoJournalRunContext = useMemo(() => {
+    if (instrument.engine === 'v2' && strategyV2) {
+      return { name: strategyV2.name, instrumentSymbol: instrument.symbol, patternLabel: 'AUTO' };
+    }
+    return runContextFromSetup(setup, instrument.symbol);
+  }, [instrument, strategyV2, setup]);
 
   const handleSaveToJournal = useCallback(async () => {
     if (!userId) {
@@ -473,7 +495,7 @@ export function ResultsSummary() {
     setIsSaving(true);
     try {
       const res = await saveAutoBacktestTradesToJournal(
-        { trades: closedTrades, setup, runId },
+        { trades: closedTrades, run: journalRunContext, runId },
         userId,
       );
       if (res.errors > 0) {
@@ -492,11 +514,15 @@ export function ResultsSummary() {
     } finally {
       setIsSaving(false);
     }
-  }, [userId, runId, closedTrades, setup]);
+  }, [userId, runId, closedTrades, journalRunContext]);
 
-  const symbol = setup.instrument.symbol;
-  const timeframe = setup.instrument.timeframe;
-  const initialBalance = setup.risk.initialBalance;
+  const symbol = instrument.symbol;
+  const timeframe = instrument.timeframe;
+  // Same wrong-source-read pattern as the instrument fix above: for a v2 run,
+  // the account size actually used lives on `strategyV2.risk`, not the v1
+  // `setup.risk` slot (which may hold an unrelated previous run's value).
+  const initialBalance =
+    instrument.engine === 'v2' && strategyV2 ? strategyV2.risk.initialBalance : setup.risk.initialBalance;
 
   const stats = result?.statistics ?? null;
 

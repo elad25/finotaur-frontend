@@ -23,6 +23,7 @@ import {
   useAutoBacktestStore,
   selectAutoResult,
   selectAutoSetup,
+  selectEffectiveInstrument,
 } from '@/store/useAutoBacktestStore';
 
 const GOLD = '#C9A646';
@@ -49,8 +50,17 @@ interface Metric {
 export function PnlHeroChart() {
   const result = useAutoBacktestStore(selectAutoResult);
   const setup = useAutoBacktestStore(selectAutoSetup);
+  const strategyV2 = useAutoBacktestStore((s) => s.strategyV2);
+  // The instrument the CURRENT result actually ran with — see
+  // LastRunInstrument in the store; falls back to `setup.instrument` only
+  // when no run has completed yet.
+  const instrument = useAutoBacktestStore(selectEffectiveInstrument);
 
-  const initialCapital = setup.risk.initialBalance;
+  // Same wrong-source-read pattern as the instrument fix: for a v2 run, the
+  // account size actually used lives on `strategyV2.risk`, not the v1
+  // `setup.risk` slot (which may hold an unrelated previous run's value).
+  const initialCapital =
+    instrument.engine === 'v2' && strategyV2 ? strategyV2.risk.initialBalance : setup.risk.initialBalance;
 
   const chartData = useMemo(() => {
     if (!result) return [];
@@ -136,7 +146,7 @@ export function PnlHeroChart() {
           </div>
           <p className="mt-1 text-xs text-ink-tertiary">
             {Number(stats.totalTrades ?? 0)} trades · {asPercent(stats.winRate).toFixed(1)}% win
-            rate · {setup.instrument.symbol} {setup.instrument.timeframe}
+            rate · {instrument.symbol} {instrument.timeframe}
           </p>
         </div>
         <div className="text-right">

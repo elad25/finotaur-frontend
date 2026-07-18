@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { autoPositionToTradeChartTrade, mapTimeframeToInterval } from '../tradeChartAdapter';
+import { autoPositionToTradeChartTrade, mapTimeframeToInterval, resolveRunEntryDefaults } from '../tradeChartAdapter';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
+import { makeDefaultSetup } from '@/core/auto/types';
+import { makeDefaultStrategyV2 } from '@/core/auto/v2/types';
 
 function makePosition(overrides: Partial<AutoPosition> = {}): AutoPosition {
   return {
@@ -86,5 +88,39 @@ describe('mapTimeframeToInterval', () => {
     expect(mapTimeframeToInterval('')).toBeUndefined();
     expect(mapTimeframeToInterval(undefined)).toBeUndefined();
     expect(mapTimeframeToInterval(null)).toBeUndefined();
+  });
+});
+
+describe('resolveRunEntryDefaults', () => {
+  it('reads the v1 setup when engine is "v1", regardless of any loaded strategyV2', () => {
+    const setup = makeDefaultSetup('BTCUSDT', '15m'); // entry: { orderType: 'limit', validForBars: 20 }
+    const v2Def = makeDefaultStrategyV2('MNQ', '5m'); // entry: { orderType: 'market', validForBars: 5 }
+
+    const out = resolveRunEntryDefaults('v1', setup, v2Def);
+
+    expect(out.orderType).toBe('limit');
+    expect(out.validForBars).toBe(20);
+    expect(out.initialBalance).toBe(setup.risk.initialBalance);
+  });
+
+  it('reads strategyV2 when engine is "v2" and a v2 definition is loaded — the reported bug', () => {
+    const setup = makeDefaultSetup('BTCUSDT', '15m');
+    const v2Def = makeDefaultStrategyV2('MNQ', '5m');
+
+    const out = resolveRunEntryDefaults('v2', setup, v2Def);
+
+    expect(out.orderType).toBe('market');
+    expect(out.validForBars).toBe(5);
+    expect(out.initialBalance).toBe(v2Def.risk.initialBalance);
+    // Must NOT be the v1 setup's values.
+    expect(out.orderType).not.toBe(setup.entry.orderType);
+  });
+
+  it('falls back to the v1 setup when engine is "v2" but strategyV2 is null (defensive)', () => {
+    const setup = makeDefaultSetup('BTCUSDT', '15m');
+    const out = resolveRunEntryDefaults('v2', setup, null);
+    expect(out.orderType).toBe(setup.entry.orderType);
+    expect(out.validForBars).toBe(setup.entry.validForBars);
+    expect(out.initialBalance).toBe(setup.risk.initialBalance);
   });
 });

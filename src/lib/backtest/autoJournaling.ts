@@ -39,10 +39,52 @@ function normalizeSide(type: 'long' | 'short'): 'LONG' | 'SHORT' {
   return type === 'long' ? 'LONG' : 'SHORT';
 }
 
-/** Distinct pattern-family labels configured on the setup, e.g. "FVG+OB". */
-function patternTypesLabel(setup: SetupDefinition): string {
+/** Distinct pattern-family labels configured on a v1 setup, e.g. "FVG+OB". */
+export function patternTypesLabel(setup: SetupDefinition): string {
   const types = Array.from(new Set(setup.patterns.map((p) => p.type)));
   return types.length > 0 ? types.join('+') : 'AUTO';
+}
+
+// ─── Run context (engine-agnostic) ─────────────────────────────────
+
+/**
+ * Normalized, engine-agnostic fields the mapper needs to build journal
+ * payloads. Built by the CALLER (ResultsSummary.handleSaveToJournal) from
+ * the store's `selectEffectiveInstrument` — never from the raw v1
+ * `currentSetup` directly — so a v2 (Strategy AI) run's journal rows carry
+ * the instrument the run ACTUALLY traded instead of whatever the v1 setup
+ * slot happened to hold (which may be a stale, unrelated previous run's
+ * instrument; this file stays free of `StrategyDefinitionV2` imports by
+ * design — the caller resolves engine-specific fields, this mapper just
+ * consumes the normalized result).
+ */
+export interface AutoJournalRunContext {
+  /** Strategy/setup name — shown in the `setup` column and in `notes`. */
+  name: string;
+  /** The instrument the run ACTUALLY traded (from `lastRunInstrument`). */
+  instrumentSymbol: string;
+  /** Pattern-family label for tags/notes — e.g. "FVG+OB" (v1) or "AUTO" (v2: the generic rules engine has no v1-shaped `patterns` list). */
+  patternLabel: string;
+}
+
+/**
+ * Convenience builder for the classic v1 path — mirrors the pre-refactor
+ * behavior exactly (name + pattern label straight off the setup), letting
+ * the caller supply `instrumentSymbol` explicitly (normally
+ * `selectEffectiveInstrument(...).symbol`, which equals
+ * `setup.instrument.symbol` for a v1 run) rather than reading it off
+ * `setup` internally — keeps a single source of truth for "which instrument
+ * did this run actually use" across both engines.
+ */
+export function runContextFromSetup(
+  setup: SetupDefinition,
+  instrumentSymbol: string,
+): AutoJournalRunContext {
+  return {
+    name: setup.name,
+    instrumentSymbol,
+    patternLabel: patternTypesLabel(setup),
+  };
 }
 
 // ─── Payload builders (exported for testing) ──────────────────────
@@ -58,7 +100,7 @@ function patternTypesLabel(setup: SetupDefinition): string {
 export function buildAutoJournalPayload(
   pos: AutoPosition,
   userId: string,
-  setup: SetupDefinition,
+  run: AutoJournalRunContext,
   runId: string,
   index: number,
 ): JournalTradePayload | null {
@@ -68,8 +110,7 @@ export function buildAutoJournalPayload(
   const outcome: JournalTradePayload['outcome'] =
     pnl == null ? 'OPEN' : pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE';
 
-  const symbol = setup.instrument.symbol || pos.symbol || '';
-  const patternLabel = patternTypesLabel(setup);
+  const symbol = run.instrumentSymbol || pos.symbol || '';
   const externalId = `autobt_${runId}_${index}`;
 
   return {
@@ -84,9 +125,9 @@ export function buildAutoJournalPayload(
     pnl,
     outcome,
     strategy_id: null,
-    setup: setup.name,
-    tags: ['backtest', 'auto', `pattern:${patternLabel}`],
-    notes: `Auto backtest "${setup.name}" (${patternLabel}) · run ${runId}`,
+    setup: run.name,
+    tags: ['backtest', 'auto', `pattern:${run.patternLabel}`],
+    notes: `Auto backtest "${run.name}" (${run.patternLabel}) · run ${runId}`,
     broker: 'backtest',
     external_id: externalId,
     session: null,
@@ -110,12 +151,12 @@ export function buildAutoJournalPayload(
 export function buildAutoJournalPayloads(
   trades: AutoPosition[],
   userId: string,
-  setup: SetupDefinition,
+  run: AutoJournalRunContext,
   runId: string,
 ): JournalTradePayload[] {
   const out: JournalTradePayload[] = [];
   trades.forEach((pos, index) => {
-    const payload = buildAutoJournalPayload(pos, userId, setup, runId, index);
+    const payload = buildAutoJournalPayload(pos, userId, run, runId, index);
     if (payload) out.push(payload);
   });
   return out;
@@ -132,10 +173,10 @@ export function buildAutoJournalPayloads(
  * same `external_id`s instead of duplicating rows.
  */
 export async function saveAutoBacktestTradesToJournal(
-  input: { trades: AutoPosition[]; setup: SetupDefinition; runId: string },
+  input: { trades: AutoPosition[]; run: AutoJournalRunContext; runId: string },
   userId: string,
 ): Promise<SaveResult> {
-  const { trades, setup, runId } = input;
+  const { trades, run, runId } = input;
   const result: SaveResult = { saved: 0, skipped: 0, errors: 0 };
 
   if (!userId) {
@@ -146,7 +187,7 @@ export async function saveAutoBacktestTradesToJournal(
   const closed = trades.filter((p) => p.exitPrice != null && p.status === 'closed');
   if (closed.length === 0) return result;
 
-  const rows = buildAutoJournalPayloads(closed, userId, setup, runId);
+  const rows = buildAutoJournalPayloads(closed, userId, run, runId);
   if (rows.length === 0) return result;
 
   const { error } = await supabase
