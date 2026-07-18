@@ -1,8 +1,8 @@
 // src/pages/app/ai/copilot/components/SectorExposureCard.tsx
 // =====================================================
-// SECTOR EXPOSURE card — donut chart grouping holdings by assetClass.
+// ASSET ALLOCATION card — donut chart grouping holdings by assetClass.
 // Follows the same pattern as AssetClassAllocationCard (Recharts PieChart).
-// Center label: "100%" + "ALLOCATED".
+// Center label: holdings count + "Holdings".
 // Right-side legend with coloured dots.
 // =====================================================
 
@@ -12,22 +12,15 @@ import { Link } from 'react-router-dom';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
-// ─── Palette — reuse AssetClassAllocationCard colours ─────────────────────────
+// ─── Palette — monochrome gold ramp (design system forbids green) ────────────
+// Ranked by slice dominance: chartData is sorted largest-first, so index 0
+// (the largest slice) gets the brightest gold and each subsequent rank steps
+// down through darker gold/neutral tones.
 
-const CLASS_COLOURS: Record<string, string> = {
-  Equities:    '#C9A646',
-  ETFs:        '#4F7FCC',
-  Cash:        '#4F9D6B',
-  Options:     '#C25450',
-  Bonds:       '#7E6BB8',
-  Crypto:      '#D08A4A',
-  Futures:     '#3A5F99',
-  Commodities: '#A66A33',
-  Other:       'rgba(255,255,255,0.30)',
-};
+const GOLD_RAMP: string[] = ['#E8C766', '#C9A646', '#A88838', '#7A6528', '#4d4224', '#2e2a1c'];
 
-const colourFor = (label: string): string =>
-  CLASS_COLOURS[label] ?? 'rgba(255,255,255,0.28)';
+const colourForIndex = (index: number): string =>
+  GOLD_RAMP[index] ?? GOLD_RAMP[GOLD_RAMP.length - 1];
 
 // ─── Map assetClass codes to display labels (same as AssetClassAllocationCard) ─
 
@@ -74,6 +67,7 @@ interface Props {
 
 export function SectorExposureCard({ snapshot, className }: Props) {
   const total = snapshot.totalValue || 1;
+  const holdingsCount = snapshot.holdings.length;
 
   // Aggregate by asset-class bucket.
   const groups = new Map<string, number>();
@@ -94,7 +88,7 @@ export function SectorExposureCard({ snapshot, className }: Props) {
       <div className="flex flex-col flex-1 p-5 pb-14">
         {/* Header pinned at top */}
         <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
-          SECTOR EXPOSURE
+          ASSET ALLOCATION
         </p>
 
         {isEmpty ? (
@@ -128,8 +122,8 @@ export function SectorExposureCard({ snapshot, className }: Props) {
                     labelLine={false}
                     isAnimationActive={false}
                   >
-                    {chartData.map((entry) => (
-                      <Cell key={entry.name} fill={colourFor(entry.name)} />
+                    {chartData.map((entry, i) => (
+                      <Cell key={entry.name} fill={colourForIndex(i)} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -146,25 +140,30 @@ export function SectorExposureCard({ snapshot, className }: Props) {
               </ResponsiveContainer>
               {/* Center label */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-mono text-base font-semibold leading-tight text-white">
-                  {chartData.reduce((s, d) => s + d.pct, 0).toFixed(0)}%
+                <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">
+                  Total Assets
                 </span>
-                <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">ALLOCATED</span>
+                <span className="font-mono text-2xl font-semibold leading-tight text-ink-primary tabular-nums">
+                  {holdingsCount}
+                </span>
+                <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">
+                  Holdings
+                </span>
               </div>
             </div>
 
             {/* Legend — centered wrap row below donut */}
             <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2">
-              {chartData.slice(0, 6).map((item) => (
+              {chartData.slice(0, 6).map((item, i) => (
                 <li key={item.name} className="flex items-center gap-1.5">
                   <span
                     className="inline-block rounded-[2px] flex-none"
-                    style={{ width: 8, height: 8, background: colourFor(item.name) }}
+                    style={{ width: 8, height: 8, background: colourForIndex(i) }}
                   />
                   <span className="text-[11px] text-ink-secondary">
                     {item.name}
                   </span>
-                  <span className="text-[11px] font-semibold text-ink-primary tabular-nums">
+                  <span className="font-mono text-[11px] font-semibold text-ink-primary tabular-nums">
                     {item.pct.toFixed(0)}%
                   </span>
                 </li>

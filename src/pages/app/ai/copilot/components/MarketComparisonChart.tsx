@@ -1,11 +1,13 @@
 // src/pages/app/ai/copilot/components/MarketComparisonChart.tsx
 // =====================================================
-// PERFORMANCE card — Portfolio vs S&P 500.
+// PERFORMANCE OVER TIME card — Portfolio vs S&P 500.
 // Hand-rolled SVG chart (no recharts) in the style of PerformanceChart.tsx:
-//   - Portfolio: gold gradient area + line, end-dot badge
-//   - S&P 500:   gray area + line, index-aligned & dollar-scaled
-//   - Right-side Y-axis ticks in full dollars
-//   - Hover crosshair + floating tooltip
+//   - Both series normalized to % return from the first point of the range
+//     so they share one directly-comparable percent axis.
+//   - Portfolio: gold gradient area + glowing gold line, end-of-line % chip
+//   - S&P 500:   thin gray line, no glow, no area fill
+//   - Right-side Y-axis in "nice" percent ticks (always includes 0%)
+//   - Hover crosshair + floating tooltip (both series shown as signed %)
 //   - Top row: inline legend (left) + time-range tabs (right)
 // =====================================================
 
@@ -33,6 +35,11 @@ const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 const GOLD_LINE   = '#E8C766';
 const GOLD_DARK   = '#C9A646';
 const SP_LINE     = 'rgba(255,255,255,0.45)';
+// Design-system tokens (ink.secondary / ink.tertiary from tailwind.config.ts) —
+// used as raw rgba here because SVG <text fill> can't consume Tailwind classes.
+const TICK_LABEL_COLOR = 'rgba(255,255,255,0.65)'; // text-ink-secondary
+const ZERO_LINE_COLOR  = 'rgba(255,255,255,0.14)';
+const GRID_LINE_COLOR  = 'rgba(255,255,255,0.05)';
 
 // SVG coordinate space
 const CHART_W  = 760;
@@ -41,22 +48,47 @@ const PAD = { top: 16, right: 96, bottom: 32, left: 12 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Format a dollar amount with commas and 2 decimal places: "$240,500.66" */
-function fmtDollarFull(value: number): string {
-  return `$${Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+/**
+ * Compute "nice" round tick values (like d3.ticks) spanning [min, max] with
+ * ~targetCount steps. Because every series here is normalized so its first
+ * point is always exactly 0, the 0% line is guaranteed to land on a tick.
+ */
+function computeNiceTicks(min: number, max: number, targetCount = 5): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+    return [0];
+  }
+  const span = max - min;
+  const rawStep = span / Math.max(targetCount - 1, 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+  let niceResidual: number;
+  if (residual >= 7.5)      niceResidual = 10;
+  else if (residual >= 3.5) niceResidual = 5;
+  else if (residual >= 1.5) niceResidual = 2;
+  else                       niceResidual = 1;
+  const step = niceResidual * magnitude;
+  const start = Math.floor(min / step) * step;
+  const end = Math.ceil(max / step) * step;
+
+  const ticks: number[] = [];
+  for (let v = start; v <= end + step * 1e-9; v += step) {
+    ticks.push(Math.round(v * 1e6) / 1e6); // clean up floating-point noise
+  }
+  return ticks;
 }
 
-/** Short dollar for compact display (badge): "$248.5K" */
-function fmtDollarShort(value: number): string {
+/** Percent tick label — no leading "+", U+2212 (real minus) for negatives. */
+function fmtPctTick(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 10_000)    return `$${(abs / 1_000).toFixed(1)}K`;
-  if (abs >= 1_000)     return `$${(abs / 1_000).toFixed(2)}K`;
-  if (abs >= 1)         return `$${abs.toFixed(2)}`;
-  return '$0.00';
+  const decimals = Math.abs(abs % 1) > 0.001 ? 1 : 0;
+  const sign = value < -0.001 ? '−' : '';
+  return `${sign}${abs.toFixed(decimals)}%`;
+}
+
+/** Signed percent for tooltip/chip — explicit "+" for positive, U+2212 for negative. */
+function fmtPctSigned(value: number): string {
+  const sign = value < 0 ? '−' : '+';
+  return `${sign}${Math.abs(value).toFixed(1)}%`;
 }
 
 /** Format date string to "MMM D" (e.g. "Jan 18"). */
@@ -83,21 +115,23 @@ interface ChartCoords {
   path: string;
   areaPath: string;
   coords: [number, number][];
-  ticks: { value: number; y: number }[];
-  minV: number;
-  maxV: number;
+}
+
+/** Map a value in [minV, maxV] to its pixel Y position within the chart. */
+function valueToY(value: number, minV: number, maxV: number): number {
+  const innerH = CHART_H - PAD.top - PAD.bottom;
+  const range = maxV - minV || 1;
+  const clamped = Math.max(minV, Math.min(maxV, value));
+  return PAD.top + (1 - (clamped - minV) / range) * innerH;
 }
 
 /** Build SVG path + area path + coordinate array for a value series. */
 function buildCoords(values: number[], minV: number, maxV: number): ChartCoords {
   const innerW = CHART_W - PAD.left - PAD.right;
-  const innerH = CHART_H - PAD.top - PAD.bottom;
-  const range  = maxV - minV || 1;
 
   const coords: [number, number][] = values.map((v, i) => {
     const x = PAD.left + (i / Math.max(values.length - 1, 1)) * innerW;
-    const clamped = Math.max(minV, Math.min(maxV, v));
-    const y = PAD.top + (1 - (clamped - minV) / range) * innerH;
+    const y = valueToY(v, minV, maxV);
     return [x, y];
   });
 
@@ -110,22 +144,15 @@ function buildCoords(values: number[], minV: number, maxV: number): ChartCoords 
   const baseline = CHART_H - PAD.bottom;
   const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
 
-  // 5 evenly-spaced tick values (bottom to top)
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-    const value = minV + ratio * range;
-    const y = PAD.top + (1 - ratio) * innerH;
-    return { value, y };
-  });
-
-  return { path, areaPath, coords, ticks, minV, maxV };
+  return { path, areaPath, coords };
 }
 
 // ─── Tooltip component ────────────────────────────────────────────────────────
 
 interface HoverTooltipProps {
   portfolioDate: string;
-  portfolioValue: number;
-  spValue: number | null;
+  portfolioPct: number;
+  spPct: number | null;
   hideValues: boolean;
   svgX: number;
   svgY: number;
@@ -133,8 +160,8 @@ interface HoverTooltipProps {
 
 function HoverTooltip({
   portfolioDate,
-  portfolioValue,
-  spValue,
+  portfolioPct,
+  spPct,
   hideValues,
   svgX,
   svgY,
@@ -161,15 +188,15 @@ function HoverTooltip({
         <span className="inline-block h-[2px] w-4 rounded" style={{ background: GOLD_LINE }} />
         <span className="text-[11px] text-gold-primary font-medium">Portfolio</span>
         <span className="ml-auto font-mono text-[11px] text-gold-primary tabular-nums">
-          {hideValues ? '*****' : fmtDollarShort(portfolioValue)}
+          {hideValues ? '*****' : fmtPctSigned(portfolioPct)}
         </span>
       </div>
-      {spValue !== null && (
+      {spPct !== null && (
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="inline-block h-[2px] w-4 rounded" style={{ background: SP_LINE }} />
           <span className="text-[11px] text-ink-tertiary font-medium">S&amp;P 500</span>
           <span className="ml-auto font-mono text-[11px] text-ink-tertiary tabular-nums">
-            {hideValues ? '*****' : fmtDollarShort(spValue)}
+            {hideValues ? '*****' : fmtPctSigned(spPct)}
           </span>
         </div>
       )}
@@ -190,51 +217,61 @@ export function MarketComparisonChart({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
-  // Scale S&P series to portfolio's starting value so both lines share the same
-  // dollar axis. Guard division by zero on sp[0].value.
-  const spScaled = useMemo<(number | null)[]>(() => {
+  // Normalize the portfolio series to % return from the first point of the
+  // selected range. Guard: missing/zero first value → flat 0% line, no NaN.
+  const portfolioPct = useMemo<number[]>(() => {
+    if (portfolioSeries.length === 0) return [];
+    const first = portfolioSeries[0].value;
+    if (!first) return portfolioSeries.map(() => 0);
+    return portfolioSeries.map((p) => (p.value / first - 1) * 100);
+  }, [portfolioSeries]);
+
+  // Normalize S&P 500 to % return from its own first point (same guard).
+  // Index-aligned to portfolioSeries (both hooks are driven by the same range).
+  const spPct = useMemo<(number | null)[]>(() => {
     if (portfolioSeries.length === 0 || sp500.length === 0) return [];
-    const portfolioStart = portfolioSeries[0].value;
-    const spStart = sp500[0].value;
-    if (spStart === 0) return portfolioSeries.map(() => null);
+    const spFirst = sp500[0].value;
+    if (!spFirst) return portfolioSeries.map(() => null);
     return portfolioSeries.map((_, i) => {
       if (i >= sp500.length) return null;
-      return (sp500[i].value / spStart) * portfolioStart;
+      return (sp500[i].value / spFirst - 1) * 100;
     });
   }, [portfolioSeries, sp500]);
 
-  const hasSpData = spScaled.some((v) => v !== null);
+  const hasSpData = spPct.some((v) => v !== null);
 
-  // Compute combined min/max across both series for shared Y axis.
-  const { minV, maxV } = useMemo(() => {
-    const allValues: number[] = portfolioSeries.map((p) => p.value);
+  // Compute combined % domain across both series, then snap to "nice" ticks
+  // so the axis always includes 0% and reads like -10% / 0% / 10% / 20% / 30%.
+  const { minV, maxV, yTicks } = useMemo(() => {
+    const allValues: number[] = [...portfolioPct];
     if (hasSpData) {
-      spScaled.forEach((v) => { if (v !== null) allValues.push(v); });
+      spPct.forEach((v) => { if (v !== null) allValues.push(v); });
     }
-    if (allValues.length === 0) return { minV: 0, maxV: 1 };
-    const raw_min = Math.min(...allValues);
-    const raw_max = Math.max(...allValues);
-    const pad = (raw_max - raw_min) * 0.06;
-    return { minV: raw_min - pad, maxV: raw_max + pad };
-  }, [portfolioSeries, spScaled, hasSpData]);
+    if (allValues.length === 0) return { minV: -10, maxV: 10, yTicks: [-10, 0, 10] };
+    const rawMin = Math.min(...allValues);
+    const rawMax = Math.max(...allValues);
+    const pad = (rawMax - rawMin) * 0.08 || 5;
+    const ticks = computeNiceTicks(rawMin - pad, rawMax + pad, 5);
+    return { minV: ticks[0], maxV: ticks[ticks.length - 1], yTicks: ticks };
+  }, [portfolioPct, spPct, hasSpData]);
 
   const portfolioChart = useMemo(() => {
-    if (portfolioSeries.length === 0) return null;
-    if (portfolioSeries.length === 1) {
+    if (portfolioPct.length === 0) return null;
+    if (portfolioPct.length === 1) {
       // Flat line for single-point edge case
-      const v = portfolioSeries[0].value;
+      const v = portfolioPct[0];
       return buildCoords([v, v], minV, maxV);
     }
-    return buildCoords(portfolioSeries.map((p) => p.value), minV, maxV);
-  }, [portfolioSeries, minV, maxV]);
+    return buildCoords(portfolioPct, minV, maxV);
+  }, [portfolioPct, minV, maxV]);
 
   const spChart = useMemo(() => {
-    if (!hasSpData || spScaled.length === 0) return null;
-    const validValues = spScaled.filter((v): v is number => v !== null);
+    if (!hasSpData || spPct.length === 0) return null;
+    const validValues = spPct.filter((v): v is number => v !== null);
     if (validValues.length < 2) return null;
     // Only build path for the contiguous valid range
     return buildCoords(validValues, minV, maxV);
-  }, [spScaled, hasSpData, minV, maxV]);
+  }, [spPct, hasSpData, minV, maxV]);
 
   // X-axis labels — ~6 evenly-spaced dates
   const xLabels = useMemo(() => {
@@ -264,9 +301,9 @@ export function MarketComparisonChart({
 
   const handleMouseLeave = () => setHoverIdx(null);
 
-  // Last portfolio value for the badge
-  const lastPortfolioValue =
-    portfolioSeries.length > 0 ? portfolioSeries[portfolioSeries.length - 1].value : null;
+  // Last portfolio % return for the end-of-line badge
+  const lastPortfolioPct =
+    portfolioPct.length > 0 ? portfolioPct[portfolioPct.length - 1] : null;
 
   const cardShell =
     'relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]';
@@ -332,7 +369,7 @@ export function MarketComparisonChart({
         <div className="relative p-5">
           {/* Row 1: eyebrow */}
           <p className="text-[10px] uppercase tracking-[0.13em] font-semibold text-gold-primary mb-2">
-            PORTFOLIO PERFORMANCE
+            PERFORMANCE OVER TIME
           </p>
           {/* Row 2: legend + tabs, wrapping on narrow widths */}
           <div className="flex flex-wrap items-center justify-between gap-y-1.5 mb-4">
@@ -352,21 +389,16 @@ export function MarketComparisonChart({
     ? portfolioChart.coords[Math.min(hoverIdx, portfolioChart.coords.length - 1)]
     : null;
 
-  // For S&P hover dot: get the scaled SP value at hover index, then compute its y
-  const hoverSpValue =
-    hoverIdx !== null && spScaled.length > hoverIdx ? spScaled[hoverIdx] : null;
+  // For S&P hover dot: get the normalized SP % at hover index, then compute its y
+  const hoverSpPct =
+    hoverIdx !== null && spPct.length > hoverIdx ? spPct[hoverIdx] : null;
 
-  const hoverSpY = hoverSpValue !== null && portfolioChart
-    ? (() => {
-        const innerH = CHART_H - PAD.top - PAD.bottom;
-        const vRange  = maxV - minV || 1;
-        const clamped = Math.max(minV, Math.min(maxV, hoverSpValue));
-        return PAD.top + (1 - (clamped - minV) / vRange) * innerH;
-      })()
+  const hoverSpY = hoverSpPct !== null
+    ? valueToY(hoverSpPct, minV, maxV)
     : null;
 
-  const hoverPortfolioValue =
-    hoverIdx !== null ? (portfolioSeries[hoverIdx]?.value ?? null) : null;
+  const hoverPortfolioPct =
+    hoverIdx !== null ? (portfolioPct[hoverIdx] ?? null) : null;
   const hoverDate =
     hoverIdx !== null ? (portfolioSeries[hoverIdx]?.date ?? '') : '';
 
@@ -377,7 +409,7 @@ export function MarketComparisonChart({
       <div className="relative p-5">
         {/* Row 1: eyebrow title */}
         <p className="text-[10px] uppercase tracking-[0.13em] font-semibold text-gold-primary mb-2">
-          PORTFOLIO PERFORMANCE
+          PERFORMANCE OVER TIME
         </p>
         {/* Row 2: legend left, tabs right — wraps on narrow widths */}
         <div className="flex flex-wrap items-center justify-between gap-y-1.5 mb-4">
@@ -407,48 +439,55 @@ export function MarketComparisonChart({
                 <stop offset="0%"   stopColor="#C9A646" />
                 <stop offset="100%" stopColor="#E8C766" />
               </linearGradient>
-              {/* S&P gray area fill */}
-              <linearGradient id="mccSpArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor="rgba(255,255,255,0.10)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.00)" />
-              </linearGradient>
+              {/* Glow blur for the portfolio line */}
+              <filter id="mccGoldGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="4.5" result="blur" />
+              </filter>
             </defs>
 
-            {/* Horizontal gridlines */}
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-              const y = PAD.top + ratio * (CHART_H - PAD.top - PAD.bottom);
+            {/* Horizontal gridlines — one per Y-axis tick, 0% line more visible */}
+            {yTicks.map((tickValue) => {
+              const y = valueToY(tickValue, minV, maxV);
+              const isZero = Math.abs(tickValue) < 1e-6;
               return (
                 <line
-                  key={`hg-${ratio}`}
+                  key={`hg-${tickValue}`}
                   x1={PAD.left}
                   x2={CHART_W - PAD.right}
                   y1={y}
                   y2={y}
-                  stroke="rgba(255,255,255,0.05)"
+                  stroke={isZero ? ZERO_LINE_COLOR : GRID_LINE_COLOR}
                   strokeWidth={1}
                 />
               );
             })}
 
-            {/* S&P 500 series (rendered UNDER portfolio) */}
+            {/* S&P 500 series (rendered UNDER portfolio) — thin line only, no glow, no area */}
             {spChart && (
-              <>
-                <path d={spChart.areaPath} fill="url(#mccSpArea)" />
-                <path
-                  d={spChart.path}
-                  fill="none"
-                  stroke={SP_LINE}
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </>
+              <path
+                d={spChart.path}
+                fill="none"
+                stroke={SP_LINE}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             )}
 
-            {/* Portfolio series (rendered ON TOP) */}
+            {/* Portfolio series (rendered ON TOP) — glow pass underneath + crisp gold line */}
             {portfolioChart && (
               <>
                 <path d={portfolioChart.areaPath} fill="url(#mccPortfolioArea)" />
+                <path
+                  d={portfolioChart.path}
+                  fill="none"
+                  stroke={GOLD_LINE}
+                  strokeWidth={6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={0.45}
+                  filter="url(#mccGoldGlow)"
+                />
                 <path
                   d={portfolioChart.path}
                   fill="none"
@@ -473,27 +512,31 @@ export function MarketComparisonChart({
 
             {/* Y-axis right-side tick labels — ticks within the badge zone are
                 skipped so the gold latest-value badge never overlaps a label */}
-            {portfolioChart && portfolioChart.ticks.filter(({ y }) => {
-              if (portfolioChart.coords.length === 0) return true;
-              const [, lastY] = portfolioChart.coords[portfolioChart.coords.length - 1];
-              return Math.abs(y - lastY) > 14;
-            }).map(({ value, y }) => (
-              <text
-                key={`yt-${value.toFixed(0)}`}
-                x={CHART_W - PAD.right + 8}
-                y={y + 4}
-                textAnchor="start"
-                fill="rgba(255,255,255,0.45)"
-                fontSize={10}
-              >
-                {hideValues ? '*****' : fmtDollarFull(value)}
-              </text>
-            ))}
+            {portfolioChart && yTicks.map((tickValue) => {
+              const y = valueToY(tickValue, minV, maxV);
+              if (portfolioChart.coords.length > 0) {
+                const [, lastY] = portfolioChart.coords[portfolioChart.coords.length - 1];
+                if (Math.abs(y - lastY) <= 14) return null;
+              }
+              return (
+                <text
+                  key={`yt-${tickValue}`}
+                  x={CHART_W - PAD.right + 8}
+                  y={y + 4}
+                  textAnchor="start"
+                  fill={TICK_LABEL_COLOR}
+                  fontSize={10}
+                  className="font-mono tabular-nums"
+                >
+                  {hideValues ? '*****' : fmtPctTick(tickValue)}
+                </text>
+              );
+            })}
 
             {/* Gold value badge at last portfolio value y-position */}
-            {lastPortfolioValue !== null && portfolioChart && (() => {
+            {lastPortfolioPct !== null && portfolioChart && (() => {
               const [, lastY] = portfolioChart.coords[portfolioChart.coords.length - 1];
-              const badgeText = hideValues ? '*****' : fmtDollarShort(lastPortfolioValue);
+              const badgeText = hideValues ? '*****' : fmtPctSigned(lastPortfolioPct);
               const badgeW = badgeText.length * 6.5 + 10;
               return (
                 <g>
@@ -512,6 +555,7 @@ export function MarketComparisonChart({
                     fill="#0a0908"
                     fontSize={10}
                     fontWeight="700"
+                    className="font-mono tabular-nums"
                   >
                     {badgeText}
                   </text>
@@ -556,7 +600,7 @@ export function MarketComparisonChart({
                   strokeWidth={2}
                 />
                 {/* S&P dot */}
-                {hoverSpValue !== null && hoverSpY !== null && (
+                {hoverSpPct !== null && hoverSpY !== null && (
                   <circle
                     cx={hoverPortfolioCoords[0]}
                     cy={hoverSpY}
@@ -571,11 +615,11 @@ export function MarketComparisonChart({
           </svg>
 
           {/* HTML tooltip overlay */}
-          {hoverIdx !== null && hoverPortfolioCoords && hoverPortfolioValue !== null && (
+          {hoverIdx !== null && hoverPortfolioCoords && hoverPortfolioPct !== null && (
             <HoverTooltip
               portfolioDate={hoverDate}
-              portfolioValue={hoverPortfolioValue}
-              spValue={hoverSpValue}
+              portfolioPct={hoverPortfolioPct}
+              spPct={hoverSpPct}
               hideValues={hideValues}
               svgX={hoverPortfolioCoords[0]}
               svgY={hoverPortfolioCoords[1]}
