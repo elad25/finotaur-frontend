@@ -64,12 +64,19 @@ const Navbar = () => {
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <div className="flex flex-col items-start gap-[3px]">
-            <button onClick={handleLogoClick} className="flex items-center" aria-label="FINOTAUR home">
-              <Wordmark size="nav" interactive />
-            </button>
-            <span className="h-px w-full bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
+          {/* Logo + promo chip — mirrors the in-app TopNav, where the chip sits
+              in the left column just right of the wordmark rather than beside
+              the auth buttons. */}
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-start gap-[3px]">
+              <button onClick={handleLogoClick} className="flex items-center" aria-label="FINOTAUR home">
+                <Wordmark size="nav" interactive />
+              </button>
+              <span className="h-px w-full bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
+            </div>
+
+            {/* 🎁 Promo offer chip — BETA100 founding-beta offer for ad traffic */}
+            <PromoOfferChip audience="landing" />
           </div>
 
           {/* Desktop Nav Links */}
@@ -88,8 +95,6 @@ const Navbar = () => {
 
           {/* Auth Buttons — Desktop */}
           <div className="hidden lg:flex items-center space-x-3">
-            {/* 🎁 Promo offer chip — BETA100 founding-beta offer for ad traffic */}
-            <PromoOfferChip audience="landing" />
             <button
               onClick={() => navigate('/auth/login')}
               className="text-[12px] font-sans uppercase tracking-[0.14em] font-medium text-white/80 hover:text-white transition-colors duration-300"
