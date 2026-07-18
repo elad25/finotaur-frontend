@@ -35,11 +35,11 @@ export interface ChartSettingsMenuProps {
   onChange: (patch: Partial<ChartStyleSettings>) => void;
   onReset: () => void;
   /**
-   * Current asset class — gates the "Auto-transform to footprint" toggle
-   * (Order Flow section): only crypto has a live tick feed ChartTab can
-   * bridge into today (see ChartTab.tsx's header comment for the futures
-   * deferral). Optional/undefined = toggle stays enabled (safe default for
-   * any caller that doesn't yet thread assetClass through).
+   * Current asset class. Unused since the "Order Flow" section (the
+   * "Auto-transform to footprint" toggle it gated) was removed 2026-07-18 —
+   * the plain Chart tab never renders footprint (see ChartTab.tsx's header
+   * comment). Kept optional on the prop type only so existing callers don't
+   * need to change.
    */
   assetClass?: string;
 }
@@ -150,7 +150,7 @@ function NumberField({ label, value, min, max, step, onCommit }: {
   );
 }
 
-export function ChartSettingsMenu({ settings, onChange, onReset, assetClass }: ChartSettingsMenuProps) {
+export function ChartSettingsMenu({ settings, onChange, onReset }: ChartSettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -376,26 +376,6 @@ export function ChartSettingsMenu({ settings, onChange, onReset, assetClass }: C
               this same onChange. */}
           <div className="text-[10px] text-[#707070]">
             Volume Profile moved to Indicators.
-          </div>
-
-          <SectionDivider />
-
-          {/* ORDER FLOW (Chart tab — zoom-gated footprint auto-transform) */}
-          <div>
-            <SectionLabel>Order Flow</SectionLabel>
-            <div className="flex flex-col gap-1">
-              <FieldRow label="Auto-transform to footprint">
-                <ToggleSwitch
-                  active={settings.footprintOnZoom}
-                  disabled={assetClass !== undefined && assetClass !== 'crypto'}
-                  onClick={() => onChange({ footprintOnZoom: !settings.footprintOnZoom })}
-                  label={settings.footprintOnZoom ? 'On' : 'Off'}
-                />
-              </FieldRow>
-              {assetClass !== undefined && assetClass !== 'crypto' && (
-                <div className="text-[10px] text-[#707070]">Requires tick data</div>
-              )}
-            </div>
           </div>
 
           <SectionDivider />

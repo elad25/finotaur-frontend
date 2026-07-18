@@ -312,8 +312,10 @@ export function FootprintLayer({
   // and hides it IMMEDIATELY on move-away (no debounce on hide). Only
   // eligible when the config toggle is on AND the current zoom stage is NOT
   // 'full' (numbers already visible on-chart at 'full' — magnifier would be
-  // redundant there). Runs on every crosshair move — no per-frame data scans,
-  // no rAF: this is purely event-driven.
+  // redundant there), AND the cursor's Y position is physically over the
+  // candle's own price range (not merely anywhere in its time column — see
+  // the y-axis hit-test inside the handler below). Runs on every crosshair
+  // move — no per-frame data scans, no rAF: this is purely event-driven.
   useEffect(() => {
     const clearHoverTimer = () => {
       if (hoverTimerRef.current !== null) {
@@ -353,6 +355,28 @@ export function FootprintLayer({
 
       const point = param.point;
 
+      // Y-axis hit-test: only eligible when the cursor is physically over the
+      // candle's own price range, not merely in its time column (the bug —
+      // the magnifier used to fire anywhere above/below the candle at that
+      // bar's time). Prefer the candlestick series' real OHLC high/low
+      // (threaded in via the `bars` prop / barsRef — see FootprintLayerProps'
+      // `bars` doc comment) since it's exact; fall back to the footprint's
+      // own bin-price extent (`candle.bins` is sorted ascending by binPrice —
+      // see FlowCandleView's doc comment) for the rare case OHLC isn't loaded
+      // for this bar yet. A small tolerance (half a price-bin, or 0.1% of
+      // price, whichever is larger) keeps wick-edge hovers registering.
+      const ohlcBar = barsRef.current?.find((b) => (b.time as unknown as number) === timeSec);
+      const rowSize = storeRef.current.getConfig().rowSize;
+      const low = ohlcBar ? ohlcBar.low : candle.bins[0].binPrice;
+      const high = ohlcBar ? ohlcBar.high : candle.bins[candle.bins.length - 1].binPrice + rowSize;
+      const tolerance = Math.max(rowSize / 2, Math.abs(high) * 0.001);
+      const cursorPrice = series.coordinateToPrice(point.y);
+      if (cursorPrice === null || cursorPrice < low - tolerance || cursorPrice > high + tolerance) {
+        clearHoverTimer();
+        if (hoveredCandle !== null) setHoveredCandle(null);
+        return;
+      }
+
       // Already hovering (or already timing) the SAME candle — just refresh
       // the cursor-anchored position, no need to re-arm the dwell timer.
       if (pendingHoverKeyRef.current === timeSec) {
@@ -385,7 +409,7 @@ export function FootprintLayer({
       clearHoverTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chart, hoveredCandle]);
+  }, [chart, series, hoveredCandle]);
 
   // ── rAF draw loop ─────────────────────────────────────────────────────────
   useEffect(() => {

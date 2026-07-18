@@ -5,8 +5,11 @@
  * FootprintSettingsDialog.tsx / IndicatorsDialog.tsx — Radix Dialog,
  * gold-on-black, left tab rail + scrollable content, footer Reset + Done).
  *
- * Sections (left rail): Candles | Canvas | Scales & Lines | Time | Order Flow
- * — every setting ChartSettingsMenu.tsx exposed is ported here 1:1, PLUS
+ * Sections (left rail): Candles | Canvas | Scales & Lines | Time
+ * (the "Order Flow" section — an "Auto-transform to footprint" toggle for
+ * the plain Chart tab — was removed 2026-07-18: ALL order flow/footprint
+ * now lives exclusively on the Order Flow tab, FootprintTab.tsx.)
+ * Every remaining setting ChartSettingsMenu.tsx exposed is ported here 1:1, PLUS
  * full TradingView-style color freedom for candles: Body / Borders / Wick,
  * up & down colors each via a ColorSwatchPicker (palette grid + custom
  * color + opacity) — see ./ColorSwatchPicker.tsx and the new optional
@@ -47,21 +50,22 @@ export interface ChartSettingsDialogProps {
   onChange: (patch: Partial<ChartStyleSettings>) => void;
   onReset: () => void;
   /**
-   * Current asset class — gates the "Auto-transform to footprint" toggle
-   * (Order Flow section): only crypto has a live tick feed ChartTab can
-   * bridge into today. Optional/undefined = toggle stays enabled.
+   * Current asset class. Unused since the "Order Flow" section (the
+   * "Auto-transform to footprint" toggle it gated) was removed 2026-07-18 —
+   * the plain Chart tab never renders footprint (see ChartTab.tsx's header
+   * comment). Kept optional on the prop type only so existing callers
+   * (ArenaToolbar.tsx) don't need to change.
    */
   assetClass?: string;
 }
 
-type DialogTabId = 'candles' | 'canvas' | 'scales' | 'time' | 'orderflow';
+type DialogTabId = 'candles' | 'canvas' | 'scales' | 'time';
 
 const TABS: { id: DialogTabId; label: string }[] = [
   { id: 'candles', label: 'Candles' },
   { id: 'canvas', label: 'Canvas' },
   { id: 'scales', label: 'Scales & Lines' },
   { id: 'time', label: 'Time' },
-  { id: 'orderflow', label: 'Order Flow' },
 ];
 
 const CROSSHAIR_OPTIONS: { value: CrosshairStyle; label: string }[] = [
@@ -122,7 +126,7 @@ function ToggleSwitch({ active, onClick, label, disabled }: { active: boolean; o
   );
 }
 
-export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, onReset, assetClass }: ChartSettingsDialogProps) {
+export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, onReset }: ChartSettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<DialogTabId>('candles');
 
   const activeBackgroundPresetId = BACKGROUND_PRESETS.find(
@@ -368,22 +372,6 @@ export function ChartSettingsDialog({ open, onOpenChange, settings, onChange, on
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'orderflow' && (
-              <div className="flex flex-col gap-1">
-                <FieldRow label="Auto-transform to footprint">
-                  <ToggleSwitch
-                    active={settings.footprintOnZoom}
-                    disabled={assetClass !== undefined && assetClass !== 'crypto'}
-                    onClick={() => onChange({ footprintOnZoom: !settings.footprintOnZoom })}
-                    label={settings.footprintOnZoom ? 'On' : 'Off'}
-                  />
-                </FieldRow>
-                {assetClass !== undefined && assetClass !== 'crypto' && (
-                  <div className="text-[10px] text-[#707070]">Requires tick data</div>
-                )}
               </div>
             )}
           </div>

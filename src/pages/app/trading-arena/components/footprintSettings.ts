@@ -32,11 +32,11 @@ export type { FootprintColorScheme, FootprintLayout };
 export type FootprintRowSizeMode = 'auto' | 'price' | 'ticks';
 
 /**
- * ATAS "Candle width to auto transform" default (CSS px) — shared by both
- * the Footprint tab's own autoTransform toggle (below) and ChartTab's
- * `footprintOnZoom` opt-in bridge (chartStyleSettings.ts), which reuses this
- * constant directly rather than exposing a second independently-configurable
- * threshold on that tab (spec: "a single shared constant is fine").
+ * ATAS "Candle width to auto transform" default (CSS px) — used by the
+ * Footprint tab's own autoTransform toggle (below). Formerly also reused by
+ * ChartTab's `footprintOnZoom` opt-in bridge (chartStyleSettings.ts); that
+ * bridge was removed 2026-07-18 (the plain Chart tab never renders
+ * footprint), so this constant is Footprint-tab-only again.
  */
 export const DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX = 20;
 export const FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE = { min: 8, max: 60 } as const;

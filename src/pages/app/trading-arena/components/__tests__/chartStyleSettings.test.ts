@@ -43,9 +43,11 @@ describe('DEFAULT_CHART_STYLE', () => {
     expect(DEFAULT_CHART_STYLE.timezone).toBe('local');
     expect(DEFAULT_CHART_STYLE.pricePrecision).toBe('default');
 
-    // Session Volume Profile + footprint-on-zoom (S1 "Arena WOW week")
+    // Session Volume Profile
     expect(DEFAULT_CHART_STYLE.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
-    expect(DEFAULT_CHART_STYLE.footprintOnZoom).toBe(true);
+    // footprintOnZoom is a dead/deprecated field (Chart tab footprint bridge
+    // removed 2026-07-18) — defaults to false, has no effect on rendering.
+    expect(DEFAULT_CHART_STYLE.footprintOnZoom).toBe(false);
   });
 
   it('candle default is exactly the "classic" preset', () => {
@@ -157,7 +159,8 @@ describe('sanitizeChartStyleSettings', () => {
   it('degrades a corrupt/foreign nested volumeProfile object to defaults instead of throwing', () => {
     const result = sanitizeChartStyleSettings({ volumeProfile: 'not-an-object', footprintOnZoom: 'yes' });
     expect(result.volumeProfile).toEqual(DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS);
-    expect(result.footprintOnZoom).toBe(true);
+    // 'yes' is not a boolean — degrades to the fallback (DEFAULT_CHART_STYLE.footprintOnZoom = false).
+    expect(result.footprintOnZoom).toBe(false);
   });
 });
 
