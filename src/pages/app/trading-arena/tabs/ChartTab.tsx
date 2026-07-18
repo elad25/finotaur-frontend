@@ -55,6 +55,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import {
   pickDataSource,
@@ -68,6 +69,7 @@ import {
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
 import type { ChartDataSource, Indicator } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
+import { useBacktestSession } from '@/hooks/useBacktestSession';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
@@ -217,6 +219,157 @@ function DelayedDataBadge() {
   );
 }
 
+// ── Chart right-click Buy/Sell/Settings menu ────────────────────────────
+// Replaces the browser context menu over the chart pane (see FinotaurChart's
+// onChartContextMenu prop). Order actions route into the SAME lifted
+// 'arena-paper' session the PaperTradeRail uses, at the rail's current qty.
+type ContextOrderType = 'MARKET' | 'LIMIT' | 'STOP';
+
+function formatMenuPrice(p: number): string {
+  if (p >= 1) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return p.toPrecision(4);
+}
+
+/** Rounds a raw coordinateToPrice float to an order-friendly precision. */
+function roundOrderPrice(p: number): number {
+  if (p >= 1) return Math.round(p * 100) / 100;
+  return Number(p.toPrecision(4));
+}
+
+const MENU_WIDTH = 200;
+
+function ChartContextMenu({
+  x,
+  y,
+  price,
+  qty,
+  tradingEnabled,
+  livePrice,
+  onOrder,
+  onOpenSettings,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  price: number | null;
+  qty: number;
+  tradingEnabled: boolean;
+  livePrice: number | null;
+  onOrder: (side: 'LONG' | 'SHORT', type: ContextOrderType) => void;
+  onOpenSettings?: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const priceLabel = price != null ? formatMenuPrice(price) : null;
+  const marketEnabled = tradingEnabled && livePrice != null;
+  const atPriceEnabled = tradingEnabled && price != null;
+
+  const itemClass = (enabled: boolean, tone: 'buy' | 'sell' | 'neutral') =>
+    cn(
+      'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-[12px] font-semibold transition-colors',
+      enabled
+        ? tone === 'buy'
+          ? 'text-[#22c55e] hover:bg-[rgba(34,197,94,0.10)]'
+          : tone === 'sell'
+            ? 'text-[#ef4444] hover:bg-[rgba(239,68,68,0.10)]'
+            : 'text-[#E8E8E8] hover:bg-[rgba(255,255,255,0.06)]'
+        : 'cursor-not-allowed text-[#4a4a4a]',
+    );
+
+  // Clamp inside the viewport so the menu never opens half off-screen.
+  const left = Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - MENU_WIDTH - 8);
+  const top = Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 330);
+
+  return (
+    <>
+      {/* Backdrop — swallows the next click/right-click and closes. */}
+      <div
+        className="fixed inset-0 z-[9998]"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+        aria-hidden="true"
+      />
+      <div
+        role="menu"
+        aria-label="Chart actions"
+        className="fixed z-[10000] flex flex-col rounded-lg border py-1 shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
+        style={{ left, top, width: MENU_WIDTH, background: '#0D0D0F', borderColor: 'rgba(201,166,70,0.25)' }}
+      >
+        {(['MARKET', 'LIMIT', 'STOP'] as const).map((type) => {
+          const enabled = type === 'MARKET' ? marketEnabled : atPriceEnabled;
+          return (
+            <button
+              key={`buy-${type}`}
+              type="button"
+              role="menuitem"
+              disabled={!enabled}
+              onClick={() => enabled && onOrder('LONG', type)}
+              className={itemClass(enabled, 'buy')}
+            >
+              <span>
+                {type === 'MARKET' ? `Buy Market · ${qty}` : type === 'LIMIT' ? 'Buy Limit' : 'Buy Stop'}
+              </span>
+              {type !== 'MARKET' && priceLabel && (
+                <span className="tabular-nums text-[11px] font-medium text-[#909090]">{priceLabel}</span>
+              )}
+            </button>
+          );
+        })}
+
+        <div className="my-1 h-px" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+        {(['MARKET', 'LIMIT', 'STOP'] as const).map((type) => {
+          const enabled = type === 'MARKET' ? marketEnabled : atPriceEnabled;
+          return (
+            <button
+              key={`sell-${type}`}
+              type="button"
+              role="menuitem"
+              disabled={!enabled}
+              onClick={() => enabled && onOrder('SHORT', type)}
+              className={itemClass(enabled, 'sell')}
+            >
+              <span>
+                {type === 'MARKET' ? `Sell Market · ${qty}` : type === 'LIMIT' ? 'Sell Limit' : 'Sell Stop'}
+              </span>
+              {type !== 'MARKET' && priceLabel && (
+                <span className="tabular-nums text-[11px] font-medium text-[#909090]">{priceLabel}</span>
+              )}
+            </button>
+          );
+        })}
+
+        {onOpenSettings && (
+          <>
+            <div className="my-1 h-px" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onClose();
+                onOpenSettings();
+              }}
+              className={itemClass(true, 'neutral')}
+            >
+              Settings…
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 export function ChartTab({
   symbol,
   interval,
@@ -243,6 +396,17 @@ export function ChartTab({
   // practice — ChartTab only ever renders inside it — but keeps this
   // component safe to unit-test/render in isolation).
   const chartStyle = useContext(ChartStyleContext) ?? DEFAULT_CHART_STYLE;
+
+  // Lifted paper-trading session — shared by the PaperTradeRail AND the
+  // chart's right-click Buy/Sell menu so both act on the same 'arena-paper'
+  // session (mirror of DomTab's lift; balance mirrors the rail's internal
+  // PAPER_BALANCE). The rail's own internal hook instance goes unused when
+  // this is passed — see PaperTradeRail.tsx's header comment.
+  const paperSession = useBacktestSession(100_000, 'arena-paper');
+  // Order qty shared between the rail's stepper and the context menu.
+  const [orderQty, setOrderQty] = useState(1);
+  // Right-click chart menu (viewport coords + series price at the click).
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; price: number | null } | null>(null);
 
   // Session Volume Profile render settings — pure derivation, memoized so
   // FinotaurChart/SessionVolumeProfileLayer's recompute-gating (keyed on
@@ -386,6 +550,21 @@ export function ChartTab({
     };
   }, [isDraggingRail]);
 
+  // Context-menu order routing — MARKET fills at the live tick (same as the
+  // rail's Buy/Sell Mkt buttons); LIMIT/STOP become pending orders at the
+  // right-clicked price, filled by the rail's live-tick engine.
+  const handleContextOrder = (side: 'LONG' | 'SHORT', type: ContextOrderType) => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (type === 'MARKET') {
+      if (livePrice != null) {
+        paperSession.openPosition({ side, price: livePrice, time: nowSec, size: orderQty, entryOrderType: 'MARKET' });
+      }
+    } else if (ctxMenu?.price != null) {
+      paperSession.addPendingOrder({ side, type, triggerPrice: roundOrderPrice(ctxMenu.price), size: orderQty, time: nowSec });
+    }
+    setCtxMenu(null);
+  };
+
   return (
     <div className="flex flex-1 min-h-0 w-full" onDoubleClick={onOpenSettings}>
       {/* Chart pane */}
@@ -403,6 +582,7 @@ export function ChartTab({
           />
           <FinotaurChart
             hideCursor
+            onChartContextMenu={(info) => setCtxMenu({ x: info.clientX, y: info.clientY, price: info.price })}
             symbol={chartSymbol}
             interval={chartInterval}
             from={from}
@@ -441,8 +621,25 @@ export function ChartTab({
           enabled={isCrypto}
           disabledTitle="Live order entry unavailable"
           disabledDescription="Switch to a crypto symbol to enable paper trading on the chart."
+          session={paperSession}
+          qty={orderQty}
+          onQtyChange={setOrderQty}
         />
       </div>
+
+      {ctxMenu && (
+        <ChartContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          price={ctxMenu.price}
+          qty={orderQty}
+          tradingEnabled={isCrypto}
+          livePrice={livePrice}
+          onOrder={handleContextOrder}
+          onOpenSettings={onOpenSettings}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }
