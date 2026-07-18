@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ds/Button";
 import { Wordmark } from "@/components/ds/Wordmark";
-import { BetaOfferBanner } from "@/components/promo/BetaOfferBanner";
+import PromoOfferChip from "@/components/PromoOfferChip";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -62,7 +62,6 @@ const Navbar = () => {
         isScrolled && "bg-black/85"
       )}
     >
-      <BetaOfferBanner variant="landing" />
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -89,6 +88,8 @@ const Navbar = () => {
 
           {/* Auth Buttons — Desktop */}
           <div className="hidden lg:flex items-center space-x-3">
+            {/* 🎁 Promo offer chip — BETA100 founding-beta offer for ad traffic */}
+            <PromoOfferChip audience="landing" />
             <button
               onClick={() => navigate('/auth/login')}
               className="text-[12px] font-sans uppercase tracking-[0.14em] font-medium text-white/80 hover:text-white transition-colors duration-300"
