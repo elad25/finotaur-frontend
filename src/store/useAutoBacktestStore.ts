@@ -61,6 +61,13 @@ export interface AutoBacktestState {
   savedRuns: SavedRun[];
   /** Index into result.trades of the highlighted trade (or null). */
   selectedTradeIndex: number | null;
+  /**
+   * Id of the SavedRun backing the current `result` (set right after a run
+   * completes or a saved run is loaded). Used as the deterministic run
+   * identifier for journal-save idempotency (`autobt_<runId>_<index>`).
+   * `null` when no run has completed/loaded yet.
+   */
+  lastRunId: string | null;
 }
 
 export interface AutoBacktestActions {
@@ -143,6 +150,7 @@ const initialState: AutoBacktestState = {
   savedSetups: [],
   savedRuns: [],
   selectedTradeIndex: null,
+  lastRunId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -351,6 +359,9 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
             from,
             to,
           });
+          set((state) => {
+            state.lastRunId = run.id;
+          });
           const saveResult = await saveRun(run);
           if (saveResult.ok && saveResult.storage === 'local') {
             toast.warning('Run saved locally only — cloud sync failed');
@@ -436,6 +447,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.error = null;
           state.progress = { scanned: 0, total: 0, found: 0 };
           state.selectedTradeIndex = null;
+          state.lastRunId = found.id;
         });
       },
 
@@ -477,6 +489,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.result = null;
           state.error = null;
           state.selectedTradeIndex = null;
+          state.lastRunId = null;
           // Keep currentSetup and saved library intact.
         });
       },
@@ -509,3 +522,4 @@ export const selectSavedSetups = (s: AutoBacktestStore) => s.savedSetups;
 export const selectSavedRuns = (s: AutoBacktestStore) => s.savedRuns;
 export const selectSelectedTradeIndex = (s: AutoBacktestStore) =>
   s.selectedTradeIndex;
+export const selectAutoRunId = (s: AutoBacktestStore) => s.lastRunId;

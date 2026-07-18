@@ -50,7 +50,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { backtestStatsKeys } from '@/hooks/useBacktestStats';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
-import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
+import { BacktestReplayChart, type ContextMenuPriceInfo, type HandoffContext } from './BacktestReplayChart';
 import { DateTimePicker } from './DateTimePicker';
 import { SymbolAutocomplete } from './SymbolAutocomplete';
 import { detectAssetClass, sanitizeSourceSymbol, type AssetClass } from './symbolUniverse';
@@ -317,6 +317,18 @@ export interface BacktestChartProps {
    *  Applied once on mount via setCommissionConfig so the session reflects
    *  the user's execution settings from the very first trade. */
   initialCommissionConfig?: CommissionConfig;
+  /**
+   * "Inspect in Replay" handoff support: unix-seconds moment to open the
+   * replay at (becomes the initial replayStartTime) instead of the default
+   * "now − 4h". Undefined preserves normal session-creation behavior.
+   */
+  initialReplayStartTime?: number;
+  /**
+   * "Inspect in Replay" handoff support: the originating detection zone /
+   * armed signal to draw as read-only context annotations on the chart.
+   * Undefined = no annotations (normal session flow, byte-identical).
+   */
+  handoffContext?: HandoffContext;
 }
 
 export function BacktestChart({
@@ -326,6 +338,8 @@ export function BacktestChart({
   sessionId,
   theme = 'dark',
   initialCommissionConfig,
+  initialReplayStartTime,
+  handoffContext,
 }: BacktestChartProps) {
   const [symbol, setSymbol] = useState(() => sanitizeSourceSymbol(initialSymbol));
   // Asset class is derived from the symbol — no separate user control.
@@ -435,8 +449,11 @@ export function BacktestChart({
   const [contextMenu, setContextMenu] = useState<ContextMenuPriceInfo | null>(null);
 
   // Phase 4: replay start moment. Defaults to "now − 4 hours" so the trader
-  // immediately sees recent history with room to PLAY forward.
+  // immediately sees recent history with room to PLAY forward. When arriving
+  // via an "Inspect in Replay" handoff, initialReplayStartTime (unix seconds)
+  // positions the cursor at the originating trade's setup bar instead.
   const [replayStart, setReplayStart] = useState<Date>(() => {
+    if (initialReplayStartTime != null) return new Date(initialReplayStartTime * 1000);
     const now = new Date();
     return new Date(now.getTime() - 4 * 60 * 60 * 1000);
   });
@@ -1231,6 +1248,7 @@ export function BacktestChart({
             onUpdateTP={updateTakeProfit}
             onUpdatePendingPrice={(orderId, price) => updatePendingRisk(orderId, { triggerPrice: price })}
             onUpdateTpLeg={updateTpLeg}
+            handoffContext={handoffContext}
           />
           {/* Right rail — PlaceOrderPanel + open-position card + Save to journal */}
           <div className="absolute right-0 top-0 bottom-0 z-30 w-80 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]/95 p-3 flex flex-col gap-3">

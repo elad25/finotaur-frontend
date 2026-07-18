@@ -8,6 +8,11 @@ import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
 import type { BacktestSession } from "@/types/backtestSession";
 import type { CommissionConfig } from "@/lib/backtest/orderEngine";
 import type { ReplayHandoff } from "@/core/auto/replayBridge";
+import {
+  deriveAssetTypeFromSymbol,
+  resolveHandoffStartBalance,
+  focusTimeToReplayStartSeconds,
+} from "@/lib/backtest/replayHandoffMapping";
 import { Button } from "@/components/ui/button";
 import {
   Plus, History, LineChart, BookOpen, Share2, Clock,
@@ -63,10 +68,22 @@ function msToIsoDate(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Read-only chart annotations carried over from an "Inspect in Replay" handoff. */
+interface PendingHandoffContext {
+  /** Unix seconds — positions the replay cursor at the trade's setup bar. */
+  initialReplayStartTime?: number;
+  /** Detection zone / signal to draw on the chart (see BacktestChart props). */
+  handoffContext?: {
+    detection?: ReplayHandoff["detection"];
+    signal?: ReplayHandoff["signal"];
+  };
+}
+
 export default function Chart() {
   const [isImmersiveMode, setIsImmersiveMode] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingCommissionConfig, setPendingCommissionConfig] = useState<CommissionConfig | undefined>(undefined);
+  const [pendingHandoffContext, setPendingHandoffContext] = useState<PendingHandoffContext | undefined>(undefined);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -87,9 +104,17 @@ export default function Chart() {
     };
   }, []);
 
-  const enterSession = (session: BacktestSession, commissionConfig?: CommissionConfig) => {
+  const enterSession = (
+    session: BacktestSession,
+    commissionConfig?: CommissionConfig,
+    handoffContext?: PendingHandoffContext,
+  ) => {
     setActiveSession(session.id);
     setPendingCommissionConfig(commissionConfig);
+    // Reset to undefined on every entry (not just handoff-originated ones) so a
+    // normal "Open session" click after a handoff-originated one doesn't carry
+    // over the previous session's cursor/annotation context.
+    setPendingHandoffContext(handoffContext);
     setIsImmersiveMode(true);
   };
 
@@ -102,10 +127,10 @@ export default function Chart() {
 
     const session = createSession({
       name: `Replay: ${handoff.symbol} ${handoff.timeframe} ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
-      assetType: "crypto",
+      assetType: deriveAssetTypeFromSymbol(handoff.symbol),
       symbol: handoff.symbol,
       timeframe: handoff.timeframe || "1m",
-      startBalance: 10000,
+      startBalance: resolveHandoffStartBalance(handoff.initialBalance),
       leverage: 1,
       dateRange: {
         from: msToIsoDate(handoff.windowFrom),
@@ -113,7 +138,13 @@ export default function Chart() {
       },
     });
 
-    enterSession(session);
+    enterSession(session, undefined, {
+      initialReplayStartTime: focusTimeToReplayStartSeconds(handoff.focusTime),
+      handoffContext: {
+        detection: handoff.detection,
+        signal: handoff.signal,
+      },
+    });
 
     // Clear the router state so a refresh doesn't re-create the session.
     navigate(location.pathname, { replace: true, state: null });
@@ -148,6 +179,8 @@ export default function Chart() {
             initialInterval={activeSession?.timeframe as Interval}
             startingBalance={activeSession?.startBalance}
             initialCommissionConfig={pendingCommissionConfig}
+            initialReplayStartTime={pendingHandoffContext?.initialReplayStartTime}
+            handoffContext={pendingHandoffContext?.handoffContext}
           />
         </div>
       </div>

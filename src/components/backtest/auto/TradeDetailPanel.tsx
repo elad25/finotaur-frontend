@@ -20,6 +20,8 @@ import {
 import type { AutoPosition } from '@/core/auto/signalToPosition';
 import type { Detection } from '@/core/auto/types';
 import type { ReplayHandoff } from '@/core/auto/replayBridge';
+import { TradeChart } from '@/components/journal/TradeChart';
+import { autoPositionToTradeChartTrade, mapTimeframeToInterval } from './tradeChartAdapter';
 
 function fmtTime(sec?: number): string {
   if (!sec) return '—';
@@ -67,6 +69,12 @@ export function TradeDetailPanel() {
   const pnl = trade.realizedPnl ?? 0;
   const pnlTone = pnl > 0 ? 'text-emerald-500' : pnl < 0 ? 'text-num-negative' : 'text-ink-primary';
 
+  // Candle chart with entry/exit markers + SL/TP lines — chart against the
+  // run's instrument, not AutoPosition.symbol (which often carries the
+  // detection's 'AUTO' meta placeholder rather than a chartable symbol).
+  const chartTrade = autoPositionToTradeChartTrade(trade, setup.instrument.symbol);
+  const chartDefaultInterval = mapTimeframeToInterval(setup.instrument.timeframe);
+
   const handleInspect = () => {
     // Trade times are in SECONDS (journal convention). The handoff carries ms.
     const entryMs = trade.entryTime * 1000;
@@ -82,6 +90,25 @@ export function TradeDetailPanel() {
       windowTo: exitMs + padMs,
       focusTime: entryMs,
       ...(detection ? { detection } : {}),
+      // Signal requires a `detection` (TradeSignal.detection is non-optional)
+      // — only include it when we have one. armIndex/orderType/validForBars
+      // come from the run's own setup rules (per TradeSignal.armIndex's doc
+      // comment: "== detection.formedAtIndex"), not fabricated.
+      ...(detection
+        ? {
+            signal: {
+              detection,
+              direction: trade.type,
+              armIndex: detection.formedAtIndex,
+              entryPrice: trade.entryPrice,
+              orderType: setup.entry.orderType,
+              stopLoss: trade.stopLoss,
+              takeProfit: trade.takeProfit,
+              validForBars: setup.entry.validForBars,
+            },
+          }
+        : {}),
+      initialBalance: setup.risk.initialBalance,
     };
 
     // Consumed by useBacktestStore.loadHandoff on the manual replay surface.
@@ -104,6 +131,15 @@ export function TradeDetailPanel() {
         >
           {trade.type}
         </span>
+      </div>
+
+      <div className="mb-5">
+        <TradeChart
+          trade={chartTrade}
+          height={380}
+          showTimeframeSwitcher
+          defaultInterval={chartDefaultInterval}
+        />
       </div>
 
       <div className="grid gap-x-6 sm:grid-cols-2">

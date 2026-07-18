@@ -41,6 +41,7 @@ import dayjs from 'dayjs';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
 import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
+import type { Detection, TradeSignal } from '@/core/auto/types';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { PositionBox, type PositionBoxModel } from '@/components/charting/PositionBox';
 import { ReplayControls } from './ReplayControls';
@@ -168,6 +169,16 @@ function writeDrawingPrefs(prefs: DrawingPrefs): void {
   } catch { /* storage full or unavailable */ }
 }
 
+/**
+ * Read-only chart annotations carried over from an "Inspect in Replay"
+ * handoff (see @/core/auto/replayBridge ReplayHandoff). Drawn as chart price
+ * lines only — never persisted into drawings2 localStorage, never draggable.
+ */
+export interface HandoffContext {
+  detection?: Detection;
+  signal?: TradeSignal;
+}
+
 export interface ContextMenuPriceInfo {
   /** Price the user right-clicked at (computed from screen Y via priceScale). */
   price: number;
@@ -244,6 +255,12 @@ export interface BacktestReplayChartProps {
   onUpdatePendingPrice?: (orderId: string, price: number) => void;
   /** Phase 7: called when user drags a multi-leg TP line to a new price. */
   onUpdateTpLeg?: (legId: string, price: number) => void;
+  /**
+   * Read-only context annotations from an "Inspect in Replay" handoff — the
+   * originating pattern zone + armed signal. Undefined = no annotations
+   * (normal session flow, unchanged rendering).
+   */
+  handoffContext?: HandoffContext;
 }
 
 type LoadState =
@@ -275,6 +292,7 @@ export function BacktestReplayChart({
   onUpdateTP,
   onUpdatePendingPrice,
   onUpdateTpLeg,
+  handoffContext,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -290,6 +308,10 @@ export function BacktestReplayChart({
   const setCursorRef = useRef<((c: number) => void) | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const positionLineRef = useRef<IPriceLine | null>(null);
+  // Read-only "Inspect in Replay" handoff annotations (zone top/bottom,
+  // entry/SL/TP) — separate from priceLinesRef (pending orders) so the two
+  // don't clobber each other's map keys.
+  const handoffLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Replay cursor overlay state ─────────────────────────────
@@ -954,6 +976,10 @@ export function BacktestReplayChart({
         jumpTimerRef.current = null;
       }
       priceLinesRef.current.clear();
+      // Series is being destroyed with the chart — the handoff annotation
+      // lines go with it; just drop the stale references (no removePriceLine
+      // needed, the series itself is gone).
+      handoffLinesRef.current.clear();
       // Destroy the drawings controller (unsubscribes + detaches all primitives).
       drawingControllerRef.current?.destroy();
       drawingControllerRef.current = null;
@@ -1130,6 +1156,87 @@ export function BacktestReplayChart({
       }
     };
   }, [activePosition]);
+
+  // ─── Handoff context annotations (Inspect-in-Replay) ─────────────
+  // Read-only price lines for the originating detection zone + armed signal
+  // carried over from the automated backtest. Purely visual — NOT draggable,
+  // NOT persisted into drawings2 localStorage, and independent of the
+  // trading/order price-line effects above. Gated on load.kind === 'ready'
+  // (in addition to `bars`) so it also fires once the chart/series are
+  // actually created, not just when `handoffContext` itself changes — the
+  // prop is set once from a router-state handoff and won't change again
+  // during the component's lifetime, so relying on its identity alone would
+  // miss the case where the chart is still loading on first mount.
+  useEffect(() => {
+    if (load.kind !== 'ready') return;
+    const series = seriesRef.current;
+    if (!series) return;
+    const lines = handoffLinesRef.current;
+
+    // Clear any previously-drawn handoff lines before redrawing.
+    for (const line of lines.values()) series.removePriceLine(line);
+    lines.clear();
+
+    if (!handoffContext) return;
+    const { detection, signal } = handoffContext;
+
+    if (detection?.zone) {
+      const zoneColor = detection.direction === 'short' ? NT_STOP_COLOR : NT_LIMIT_COLOR;
+      lines.set('zoneTop', series.createPriceLine({
+        price: detection.zone.top,
+        color: zoneColor,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        lineVisible: true,
+        axisLabelVisible: true,
+        title: `${detection.patternType} ZONE TOP`,
+      }));
+      lines.set('zoneBottom', series.createPriceLine({
+        price: detection.zone.bottom,
+        color: zoneColor,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        lineVisible: true,
+        axisLabelVisible: true,
+        title: `${detection.patternType} ZONE BOTTOM`,
+      }));
+    }
+
+    if (signal) {
+      lines.set('entry', series.createPriceLine({
+        price: signal.entryPrice,
+        color: THEME.brandGold,
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        lineVisible: true,
+        axisLabelVisible: true,
+        title: 'ENTRY',
+      }));
+      lines.set('stopLoss', series.createPriceLine({
+        price: signal.stopLoss,
+        color: THEME.candleDown,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        lineVisible: true,
+        axisLabelVisible: true,
+        title: 'SL',
+      }));
+      lines.set('takeProfit', series.createPriceLine({
+        price: signal.takeProfit,
+        color: THEME.candleUp,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        lineVisible: true,
+        axisLabelVisible: true,
+        title: 'TP',
+      }));
+    }
+
+    return () => {
+      for (const line of lines.values()) series.removePriceLine(line);
+      lines.clear();
+    };
+  }, [handoffContext, load.kind, bars]);
 
   // ─── Replay cursor X: recompute on every cursor/bar advance ─
   useEffect(() => {

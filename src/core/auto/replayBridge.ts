@@ -33,4 +33,11 @@ export interface ReplayHandoff {
   detection?: Detection;
   /** Armed signal behind the trade (for optional entry/SL/TP overlay). */
   signal?: TradeSignal;
+  /**
+   * Starting balance the automated run used (RiskConfig.initialBalance), so
+   * the manual replay session opens with the same account size instead of
+   * the generic $10,000 default. Populated by TradeDetailPanel's
+   * handleInspect from `setup.risk.initialBalance`.
+   */
+  initialBalance?: number;
 }

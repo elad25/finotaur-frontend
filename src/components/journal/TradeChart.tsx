@@ -15,11 +15,11 @@
  *   - Cache (Edge Function + chart_bars_cache table handle it server-side)
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, TrendingUp, X } from 'lucide-react';
-import type { UTCTimestamp } from 'lightweight-charts';
+import { LineStyle, type UTCTimestamp } from 'lightweight-charts';
 
-import { FinotaurChart, type MarkerIcon } from '@/components/charting/FinotaurChart';
+import { FinotaurChart, type MarkerIcon, type OverlayPriceLine } from '@/components/charting/FinotaurChart';
 import {
   pickDataSource,
   pickInterval,
@@ -34,7 +34,7 @@ import { isIntradayInterval } from '@/components/charting/indicators';
 import { IndicatorToolbar } from '@/components/charting/IndicatorToolbar';
 import { useIndicatorPreferences } from '@/components/charting/useIndicatorPreferences';
 import { useChartTheme } from '@/components/charting/useChartTheme';
-import type { ChartMarker, Indicator } from '@/components/charting/types';
+import type { ChartMarker, Indicator, Interval } from '@/components/charting/types';
 import { INDICATOR_PERIODS } from '@/components/charting/types';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
@@ -51,7 +51,26 @@ export interface TradeChartTrade {
   outcome?: 'WIN' | 'LOSS' | 'BE' | 'OPEN' | null;
   pnl?: number | null;
   asset_class?: string | null;
+  /**
+   * Optional stop-loss / take-profit levels. When either is present, TradeChart
+   * draws horizontal price lines on the candle series (SL red dashed, TP green
+   * dashed, plus a gold solid "Entry" line for context). Omitted (the default
+   * for every existing caller — journal TradeDetail/MyTrades/SharedTradeCard)
+   * is a complete no-op: zero lines drawn, identical to current behavior.
+   */
+  stopLoss?: number | null;
+  takeProfit?: number | null;
 }
+
+/** Compact intraday→daily timeframe set offered by the optional TF switcher. */
+const TIMEFRAME_OPTIONS: ReadonlyArray<{ label: string; value: Interval }> = [
+  { label: '1m', value: '1m' },
+  { label: '5m', value: '5m' },
+  { label: '15m', value: '15m' },
+  { label: '1h', value: '1h' },
+  { label: '4h', value: '4h' },
+  { label: '1d', value: '1d' },
+];
 
 interface TradeChartProps {
   trade: TradeChartTrade;
@@ -65,6 +84,26 @@ interface TradeChartProps {
   onToggleTheme?: () => void;
   fullscreen?: boolean;
   onFullscreenChange?: (open: boolean) => void;
+  /**
+   * Inline (non-controlled) chart height. Only applies when `theme`/
+   * `onToggleTheme`/`onFullscreenChange` are NOT supplied (controlled mode
+   * already fills its parent via `flex-1`). Default 640 preserves the
+   * pre-existing fixed `h-[640px]` for every caller that doesn't pass this.
+   */
+  height?: number | string;
+  /**
+   * Renders a compact 1m/5m/15m/1h/4h/1d pill row that overrides the
+   * auto-picked interval and refetches candles at the chosen timeframe.
+   * Default false — zero UI change for every existing caller.
+   */
+  showTimeframeSwitcher?: boolean;
+  /**
+   * Seeds the timeframe switcher's initial selection (e.g. the backtest
+   * run's execution timeframe) instead of the trade-duration auto-pick.
+   * Resets to this value whenever `trade` changes. No effect when
+   * `showTimeframeSwitcher` is false.
+   */
+  defaultInterval?: Interval;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -256,11 +295,14 @@ function ChartBody({
   height,
   indicators,
   theme,
+  intervalOverride,
 }: {
   trade: TradeChartTrade;
   height: number | string;
   indicators?: Indicator[];
   theme: 'light' | 'dark';
+  /** When provided (TF switcher), used instead of the trade-duration auto-pick. */
+  intervalOverride?: Interval;
 }) {
   // Resolve symbol once per render — pure function of raw symbol
   const isCrypto = useMemo(() => isCryptoSymbol(trade.symbol ?? ''), [trade.symbol]);
@@ -279,8 +321,47 @@ function ChartBody({
   );
 
   const window = useMemo(() => computeWindow(trade), [trade]);
-  const interval = useMemo(() => pickInterval(window.durationMs), [window.durationMs]);
+  const interval = useMemo(
+    () => intervalOverride ?? pickInterval(window.durationMs),
+    [intervalOverride, window.durationMs],
+  );
   const { markers, markerIcons } = useMemo(() => tradeToMarkers(trade), [trade]);
+
+  // SL/TP/Entry overlay price lines — no-op (empty array) unless the caller
+  // supplies stopLoss/takeProfit on the trade (see TradeChartTrade doc comment).
+  const priceLines = useMemo<OverlayPriceLine[]>(() => {
+    if (trade.stopLoss == null && trade.takeProfit == null) return [];
+    const lines: OverlayPriceLine[] = [];
+    if (trade.stopLoss != null) {
+      lines.push({
+        id: 'sl',
+        price: trade.stopLoss,
+        title: 'SL',
+        color: '#dc2626',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+      });
+    }
+    if (trade.takeProfit != null) {
+      lines.push({
+        id: 'tp',
+        price: trade.takeProfit,
+        title: 'TP',
+        color: '#22c55e',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+      });
+    }
+    lines.push({
+      id: 'entry-line',
+      price: trade.entry_price,
+      title: 'Entry',
+      color: '#eab308',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+    });
+    return lines;
+  }, [trade.stopLoss, trade.takeProfit, trade.entry_price]);
 
   // Route to the right source based on the raw broker symbol (router knows crypto vs equity)
   // For Databento-cached futures, wrap in a Yahoo fallback so recently-
@@ -371,6 +452,7 @@ function ChartBody({
       theme={theme}
       focusRange={focusRange}
       height={height}
+      priceLines={priceLines}
     />
   );
 }
@@ -436,9 +518,53 @@ function MarkerChips({ trade }: { trade: TradeChartTrade }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Timeframe switcher — compact pill row, mirrors IndicatorToolbar's Chip
+// styling. Optional (showTimeframeSwitcher) — no-op UI when unused.
+// ═══════════════════════════════════════════════════════════════
+function TimeframeSwitcher({
+  value,
+  onChange,
+}: {
+  value: Interval;
+  onChange: (next: Interval) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {TIMEFRAME_OPTIONS.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            aria-pressed={active}
+            className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
+              active
+                ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-300'
+                : 'border-zinc-700/60 bg-zinc-900/40 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main component
 // ═══════════════════════════════════════════════════════════════
-export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreenProp, onFullscreenChange }: TradeChartProps) {
+export function TradeChart({
+  trade,
+  theme,
+  onToggleTheme,
+  fullscreen: fullscreenProp,
+  onFullscreenChange,
+  height,
+  showTimeframeSwitcher = false,
+  defaultInterval,
+}: TradeChartProps) {
   const controlled = theme !== undefined && !!onToggleTheme && !!onFullscreenChange;
   const [localFullscreen, setLocalFullscreen] = useState(false);
   const [localTheme] = useChartTheme('light');
@@ -450,7 +576,17 @@ export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreen
   // Interval is the same calculation ChartBody does internally — recomputed
   // here so the toolbar can gate VWAP on intraday intervals only.
   const window = useMemo(() => computeWindow(trade), [trade]);
-  const interval = useMemo(() => pickInterval(window.durationMs), [window.durationMs]);
+  const autoInterval = useMemo(() => pickInterval(window.durationMs), [window.durationMs]);
+
+  // Manual TF-pill override. Resets to null (→ falls back to defaultInterval
+  // / autoInterval) whenever a different trade is selected, so switching
+  // trades in a list never carries a stale manual pick forward.
+  const [manualInterval, setManualInterval] = useState<Interval | null>(null);
+  useEffect(() => {
+    setManualInterval(null);
+  }, [trade.symbol, trade.open_at]);
+  const interval = manualInterval ?? defaultInterval ?? autoInterval;
+  const chartHeight = height ?? 640;
 
   const indicators = useMemo<Indicator[]>(() => {
     const list: Indicator[] = [];
@@ -481,12 +617,15 @@ export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreen
   return (
     <div className={`rounded-xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-3 sm:p-4 shadow-2xl ${controlled ? 'flex h-full w-full flex-col' : ''}`}>
       {!controlled && (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-300">
             <TrendingUp className="h-5 w-5" />
             Price Chart
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {showTimeframeSwitcher && (
+              <TimeframeSwitcher value={interval} onChange={setManualInterval} />
+            )}
             <button
               type="button"
               onClick={() => setFullscreen(true)}
@@ -500,8 +639,11 @@ export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreen
         </div>
       )}
 
-      <div className={`w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl ${controlled ? 'min-h-0 flex-1' : 'h-[640px]'}`}>
-        <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
+      <div
+        className={`w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl ${controlled ? 'min-h-0 flex-1' : ''}`}
+        style={controlled ? undefined : { height: typeof chartHeight === 'number' ? `${chartHeight}px` : chartHeight }}
+      >
+        <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} intervalOverride={interval} />
       </div>
 
       <div className="mt-4">
@@ -511,19 +653,24 @@ export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreen
       <Dialog open={fullscreen} onOpenChange={setFullscreen}>
         <DialogContent className="flex h-[95vh] w-[95vw] max-w-none flex-col gap-3 border-zinc-700 bg-zinc-950 p-4">
           <DialogTitle className="sr-only">{trade.symbol} chart</DialogTitle>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-200">
               <TrendingUp className="h-5 w-5" />
               {trade.symbol} · Price Chart
             </div>
-            <IndicatorToolbar
-              settings={indicatorSettings}
-              onChange={setIndicatorSettings}
-              interval={interval}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              {showTimeframeSwitcher && (
+                <TimeframeSwitcher value={interval} onChange={setManualInterval} />
+              )}
+              <IndicatorToolbar
+                settings={indicatorSettings}
+                onChange={setIndicatorSettings}
+                interval={interval}
+              />
+            </div>
           </div>
           <div className="flex-1 overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950">
-            <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
+            <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} intervalOverride={interval} />
           </div>
           <MarkerChips trade={trade} />
         </DialogContent>
