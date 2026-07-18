@@ -21,9 +21,11 @@ import { TRADING_ARENA_TABS, type TabId } from '../types';
 
 interface ArenaTabSwitcherProps {
   activeTab: TabId;
+  /** Chart Settings' Light Mode (chartStyle.theme) — see chartStyleSettings.ts. Defaults to dark. */
+  light?: boolean;
 }
 
-export function ArenaTabSwitcher({ activeTab }: ArenaTabSwitcherProps) {
+export function ArenaTabSwitcher({ activeTab, light = false }: ArenaTabSwitcherProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +70,9 @@ export function ArenaTabSwitcher({ activeTab }: ArenaTabSwitcherProps) {
           'flex items-center gap-1.5 h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
           open
             ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+            : light
+              ? 'text-[#6a6d78] hover:text-[#131722] hover:bg-[rgba(0,0,0,0.04)] border-transparent'
+              : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
         )}
       >
         <span>{activeLabel}</span>
@@ -80,7 +84,10 @@ export function ArenaTabSwitcher({ activeTab }: ArenaTabSwitcherProps) {
 
       {open && (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 bg-[#0D0D0F] border border-[rgba(201,166,70,0.25)] rounded-lg shadow-lg flex flex-col p-1 min-w-[160px]"
+          className={cn(
+            'absolute left-0 top-[calc(100%+4px)] z-50 border border-[rgba(201,166,70,0.25)] rounded-lg shadow-lg flex flex-col p-1 min-w-[160px]',
+            light ? 'bg-[#ffffff]' : 'bg-[#0D0D0F]',
+          )}
           role="listbox"
           aria-label="Select view"
         >
@@ -97,7 +104,9 @@ export function ArenaTabSwitcher({ activeTab }: ArenaTabSwitcherProps) {
                   'flex items-center justify-between gap-2 h-7 rounded px-2 text-[11px] font-semibold whitespace-nowrap transition-colors duration-150',
                   active
                     ? 'bg-[rgba(201,166,70,0.12)] text-[#C9A646] hover:bg-[rgba(201,166,70,0.18)]'
-                    : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)]',
+                    : light
+                      ? 'text-[#6a6d78] hover:text-[#131722] hover:bg-[rgba(0,0,0,0.04)]'
+                      : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)]',
                 )}
               >
                 <span>{tab.label}</span>

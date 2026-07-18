@@ -27,10 +27,11 @@
  * after fillPendingOrder — doing so would double-open the position.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useContext, useEffect, useState, useMemo } from 'react';
 import { useBacktestSession, type UseBacktestSessionReturn } from '@/hooks/useBacktestSession';
 import { cn } from '@/lib/utils';
 import { CleanSelect, type CleanSelectOption } from './CleanSelect';
+import { ChartStyleContext } from './chartStyleSettings';
 
 // Internal notional only — used as the useBacktestSession starting balance
 // so P&L percentages have a denominator. Never displayed to the user.
@@ -76,6 +77,11 @@ export function PaperTradeRail({
   qty: qtyProp,
   onQtyChange,
 }: PaperTradeRailProps) {
+  // Chart Settings' Light Mode (see chartStyleSettings.ts) reaches this rail
+  // via context — same fallback pattern FinotaurChart/ChartTab use, no prop
+  // threading needed. Defaults to dark outside the Arena's provider tree.
+  const light = (useContext(ChartStyleContext)?.theme ?? 'dark') === 'light';
+
   // Called unconditionally (rules of hooks) even when a `session` prop is
   // supplied — see the file header comment for why this is safe.
   const internalSession = useBacktestSession(PAPER_BALANCE, 'arena-paper');
@@ -185,10 +191,10 @@ export function PaperTradeRail({
   if (!enabled) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
-        <p className="text-[12px] font-medium text-zinc-500">
+        <p className={cn('text-[12px] font-medium', light ? 'text-[#6a6d78]' : 'text-zinc-500')}>
           {disabledTitle}
         </p>
-        <p className="text-[11px] text-zinc-700">
+        <p className={cn('text-[11px]', light ? 'text-[#8a8d98]' : 'text-zinc-700')}>
           {disabledDescription}
         </p>
       </div>
@@ -203,14 +209,24 @@ export function PaperTradeRail({
     <div className="flex flex-col gap-3 p-3">
       {/* NinjaTrader-style order-entry panel — disabled if no live price yet */}
       {livePrice == null ? (
-        <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-center">
-          <p className="text-[11px] text-zinc-600">Connecting to live feed…</p>
+        <div
+          className={cn(
+            'flex items-center justify-center rounded-xl border p-4 text-center',
+            light ? 'border-[#e0e3eb] bg-[#f7f8fa]' : 'border-zinc-800 bg-zinc-950/60',
+          )}
+        >
+          <p className={cn('text-[11px]', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>Connecting to live feed…</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2 rounded-xl border border-[#C9A646]/20 bg-[#0A0A0C] p-3">
+        <div
+          className={cn(
+            'flex flex-col gap-2 rounded-xl border border-[#C9A646]/20 p-3',
+            light ? 'bg-[#ffffff]' : 'bg-[#0A0A0C]',
+          )}
+        >
           {/* Header row */}
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-white">{symbol}</span>
+            <span className={cn('text-[13px] font-bold', light ? 'text-[#131722]' : 'text-white')}>{symbol}</span>
             <span className="rounded border border-[#C9A646]/30 bg-[#C9A646]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C9A646]">
               Paper
             </span>
@@ -284,25 +300,35 @@ export function PaperTradeRail({
                 }
                 cancelAllPending();
               }}
-              className="rounded-md border border-zinc-600 bg-black py-1.5 text-[11px] font-bold text-white transition-colors hover:border-zinc-400 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                'rounded-md border py-1.5 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                light
+                  ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722] hover:border-[#8a8d98] hover:bg-[rgba(0,0,0,0.04)]'
+                  : 'border-zinc-600 bg-black text-white hover:border-zinc-400 hover:bg-zinc-900',
+              )}
             >
               Close
             </button>
           </div>
-          <p className="text-[10px] text-zinc-600">
+          <p className={cn('text-[10px]', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>
             Close = flatten position + cancel pending
           </p>
 
           {/* PnL bar */}
-          <div className="flex items-center justify-between rounded-md border border-[#C9A646]/15 bg-black px-2.5 py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <div
+            className={cn(
+              'flex items-center justify-between rounded-md border border-[#C9A646]/15 px-2.5 py-2',
+              light ? 'bg-[#f7f8fa]' : 'bg-black',
+            )}
+          >
+            <span className={cn('text-[10px] font-semibold uppercase tracking-wider', light ? 'text-[#6a6d78]' : 'text-zinc-500')}>
               Unrealized PnL
             </span>
             <span
               className={cn(
                 'text-[13px] font-bold tabular-nums',
                 unrealizedPnl == null
-                  ? 'text-zinc-600'
+                  ? light ? 'text-[#8a8d98]' : 'text-zinc-600'
                   : unrealizedPnl >= 0
                     ? 'text-[#3ddc9a]'
                     : 'text-[#ff6b93]',
@@ -315,27 +341,42 @@ export function PaperTradeRail({
           {/* Order qty + TIF */}
           <div className="grid grid-cols-2 gap-[7px]">
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Order Qty</p>
-              <div className="flex items-center justify-between rounded-md border border-[#C9A646]/20 bg-black/40 px-1 py-1">
+              <p className={cn('mb-1 text-[10px] font-semibold uppercase tracking-wider', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>Order Qty</p>
+              <div
+                className={cn(
+                  'flex items-center justify-between rounded-md border border-[#C9A646]/20 px-1 py-1',
+                  light ? 'bg-[#f7f8fa]' : 'bg-black/40',
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="h-5 w-5 rounded text-[13px] font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+                  className={cn(
+                    'h-5 w-5 rounded text-[13px] font-bold',
+                    light
+                      ? 'text-[#6a6d78] hover:bg-[rgba(0,0,0,0.04)] hover:text-[#131722]'
+                      : 'text-zinc-400 hover:bg-white/5 hover:text-white',
+                  )}
                 >
                   −
                 </button>
-                <span className="text-[12px] font-semibold text-white tabular-nums">{qty}</span>
+                <span className={cn('text-[12px] font-semibold tabular-nums', light ? 'text-[#131722]' : 'text-white')}>{qty}</span>
                 <button
                   type="button"
                   onClick={() => setQty((q) => q + 1)}
-                  className="h-5 w-5 rounded text-[13px] font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+                  className={cn(
+                    'h-5 w-5 rounded text-[13px] font-bold',
+                    light
+                      ? 'text-[#6a6d78] hover:bg-[rgba(0,0,0,0.04)] hover:text-[#131722]'
+                      : 'text-zinc-400 hover:bg-white/5 hover:text-white',
+                  )}
                 >
                   +
                 </button>
               </div>
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">TIF</p>
+              <p className={cn('mb-1 text-[10px] font-semibold uppercase tracking-wider', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>TIF</p>
               {/* TIF is cosmetic for paper market orders — display-only, not wired into the engine. */}
               <CleanSelect<'GTC' | 'Day'> value={tif} onChange={setTif} options={TIF_OPTIONS} className="w-full" />
             </div>
@@ -343,14 +384,14 @@ export function PaperTradeRail({
 
           {/* Bid / Ask levels */}
           <div className="grid grid-cols-2 gap-[7px]">
-            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Bid</p>
+            <div className={cn('rounded-md border px-2 py-1.5', light ? 'border-[#e0e3eb] bg-[#f7f8fa]' : 'border-white/10 bg-black/30')}>
+              <p className={cn('text-[9px] font-semibold uppercase tracking-wider', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>Bid</p>
               <p className="text-[12px] font-semibold tabular-nums text-[#3ddc9a]">
                 {bid != null ? bid.toFixed(2) : '—'}
               </p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Ask</p>
+            <div className={cn('rounded-md border px-2 py-1.5', light ? 'border-[#e0e3eb] bg-[#f7f8fa]' : 'border-white/10 bg-black/30')}>
+              <p className={cn('text-[9px] font-semibold uppercase tracking-wider', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>Ask</p>
               <p className="text-[12px] font-semibold tabular-nums text-[#ff6b93]">
                 {ask != null ? ask.toFixed(2) : '—'}
               </p>
@@ -370,7 +411,7 @@ export function PaperTradeRail({
           )}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-white">
+            <span className={cn('text-xs font-bold uppercase tracking-wider', light ? 'text-[#131722]' : 'text-white')}>
               Open Position
             </span>
             <span
@@ -391,21 +432,21 @@ export function PaperTradeRail({
 
           <div className="grid grid-cols-2 gap-1.5 text-xs mb-3">
             <div>
-              <span className="text-gray-500">Size</span>
-              <span className="ml-2 font-mono text-white">
+              <span className={light ? 'text-[#6a6d78]' : 'text-gray-500'}>Size</span>
+              <span className={cn('ml-2 font-mono', light ? 'text-[#131722]' : 'text-white')}>
                 {activePos.size}
                 {activePos.originalSize && activePos.originalSize !== activePos.size && (
-                  <span className="ml-1 text-gray-600">/{activePos.originalSize}</span>
+                  <span className={cn('ml-1', light ? 'text-[#8a8d98]' : 'text-gray-600')}>/{activePos.originalSize}</span>
                 )}
               </span>
             </div>
             <div>
-              <span className="text-gray-500">
+              <span className={light ? 'text-[#6a6d78]' : 'text-gray-500'}>
                 {(activePos.fills ?? []).filter((f) => f.kind === 'entry').length > 1
                   ? 'Avg Entry'
                   : 'Entry'}
               </span>
-              <span className="ml-2 font-mono text-white">
+              <span className={cn('ml-2 font-mono', light ? 'text-[#131722]' : 'text-white')}>
                 ${activePos.entryPrice.toFixed(2)}
               </span>
             </div>
@@ -427,7 +468,7 @@ export function PaperTradeRail({
             )}
             {unrealizedPnl != null && (
               <div className="col-span-2">
-                <span className="text-gray-500">Unrealized</span>
+                <span className={light ? 'text-[#6a6d78]' : 'text-gray-500'}>Unrealized</span>
                 <span
                   className={cn(
                     'ml-2 font-mono font-semibold',
@@ -448,7 +489,10 @@ export function PaperTradeRail({
                 key={pct}
                 type="button"
                 onClick={() => partialClose(pct, price, nowSec())}
-                className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-[#C9A646]/40 hover:text-[#C9A646] transition-colors"
+                className={cn(
+                  'rounded-md border py-1.5 text-[10px] font-semibold transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]',
+                  light ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722]' : 'border-zinc-700 bg-zinc-900/60 text-zinc-300',
+                )}
               >
                 Close {pct * 100}%
               </button>
@@ -460,7 +504,10 @@ export function PaperTradeRail({
             <button
               type="button"
               onClick={() => moveToBreakeven()}
-              className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
+              className={cn(
+                'rounded-md border py-1.5 text-[10px] font-semibold transition-colors hover:border-amber-500/40 hover:text-amber-400',
+                light ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722]' : 'border-zinc-700 bg-zinc-900/60 text-zinc-300',
+              )}
               title="Move stop loss to entry price (breakeven)"
             >
               BE Stop
@@ -468,7 +515,10 @@ export function PaperTradeRail({
             <button
               type="button"
               onClick={() => flatten(price, nowSec())}
-              className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-rose-500/40 hover:text-rose-400 transition-colors"
+              className={cn(
+                'rounded-md border py-1.5 text-[10px] font-semibold transition-colors hover:border-rose-500/40 hover:text-rose-400',
+                light ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722]' : 'border-zinc-700 bg-zinc-900/60 text-zinc-300',
+              )}
               title="Close position and cancel all pending orders"
             >
               Flatten
@@ -480,7 +530,10 @@ export function PaperTradeRail({
             <button
               type="button"
               onClick={() => reverse(price, nowSec(), activePos.size)}
-              className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-purple-500/40 hover:text-purple-400 transition-colors"
+              className={cn(
+                'rounded-md border py-1.5 text-[10px] font-semibold transition-colors hover:border-purple-500/40 hover:text-purple-400',
+                light ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722]' : 'border-zinc-700 bg-zinc-900/60 text-zinc-300',
+              )}
               title="Close position and open opposite at same price"
             >
               Reverse
@@ -488,7 +541,12 @@ export function PaperTradeRail({
             <button
               type="button"
               onClick={() => closePosition({ price, time: nowSec(), reason: 'manual' })}
-              className="rounded-md border border-zinc-700 bg-black py-1.5 text-[10px] font-bold text-white hover:border-zinc-500 hover:bg-zinc-900 transition-colors"
+              className={cn(
+                'rounded-md border py-1.5 text-[10px] font-bold transition-colors',
+                light
+                  ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#131722] hover:border-[#8a8d98] hover:bg-[rgba(0,0,0,0.04)]'
+                  : 'border-zinc-700 bg-black text-white hover:border-zinc-500 hover:bg-zinc-900',
+              )}
             >
               Close All
             </button>
@@ -501,7 +559,10 @@ export function PaperTradeRail({
         <button
           type="button"
           onClick={() => cancelAllPending()}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/40 py-2 text-xs font-semibold text-zinc-400 hover:border-rose-700 hover:text-rose-400 transition-colors"
+          className={cn(
+            'w-full rounded-lg border py-2 text-xs font-semibold transition-colors hover:border-rose-700 hover:text-rose-400',
+            light ? 'border-[#e0e3eb] bg-[#f7f8fa] text-[#6a6d78]' : 'border-zinc-700 bg-zinc-900/40 text-zinc-400',
+          )}
         >
           Cancel All Pending ({state.pendingOrders.length})
         </button>
@@ -509,16 +570,16 @@ export function PaperTradeRail({
 
       {/* Positions + orders counter — what's currently open/working */}
       <div className="grid grid-cols-2 gap-[7px]">
-        <div className="rounded-lg border border-[#C9A646]/15 bg-black/30 px-3 py-1.5">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-[#6a6a6a]">
+        <div className={cn('rounded-lg border border-[#C9A646]/15 px-3 py-1.5', light ? 'bg-[#f7f8fa]' : 'bg-black/30')}>
+          <p className={cn('text-[9px] font-semibold uppercase tracking-wide', light ? 'text-[#6a6d78]' : 'text-[#6a6a6a]')}>
             Positions
           </p>
           <p className="text-[13px] font-bold text-[#C9A646] tabular-nums">
             {activePos ? 1 : 0}
           </p>
         </div>
-        <div className="rounded-lg border border-[#C9A646]/15 bg-black/30 px-3 py-1.5">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-[#6a6a6a]">
+        <div className={cn('rounded-lg border border-[#C9A646]/15 px-3 py-1.5', light ? 'bg-[#f7f8fa]' : 'bg-black/30')}>
+          <p className={cn('text-[9px] font-semibold uppercase tracking-wide', light ? 'text-[#6a6d78]' : 'text-[#6a6a6a]')}>
             Orders
           </p>
           <p className="text-[13px] font-bold text-[#C9A646] tabular-nums">
