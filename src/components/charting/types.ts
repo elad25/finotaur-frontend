@@ -78,6 +78,26 @@ export interface ChartDataSource {
     from: UTCTimestamp,
     to: UTCTimestamp,
   ): Promise<Bar[]>;
+  /**
+   * OPTIONAL live last-bar subscription. Only implemented by sources with a
+   * real-time feed (BinanceSource — crypto only) and by AggregatingSource
+   * when the base source it wraps implements it. Absent (`undefined`) on
+   * every other source (YahooFinanceSource, DatabentoCacheSource,
+   * DatabentoYahooFallbackSource) — a complete no-op for futures/stocks,
+   * zero behavior change there.
+   *
+   * `onBar` fires on every tick (not only closed candles) with the bar
+   * currently forming — callers should replace-or-append against their own
+   * last-loaded bar by `time`, never assume one call = one new bar.
+   *
+   * Returns an unsubscribe function; callers MUST invoke it on cleanup
+   * (symbol/interval/source change, unmount) to close the underlying feed.
+   */
+  subscribeBars?(
+    symbol: string,
+    interval: Interval,
+    onBar: (bar: Bar) => void,
+  ): () => void;
 }
 
 /** Source provenance — useful for logging + the "cached vs fetched" debugging in Phase 0. */

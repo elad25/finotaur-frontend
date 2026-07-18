@@ -29,28 +29,27 @@
  * tick feed — a small "Delayed data" badge is shown near the top of the chart
  * pane whenever the active symbol isn't crypto.
  *
- * This tab is intentionally a PLAIN chart (2026-07 restructure) — no order
- * flow / footprint overlay, no CVD/Delta sub-panes, no depth-matrix heatmap,
- * EXCEPT for two S1 "Arena WOW week" additions (Volume Profile default ON,
- * footprint-on-zoom default ON but only visible after zoom-in /
- * safe no-ops unless the user turns them on via Chart ▾ → Chart Settings):
+ * This tab is intentionally a PLAIN chart — no order flow / footprint
+ * overlay, no CVD/Delta sub-panes, no depth-matrix heatmap, EXCEPT for one
+ * S1 "Arena WOW week" addition (Volume Profile, default ON, safe no-op
+ * unless the user turns it on via the Indicators popup):
  *
- *  1. Session Volume Profile (ATAS-style, multi-session, OHLCV-bar-derived —
- *     see sessionVolumeProfile.ts). Its detail params (period/custom
- *     session/vPOC/VAH-VAL/width/opacity) still read `chartStyle.volumeProfile`
- *     from ChartStyleContext, but VISIBILITY is now the `volumeProfileEnabled`
- *     prop (single source of truth: TradingArena's
- *     `indicatorsEnabled.volumeProfile`, edited from the Indicators popup —
- *     see indicatorsSettings.ts). Works for every asset class — it only
- *     needs the OHLCV bars the chart already fetches, no new data feed.
+ *  Session Volume Profile (ATAS-style, multi-session, OHLCV-bar-derived —
+ *  see sessionVolumeProfile.ts). Its detail params (period/custom
+ *  session/vPOC/VAH-VAL/width/opacity) still read `chartStyle.volumeProfile`
+ *  from ChartStyleContext, but VISIBILITY is now the `volumeProfileEnabled`
+ *  prop (single source of truth: TradingArena's
+ *  `indicatorsEnabled.volumeProfile`, edited from the Indicators popup —
+ *  see indicatorsSettings.ts). Works for every asset class — it only
+ *  needs the OHLCV bars the chart already fetches, no new data feed.
  *
- *  2. `footprintOnZoom` (ATAS "Auto transform candles to footprint"): when
- *     the user turns this on, zooming in far enough reveals footprint cells
- *     over the candles, same auto-transform threshold idea as the Footprint
- *     tab. CRYPTO ONLY in this PR — see ChartTabFootprintOnZoomBody below for
- *     why futures is deliberately deferred rather than half-wired. Off
- *     (default) is a complete no-op: no useOrderFlow hook mounts, no socket
- *     opens, this tab's plain-chart contract is unchanged.
+ * Order flow / footprint rendering lives EXCLUSIVELY on the Order Flow tab
+ * (FootprintTab.tsx). A "footprint-on-zoom" bridge used to exist on this
+ * tab but was removed (2026-07-18) so the plain Chart tab never renders
+ * footprint cells, matching the PR #1435-era product decision that ALL
+ * order flow is stripped from ChartTab. `chartStyle.footprintOnZoom` is
+ * kept in the settings type/sanitizer only so old persisted localStorage
+ * blobs still parse — the field has no effect anywhere in this tab.
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,23 +66,17 @@ import {
   DatabentoYahooFallbackSource,
 } from '@/components/charting/dataSources';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
-import type { ChartDataSource, Indicator, Interval } from '@/components/charting/types';
+import type { ChartDataSource, Indicator } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
   resolveIntervalPlan,
-  intervalToSeconds,
   type ArenaInterval,
   type CandleSourceKind,
 } from '../utils/intervals';
 import { ChartStyleContext, DEFAULT_CHART_STYLE } from '../components/chartStyleSettings';
 import type { SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
-import { resolveTradeSource } from '@/components/charting/orderflow/sourceRegistry';
-import { refineCryptoTickSize } from '@/components/charting/orderflow/cryptoTickSizes';
-import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
-import { footprintSettingsToConfig, DEFAULT_FOOTPRINT_SETTINGS } from '../components/footprintSettings';
-import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import type { ArenaIndicatorEnabled, ArenaIndicatorKey, ArenaIndicatorParams } from '../components/indicatorsSettings';
 
 interface ChartTabProps {
@@ -267,12 +260,6 @@ export function ChartTab({
     opacity: chartStyle.volumeProfile.opacity,
   }), [chartStyle.volumeProfile, chartStyle.timezone]);
 
-  // footprintOnZoom (Auto-transform to footprint) is CRYPTO-ONLY in this PR —
-  // see the file header comment. Disabled for every other asset class even
-  // if the setting happens to be on (e.g. user enabled it on a crypto symbol,
-  // then switched to a stock) — falls straight back to the plain chart path.
-  const footprintOnZoomActive = chartStyle.footprintOnZoom && isCrypto;
-
   // ── Data-source routing (Task A) — resolves via the shared router
   // (pickDataSource) rather than reimplementing crypto/futures-cache/Yahoo
   // branching here. `symbol` arrives already source-native for its asset
@@ -414,32 +401,19 @@ export function ChartTab({
             onOpenSettings={onIndicatorSettingsOpen}
             onRemove={onIndicatorRemove}
           />
-          {footprintOnZoomActive ? (
-            <ChartTabFootprintOnZoomBody
-              chartSymbol={chartSymbol}
-              chartInterval={chartInterval}
-              intervalSec={intervalToSeconds(interval)}
-              from={from}
-              to={to}
-              chartDataSource={chartDataSource}
-              indicators={indicators}
-              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
-            />
-          ) : (
-            <FinotaurChart
-              hideCursor
-              symbol={chartSymbol}
-              interval={chartInterval}
-              from={from}
-              to={to}
-              dataSource={chartDataSource}
-              indicators={indicators}
-              theme="dark"
-              height="100%"
-              showRefocusButton
-              sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
-            />
-          )}
+          <FinotaurChart
+            hideCursor
+            symbol={chartSymbol}
+            interval={chartInterval}
+            from={from}
+            to={to}
+            dataSource={chartDataSource}
+            indicators={indicators}
+            theme="dark"
+            height="100%"
+            showRefocusButton
+            sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
+          />
         </div>
       </div>
 
@@ -473,109 +447,3 @@ export function ChartTab({
   );
 }
 
-// ─── Crypto footprintOnZoom bridge (S1 "Arena WOW week") ────────────────────
-//
-// Lazily wires the order-flow store ONLY while footprintOnZoom is on AND the
-// symbol is crypto (mirrors FootprintTab.tsx's CryptoFootprintBody bridging,
-// intentionally lighter-weight — no auto-suggested row size, no CVD/Delta
-// sub-panes, no per-tab settings persistence; this is a secondary opt-in on
-// an otherwise-plain tab, not the dedicated Order Flow surface). Only ever
-// MOUNTED by ChartTab when footprintOnZoomActive is true — unmounting tears
-// down useOrderFlow's subscription via its own effect cleanup, so turning
-// footprintOnZoom off (or switching off crypto) opens zero sockets/fetches,
-// per spec. Row size uses the raw (auto-refined) tick size directly — no
-// FlowBinStore.suggestRowSize auto-suggestion — a deliberate simplification
-// for this secondary bridge; the auto-suggested-row-size machinery lives on
-// the dedicated Footprint tab.
-//
-// FUTURES DEFERRAL (flagged, not silently dropped): the task spec asks for
-// "assetClass has tick data (crypto; futures when its flow source is
-// available)". ChartTab.tsx has zero existing futures trade-source
-// scaffolding — NT8/Databento bridging lives entirely in FootprintTab.tsx's
-// FuturesFootprintBody / FuturesNt8FootprintBody, which are considerably
-// more involved (contract rollover, admin gating, NT8 bridge connection
-// status). Wiring that into this "intentionally plain" tab is materially
-// larger scope than this bridge; deferred as a follow-up rather than
-// half-implemented here. ChartSettingsMenu.tsx already disables the toggle
-// with a "Requires tick data" hint for non-crypto asset classes, so futures
-// users see an honest disabled control today, not a broken feature.
-const CHART_TAB_FOOTPRINT_ON_ZOOM_CONFIG = footprintSettingsToConfig(DEFAULT_FOOTPRINT_SETTINGS);
-
-interface ChartTabFootprintOnZoomBodyProps {
-  chartSymbol: string;
-  chartInterval: Interval;
-  intervalSec: number;
-  from: number;
-  to: number;
-  chartDataSource: ChartDataSource;
-  indicators: Indicator[];
-  sessionVolumeProfile: { settings: SessionVolumeProfileRenderSettings; visible: boolean };
-}
-
-function ChartTabFootprintOnZoomBody({
-  chartSymbol,
-  chartInterval,
-  intervalSec,
-  from,
-  to,
-  chartDataSource,
-  indicators,
-  sessionVolumeProfile,
-}: ChartTabFootprintOnZoomBodyProps) {
-  // resolveTradeSource('crypto', ...) never returns null (see its doc comment).
-  const { source: tradeSource, tickSize: staticTickSize } = resolveTradeSource('crypto', chartSymbol, { isAdmin: false })!;
-
-  // Same async-refine pattern as FootprintTab.tsx's CryptoFootprintBody: start
-  // from the sync hardcoded-map default, upgrade once Binance's live
-  // exchangeInfo resolves.
-  const [tickSize, setTickSize] = useState<number>(staticTickSize);
-  useEffect(() => {
-    setTickSize(staticTickSize);
-    let cancelled = false;
-    refineCryptoTickSize(chartSymbol).then((refined) => {
-      if (!cancelled) setTickSize(refined);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [chartSymbol, staticTickSize]);
-
-  const { store } = useOrderFlow({
-    symbol: chartSymbol,
-    intervalSec,
-    rowSize: tickSize,
-    source: tradeSource,
-    backfillBars: 40,
-  });
-
-  // Candle dimming: mirror FuturesChartTab.tsx's zoom-driven stage — the
-  // footprint's own zoom-gated auto-transform (hidden → shaded → full) is
-  // what drives this here (no forceFullDetail on this bridge), so at wide
-  // zoom the candles stay full and only reduce to the thin ATAS skeleton
-  // once cells are actually showing.
-  const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
-  const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
-
-  return (
-    <FinotaurChart
-      hideCursor
-      symbol={chartSymbol}
-      interval={chartInterval}
-      from={from}
-      to={to}
-      dataSource={chartDataSource}
-      indicators={indicators}
-      theme="dark"
-      height="100%"
-      showRefocusButton
-      footprint={{
-        store,
-        config: CHART_TAB_FOOTPRINT_ON_ZOOM_CONFIG,
-        visible: true,
-        onStageChange: setFootprintStage,
-      }}
-      sessionVolumeProfile={sessionVolumeProfile}
-      mutedCandles={mutedCandles}
-    />
-  );
-}

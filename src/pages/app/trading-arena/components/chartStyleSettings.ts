@@ -169,12 +169,13 @@ export interface ChartStyleSettings {
   volumeProfile: SessionVolumeProfileSettings;
 
   /**
-   * ATAS "Auto transform candles to footprint" opt-in for the plain Chart
-   * tab. Default FALSE — the Chart tab stays plain unless the user opts in.
-   * Crypto only in this PR (see ChartTab.tsx's header comment for the
-   * futures deferral). Threshold (min bar px width to reveal cells) reuses
-   * FootprintTab's shared DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX constant —
-   * not independently configurable from this tab.
+   * @deprecated Dead field kept ONLY so old persisted localStorage blobs
+   * still parse without throwing (see sanitizeChartStyleSettings). The
+   * "Auto transform candles to footprint" bridge this used to drive on the
+   * plain Chart tab was removed 2026-07-18 — ALL order flow / footprint
+   * rendering now lives exclusively on the Order Flow tab (FootprintTab.tsx),
+   * per the PR #1435-era product decision. This field has no effect on any
+   * rendering and no UI control writes to it anymore.
    */
   footprintOnZoom: boolean;
 }
@@ -210,7 +211,9 @@ export const DEFAULT_CHART_STYLE: ChartStyleSettings = {
   pricePrecision: 'default',
 
   volumeProfile: DEFAULT_SESSION_VOLUME_PROFILE_SETTINGS,
-  footprintOnZoom: true,
+  // Dead field — see the ChartStyleSettings.footprintOnZoom @deprecated doc
+  // comment above. Defaulted off since it no longer drives any rendering.
+  footprintOnZoom: false,
 };
 
 // ═══════════════════════════════════════════════════════════════

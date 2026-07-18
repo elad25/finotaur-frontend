@@ -581,6 +581,28 @@ export interface MarkerIcon {
   offsetY: number;
 }
 
+/**
+ * Seconds per `Interval` — used ONLY to gauge whether a chart's rolling `to`
+ * window sits at the live edge (within ~2 bar-durations of "now") before
+ * offering a `dataSource.subscribeBars()` live hookup. Not used for any bar
+ * math elsewhere in this component — each data source keeps its own
+ * authoritative interval-seconds mapping (see BinanceSource / AggregatingSource).
+ */
+const LIVE_EDGE_INTERVAL_SECONDS: Record<Interval, number> = {
+  '1s': 1,
+  '1m': 60,
+  '2m': 120,
+  '5m': 300,
+  '15m': 900,
+  '30m': 1800,
+  '60m': 3600,
+  '1h': 3600,
+  '4h': 14400,
+  '1d': 86400,
+  '1wk': 604800,
+  '1mo': 2592000,
+};
+
 // ═══════════════════════════════════════════════════════════════
 // Component props
 // ═══════════════════════════════════════════════════════════════
@@ -1447,6 +1469,7 @@ export function FinotaurChart({
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
     let cancelled = false;
+    let unsubscribeLive: (() => void) | null = null;
     setLoading(true);
     setError(null);
 
@@ -1519,6 +1542,41 @@ export function FinotaurChart({
           }
         }
         setLoading(false);
+
+        // ─── Live last-bar subscription (crypto real-time updates) ──────
+        // Only when the source implements it (BinanceSource / an
+        // AggregatingSource wrapping it — see ChartDataSource.subscribeBars'
+        // doc comment) AND the requested window is a rolling "now" window
+        // (its `to` bound sits within ~2 bar-durations of the current wall
+        // clock), not a fixed historical range (e.g. a closed trade's detail
+        // chart, which must stay frozen at its recorded window). Absent
+        // method or a non-live-edge window = zero behavior change for every
+        // other caller (Journal/Backtest/Scanner/futures/stocks).
+        // Started only AFTER the REST load resolves (never races an
+        // in-flight getBars), and torn down by this same effect's cleanup.
+        if (dataSource.subscribeBars) {
+          const intervalSec = LIVE_EDGE_INTERVAL_SECONDS[interval] ?? 60;
+          const nowSec = Math.floor(Date.now() / 1000);
+          const isLiveEdge = Number(to) >= nowSec - intervalSec * 2;
+          if (isLiveEdge) {
+            unsubscribeLive = dataSource.subscribeBars(symbol, interval, (bar: Bar) => {
+              if (cancelled || !seriesRef.current) return;
+              const liveBars = barsRef.current;
+              const lastBar = liveBars.length > 0 ? liveBars[liveBars.length - 1] : null;
+              if (lastBar && (bar.time as unknown as number) === (lastBar.time as unknown as number)) {
+                // Same candle still forming — replace in place.
+                liveBars[liveBars.length - 1] = bar;
+                seriesRef.current.update(bar);
+              } else if (!lastBar || (bar.time as unknown as number) > (lastBar.time as unknown as number)) {
+                // A new candle opened — append.
+                liveBars.push(bar);
+                seriesRef.current.update(bar);
+                setBarCount(liveBars.length);
+              }
+              // else: older than the last loaded bar — stale/out-of-order tick, ignore.
+            });
+          }
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -1530,6 +1588,10 @@ export function FinotaurChart({
 
     return () => {
       cancelled = true;
+      if (unsubscribeLive) {
+        unsubscribeLive();
+        unsubscribeLive = null;
+      }
     };
     // refreshToken: deliberate extra dep (undefined for every caller except
     // FuturesChartTab) — see the prop doc comment on FinotaurChartProps.
