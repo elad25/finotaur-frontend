@@ -1,7 +1,8 @@
 // src/components/admin/SendEmailModal.tsx
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Mail, Send } from 'lucide-react';
-import { UserWithStats } from '../../../../types/admin';
+import { UserWithStats } from '@/types/admin';
 
 interface SendEmailModalProps {
   user: UserWithStats;
@@ -65,7 +66,10 @@ export default function SendEmailModal({ user, onClose }: SendEmailModalProps) {
     onClose();
   }
 
-  return (
+  // Portal to <body>: the admin users table wrapper uses `transform: rotateX(180deg)`
+  // (scrollbar-on-top trick), which creates a containing block and would otherwise
+  // trap this `fixed` overlay inside the table instead of the viewport.
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111111] border border-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-800">
@@ -172,6 +176,7 @@ export default function SendEmailModal({ user, onClose }: SendEmailModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

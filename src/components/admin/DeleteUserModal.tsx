@@ -1,5 +1,6 @@
 // src/components/admin/DeleteUserModal.tsx
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2, AlertTriangle } from 'lucide-react';
 import { UserWithStats } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
@@ -60,7 +61,10 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
     }
   }
 
-  return (
+  // Portal to <body>: the admin users table wrapper uses `transform: rotateX(180deg)`
+  // (scrollbar-on-top trick), which creates a containing block and would otherwise
+  // trap this `fixed` overlay inside the table instead of the viewport.
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111111] border border-gray-800 rounded-lg max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-800">
@@ -152,6 +156,7 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
