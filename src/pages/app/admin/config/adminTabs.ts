@@ -23,6 +23,7 @@ import {
   Target,
   TrendingUp,
   Megaphone,
+  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -80,6 +81,16 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Per-user AI usage leaderboard + per-tier cost averages',
+  },
+  {
+    id: 'copilot-eval',
+    label: 'COPILOT Eval',
+    path: '/app/admin/copilot-eval',
+    icon: ClipboardCheck,
+    phase: 2,
+    enabled: true,
+    description:
+      'Session-3 evaluation scorecard for the Active Advisor go/no-go decision',
   },
   {
     id: 'voice',
