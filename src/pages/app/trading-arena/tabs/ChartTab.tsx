@@ -396,6 +396,9 @@ export function ChartTab({
   // practice — ChartTab only ever renders inside it — but keeps this
   // component safe to unit-test/render in isolation).
   const chartStyle = useContext(ChartStyleContext) ?? DEFAULT_CHART_STYLE;
+  // Light Mode extends from the chart canvas to the right-rail's chrome —
+  // see chartStyleSettings.ts.
+  const light = chartStyle.theme === 'light';
 
   // Lifted paper-trading session — shared by the PaperTradeRail AND the
   // chart's right-click Buy/Sell menu so both act on the same 'arena-paper'
@@ -609,7 +612,10 @@ export function ChartTab({
       />
 
       <div
-        className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
+        className={cn(
+          'flex-shrink-0 border-l overflow-y-auto',
+          light ? 'border-[#e0e3eb] bg-[#ffffff]' : 'border-white/10 bg-[#0A0A0A]',
+        )}
         style={{ width: railWidth }}
       >
         <PaperTradeRail

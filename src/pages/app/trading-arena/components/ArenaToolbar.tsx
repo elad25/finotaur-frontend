@@ -102,6 +102,10 @@ export function ArenaToolbar({
   onChartSettingsDialogOpenChange,
   assetClass,
 }: ArenaToolbarProps) {
+  // Chart Settings' Light Mode (see chartStyleSettings.ts) extends to this
+  // toolbar's own trigger buttons (gold accents/dividers stay unchanged).
+  const light = chartStyle.theme === 'light';
+
   // Indicators (N) only applies to the plain candlestick chart.
   const showChartOnlyMenus = activeTab === 'chart';
 
@@ -143,7 +147,9 @@ export function ArenaToolbar({
           'flex items-center justify-center h-7 w-7 flex-shrink-0 rounded transition-all duration-150 border',
           chartSettingsDialogOpen
             ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+            : light
+              ? 'text-[#6a6d78] hover:text-[#131722] hover:bg-[rgba(0,0,0,0.04)] border-transparent'
+              : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
         )}
       >
         <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -178,7 +184,9 @@ export function ArenaToolbar({
               'flex items-center gap-1.5 h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
               indicatorsDialogOpen
                 ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-                : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
+                : light
+                  ? 'text-[#6a6d78] hover:text-[#131722] hover:bg-[rgba(0,0,0,0.04)] border-transparent'
+                  : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
             )}
           >
             {indicatorsTriggerValue}

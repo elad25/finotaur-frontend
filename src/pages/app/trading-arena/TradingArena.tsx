@@ -136,6 +136,9 @@ export default function TradingArena() {
   // below, around <main>) instead of prop threading — see
   // chartStyleSettings.ts's header comment for why.
   const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
+  // Light Mode (chartStyle.theme) extends from the chart canvas to the
+  // surrounding Arena chrome (top bar + tab switcher) — see chartStyleSettings.ts.
+  const light = chartStyle.theme === 'light';
   const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
   const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
   const [indicatorSettingsKey, setIndicatorSettingsKey] = useState<ArenaIndicatorKey | null>(null);
@@ -273,7 +276,7 @@ export default function TradingArena() {
 
   return (
     <div
-      className="flex flex-col w-full h-screen bg-[#08080a] text-[#E8E8E8] overflow-hidden"
+      className={`flex flex-col w-full h-screen overflow-hidden ${light ? 'bg-[#f0f3fa] text-[#131722]' : 'bg-[#08080a] text-[#E8E8E8]'}`}
       style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}
     >
       {/* ── Top bar ──────────────────────────────────────────────── */}
@@ -281,8 +284,10 @@ export default function TradingArena() {
         className="flex flex-shrink-0 items-center gap-3 px-4 border-b"
         style={{
           height: '52px',
-          borderColor: 'rgba(201,166,70,0.12)',
-          background: 'linear-gradient(180deg, #0D0D0F 0%, #08080a 100%)',
+          borderColor: light ? 'rgba(0,0,0,0.08)' : 'rgba(201,166,70,0.12)',
+          background: light
+            ? 'linear-gradient(180deg, #ffffff 0%, #f7f8fa 100%)'
+            : 'linear-gradient(180deg, #0D0D0F 0%, #08080a 100%)',
         }}
       >
         {/* Left: title + back */}
@@ -323,7 +328,7 @@ export default function TradingArena() {
 
           {/* Tab switcher — Chart / Order Flow / Liquidity. URL stays the
               source of truth; this only navigates. */}
-          <ArenaTabSwitcher activeTab={activeTab} />
+          <ArenaTabSwitcher activeTab={activeTab} light={light} />
 
           {/* Divider */}
           <span

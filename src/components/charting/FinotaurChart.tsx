@@ -1068,6 +1068,16 @@ export function FinotaurChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
+    // Theme-switch remount re-seed: bars already fetched by a previous mount
+    // survive in barsRef, but the new series starts empty and the data-load
+    // effect doesn't re-run on a theme change — without this the chart
+    // renders blank until the next refetch (bug: Light Mode "loads no
+    // candles", 2026-07-18).
+    if (barsRef.current.length > 0) {
+      series.setData(barsRef.current);
+      chart.timeScale().fitContent();
+    }
+
     return () => {
       try {
         chart.remove();
