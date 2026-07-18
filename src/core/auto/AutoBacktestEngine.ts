@@ -125,6 +125,16 @@ export interface AutoBacktestResult {
   detectionsCapped?: boolean;
   /** Fill-anchored R-ladder aggregate (honest results, re-scored vs real candles). Optional for backward compatibility. */
   rLadder?: { perR: RLadderAgg[] };
+  /**
+   * Diagnostic counters for signals that were built but never became a
+   * trade (v2 only — undefined for v1 runs). `zeroSize`: the signal's
+   * risk-budget/stop-distance combination sized to 0 contracts on every bar
+   * it was considered (attemptFill kept it pending until validForBars
+   * expired). `expired`: a pending signal's limit/market price condition
+   * was never touched within `validForBars` bars. Additive/optional —
+   * existing callers reading only `trades`/`statistics` are unaffected.
+   */
+  skippedSignals?: { zeroSize: number; expired: number };
 }
 
 export function runAutoBacktest(
