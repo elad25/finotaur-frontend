@@ -4,12 +4,14 @@
 // Uses the same PremiumFrame + useValuePrivacy pattern as PortfolioValuePanel.
 // =====================================================
 
-import { Eye, EyeOff } from 'lucide-react';
+import { useState } from 'react';
+import { Eye, EyeOff, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import { useValuePrivacy } from '../hooks/useValuePrivacy';
 import type { PortfolioDataResult } from '../hooks/usePortfolioData';
+import ManualPortfolioPopup from '@/components/brokers/ManualPortfolioPopup';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,8 @@ interface Props {
 
 export function PortfolioSnapshotCard({ snapshot, className }: Props) {
   const [hideValues, toggleHideValues] = useValuePrivacy();
+  const [showEditPopup, setShowEditPopup] = useState(false);
+  const isManualSource = snapshot.sourceBroker === 'manual';
 
   const mask = '**********';
 
@@ -59,6 +63,7 @@ export function PortfolioSnapshotCard({ snapshot, className }: Props) {
   const buyingPowerPct = cashPct;
 
   return (
+    <>
     <PremiumFrame className={`flex flex-col min-h-[380px] ${className ?? ''}`}>
       {/* pb-14 reserves space for the absolute footer button */}
       <div className="flex flex-col flex-1 p-5 pb-14">
@@ -67,14 +72,26 @@ export function PortfolioSnapshotCard({ snapshot, className }: Props) {
           <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
             PORTFOLIO SNAPSHOT
           </p>
-          <button
-            type="button"
-            onClick={toggleHideValues}
-            title={hideValues ? 'Show values' : 'Hide values'}
-            className="rounded p-0.5 text-ink-tertiary transition-colors hover:text-gold-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-primary/50"
-          >
-            {hideValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
+          <div className="flex items-center gap-1">
+            {isManualSource && (
+              <button
+                type="button"
+                onClick={() => setShowEditPopup(true)}
+                title="Update Portfolio"
+                className="rounded p-0.5 text-ink-tertiary transition-colors hover:text-gold-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-primary/50"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleHideValues}
+              title={hideValues ? 'Show values' : 'Hide values'}
+              className="rounded p-0.5 text-ink-tertiary transition-colors hover:text-gold-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-primary/50"
+            >
+              {hideValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
 
         {/* TOTAL VALUE label + big gold number */}
@@ -165,5 +182,7 @@ export function PortfolioSnapshotCard({ snapshot, className }: Props) {
         View Portfolio <ArrowRight className="h-3.5 w-3.5" />
       </Link>
     </PremiumFrame>
+    {showEditPopup && <ManualPortfolioPopup onClose={() => setShowEditPopup(false)} />}
+    </>
   );
 }

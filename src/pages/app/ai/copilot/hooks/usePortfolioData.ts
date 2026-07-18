@@ -22,6 +22,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
+import { COPILOT_SOURCE_BROKERS, pickCopilotSource, type CopilotSourceBroker } from '@/hooks/brokers/copilotSource';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { isMarketOpen } from '@/lib/marketStatus';
 import { EMPTY_SNAPSHOT } from './usePortfolioMockData';
@@ -118,8 +119,10 @@ async function fetchLiveQuotes(symbols: string[]): Promise<QuotesApiResponse> {
 // ─── Return type ────────────────────────────────────────────────────────────
 
 export interface PortfolioDataResult extends PortfolioSnapshot {
-  /** 'live' when data comes from IB, 'mock' otherwise. */
+  /** 'live' when data comes from a connected COPILOT source (IB or Manual Portfolio), 'mock' otherwise. */
   source: 'mock' | 'live';
+  /** Which COPILOT source produced this snapshot — null until connected. */
+  sourceBroker: CopilotSourceBroker | null;
   lastSyncAt: string | null;
   /** True when the chart series came from portfolio_snapshots (≥2 rows). False = flat-line fallback. */
   hasHistoricalSeries: boolean;
@@ -137,23 +140,30 @@ export interface PortfolioDataResult extends PortfolioSnapshot {
 
 // ─── Supabase fetch ─────────────────────────────────────────────────────────
 
-const SELECT_COLS = 'connection_data,last_sync_at';
+const SELECT_COLS = 'connection_data,last_sync_at,broker,status,is_active';
 
-async function fetchIBPortfolio(userId: string): Promise<{
+interface IBPortfolioRow {
   connection_data: IBConnectionData | null;
   last_sync_at: string | null;
-} | null> {
+  broker: string;
+  status: string | null;
+  is_active: boolean | null;
+}
+
+async function fetchIBPortfolio(userId: string): Promise<IBPortfolioRow | null> {
+  // Scoped to both COPILOT-eligible brokers — pickCopilotSource resolves the
+  // same "which source is active" decision made by useIBConnection, so the
+  // two hooks never disagree about which row is powering the dashboard.
   const { data, error } = await supabase
     .from('broker_connections')
     .select(SELECT_COLS)
     .eq('user_id', userId)
-    .eq('broker', 'interactive_brokers')
-    .eq('is_active', true)
-    .maybeSingle();
+    .in('broker', [...COPILOT_SOURCE_BROKERS])
+    .eq('is_active', true);
 
   if (error?.code === '42P01') return null; // table missing — fresh dev DB
   if (error) throw error;
-  return data as { connection_data: IBConnectionData | null; last_sync_at: string | null } | null;
+  return pickCopilotSource((data ?? []) as IBPortfolioRow[]);
 }
 
 interface SnapshotRow {
@@ -331,7 +341,7 @@ function equitySymbols(positions: IBRITPosition[]): string[] {
 }
 
 export function usePortfolioData(range: TimeRange): PortfolioDataResult {
-  const { isConnected, loading: ibLoading, lastSyncAt: ibLastSyncAt } = useIBConnection();
+  const { isConnected, loading: ibLoading, lastSyncAt: ibLastSyncAt, broker: sourceBroker } = useIBConnection();
   const { id: userId } = useEffectiveUser();
 
   const { data: ibRow, isLoading: queryLoading } = useQuery({
@@ -384,12 +394,12 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
 
     // Not connected, or still loading connection state → empty (no fabricated data)
     if (!isConnected || ibLoading || queryLoading) {
-      return { ...EMPTY_SNAPSHOT, source: 'mock', lastSyncAt: null, hasHistoricalSeries: false, ...liveQuotesAbsent };
+      return { ...EMPTY_SNAPSHOT, source: 'mock', sourceBroker: null, lastSyncAt: null, hasHistoricalSeries: false, ...liveQuotesAbsent };
     }
 
     // Connected but sync hasn't run yet (no positions in connection_data)
     if (!positions || positions.length === 0) {
-      return { ...EMPTY_SNAPSHOT, source: 'mock', lastSyncAt: ibLastSyncAt, hasHistoricalSeries: false, ...liveQuotesAbsent };
+      return { ...EMPTY_SNAPSHOT, source: 'mock', sourceBroker, lastSyncAt: ibLastSyncAt, hasHistoricalSeries: false, ...liveQuotesAbsent };
     }
 
     const holdings = transformPositions(positions);
@@ -410,6 +420,7 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
     return {
       ...snapshot,
       source: 'live',
+      sourceBroker,
       lastSyncAt,
       hasHistoricalSeries,
       isLive,
@@ -418,5 +429,5 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
       dayChangeAbs,
       dayChangePercent,
     };
-  }, [isConnected, ibLoading, queryLoading, ibRow, ibLastSyncAt, range, snapshotSeries, seriesLoading, positions, quotesData]);
+  }, [isConnected, ibLoading, queryLoading, ibRow, ibLastSyncAt, sourceBroker, range, snapshotSeries, seriesLoading, positions, quotesData]);
 }
