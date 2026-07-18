@@ -1,5 +1,6 @@
 // src/components/admin/BanUserModal.tsx
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Ban, AlertTriangle } from 'lucide-react';
 import { UserWithStats } from '@/types/admin';
 import { banUser } from '@/services/adminService';
@@ -52,7 +53,10 @@ export default function BanUserModal({ user, onClose, onSuccess }: BanUserModalP
     }
   }
 
-  return (
+  // Portal to <body>: the admin users table wrapper uses `transform: rotateX(180deg)`
+  // (scrollbar-on-top trick), which creates a containing block and would otherwise
+  // trap this `fixed` overlay inside the table instead of the viewport.
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111111] border border-gray-800 rounded-lg max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-800">
@@ -122,6 +126,7 @@ export default function BanUserModal({ user, onClose, onSuccess }: BanUserModalP
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

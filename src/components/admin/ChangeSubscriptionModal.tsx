@@ -1,6 +1,7 @@
 // src/components/admin/ChangeSubscriptionModal.tsx
 // 🔥 v2.0: REMOVED 'free' option - Only Basic & Premium
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, AlertCircle } from 'lucide-react';
 import { updateUserSubscription } from '@/services/adminService';
 // 🔥 v8.6.0: Import AccountType from admin.ts to match UpdateUserSubscriptionPayload
@@ -110,7 +111,10 @@ export default function ChangeSubscriptionModal({
     setExpiresAt(now.toISOString().split('T')[0]);
   };
 
-  return (
+  // Portal to <body>: the admin users table wrapper uses `transform: rotateX(180deg)`
+  // (scrollbar-on-top trick), which creates a containing block and would otherwise
+  // trap this `fixed` overlay inside the table instead of the viewport.
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111111] border border-gray-800 rounded-lg max-w-md w-full p-6">
         {/* Header */}
@@ -284,6 +288,7 @@ export default function ChangeSubscriptionModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

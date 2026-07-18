@@ -1,5 +1,6 @@
 // src/components/admin/GrantPremiumModal.tsx
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Gift, Loader2 } from 'lucide-react';
 import { grantFreeAccess } from '@/services/adminService';
 import { UserWithStats } from '@/types/admin';
@@ -47,7 +48,10 @@ export default function GrantPremiumModal({ user, onClose, onSuccess }: GrantPre
     }
   }
 
-  return (
+  // Portal to <body>: the admin users table wrapper uses `transform: rotateX(180deg)`
+  // (scrollbar-on-top trick), which creates a containing block and would otherwise
+  // trap this `fixed` overlay inside the table instead of the viewport.
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111111] border border-gray-800 rounded-lg p-6 max-w-md w-full">
         {/* Header */}
@@ -175,6 +179,7 @@ export default function GrantPremiumModal({ user, onClose, onSuccess }: GrantPre
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
