@@ -10,7 +10,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ds/Button";
 import { ColorSwatchPicker } from "@/pages/app/trading-arena/components/ColorSwatchPicker";
+import { ChartSettingsDialog } from "@/pages/app/trading-arena/components/ChartSettingsDialog";
+import { DEFAULT_CHART_STYLE, type ChartStyleSettings } from "@/pages/app/trading-arena/components/chartStyleSettings";
 import { Card, Eyebrow } from "@/components/ds/Card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Price, Change, Quote } from "@/components/ds/NumberDisplay";
 import { JournalKpiCard } from "@/components/journal/ds/JournalKpiCard";
 import { JournalGauge } from "@/components/journal/ds/JournalGauge";
@@ -28,6 +31,64 @@ function ColorPickerDemo() {
         up: {upColor} · down: {downColor}
       </span>
     </div>
+  );
+}
+
+/** Full ChartSettingsDialog harness — exercises tabs, pickers, and the live candle preview. */
+function ChartSettingsDialogDemo() {
+  const [open, setOpen] = useState(false);
+  const [settings, setSettings] = useState<ChartStyleSettings>(DEFAULT_CHART_STYLE);
+  return (
+    <>
+      <Button variant="goldOutline" onClick={() => setOpen(true)}>
+        Open full Chart Settings dialog
+      </Button>
+      <ChartSettingsDialog
+        open={open}
+        onOpenChange={setOpen}
+        settings={settings}
+        onChange={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
+        onReset={() => setSettings(DEFAULT_CHART_STYLE)}
+      />
+    </>
+  );
+}
+
+/**
+ * Same picker mounted INSIDE the app Dialog — reproduces the ChartSettingsDialog
+ * stacking context (overlay z-[9998]). The popover must render and stay
+ * clickable ABOVE the dialog; regression here = the "picker opens behind the
+ * dialog" bug.
+ */
+function ColorPickerInDialogDemo() {
+  const [open, setOpen] = useState(false);
+  const [upColor, setUpColor] = useState("#4CAF50");
+  const [downColor, setDownColor] = useState("#F44336");
+  return (
+    <>
+      <Button variant="goldOutline" onClick={() => setOpen(true)}>
+        Open picker inside Dialog
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="max-w-[420px] border-[rgba(201,166,70,0.25)] bg-[rgba(10,10,11,0.98)] text-white"
+          aria-describedby={undefined}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-[15px] font-semibold text-[#E8E8E8]">
+              Picker-in-Dialog harness
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-ds-6 p-ds-3">
+            <ColorSwatchPicker label="Up" value={upColor} onChange={setUpColor} />
+            <ColorSwatchPicker label="Down" value={downColor} onChange={setDownColor} />
+            <span className="text-caption text-ink-secondary">
+              up: {upColor} · down: {downColor}
+            </span>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -91,6 +152,10 @@ export default function DesignLab() {
           <Eyebrow>Trading Arena</Eyebrow>
           <h2 className="mt-ds-2 mb-ds-5 font-serif text-h2">ColorSwatchPicker (TV-style)</h2>
           <ColorPickerDemo />
+          <div className="mt-ds-5 flex flex-wrap gap-ds-4">
+            <ColorPickerInDialogDemo />
+            <ChartSettingsDialogDemo />
+          </div>
         </section>
 
         {/* ----- Cards ----- */}

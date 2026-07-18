@@ -11,13 +11,13 @@ import { PortfolioSnapshotCard } from './components/PortfolioSnapshotCard';
 import { PortfolioHealthPanel } from './components/PortfolioHealthPanel';
 
 // Row 2
+import { MarketComparisonChart } from './components/MarketComparisonChart';
+import { SectorExposureCard } from './components/SectorExposureCard';
+
+// Row 3
 import { TopOpportunitiesCompactCard } from './components/TopOpportunitiesCompactCard';
 import { RiskAlertsCard } from './components/RiskAlertsCard';
 import { AIRecommendationsCard } from './components/AIRecommendationsCard';
-
-// Row 3
-import { MarketComparisonChart } from './components/MarketComparisonChart';
-import { SectorExposureCard } from './components/SectorExposureCard';
 
 // Globe hero (Row 1 middle)
 import { GlobeHero } from './components/GlobeHero';
@@ -110,22 +110,7 @@ export function FinotaurCopilotDashboard() {
           </ErrorBoundary>
         </div>
 
-        {/* ROW 2 — Top Opportunities | Risk Alerts | AI Recommendations (3 equal cols) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <ErrorBoundary boundary="copilot-opportunities">
-            <TopOpportunitiesCompactCard />
-          </ErrorBoundary>
-
-          <ErrorBoundary boundary="copilot-risks">
-            <RiskAlertsCard snapshot={snapshot} />
-          </ErrorBoundary>
-
-          <ErrorBoundary boundary="copilot-recommendations">
-            <AIRecommendationsCard />
-          </ErrorBoundary>
-        </div>
-
-        {/* ROW 3 — Performance (8/12) | Sector (4/12) */}
+        {/* ROW 2 — Performance (8/12) | Sector (4/12) */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch [&>*]:h-full">
           <ErrorBoundary boundary="copilot-performance">
             <MarketComparisonChart
@@ -138,6 +123,21 @@ export function FinotaurCopilotDashboard() {
 
           <ErrorBoundary boundary="copilot-sector">
             <SectorExposureCard snapshot={snapshot} className="xl:col-span-4" />
+          </ErrorBoundary>
+        </div>
+
+        {/* ROW 3 — Top Opportunities | Risk Alerts | AI Recommendations (3 equal cols) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <ErrorBoundary boundary="copilot-opportunities">
+            <TopOpportunitiesCompactCard />
+          </ErrorBoundary>
+
+          <ErrorBoundary boundary="copilot-risks">
+            <RiskAlertsCard snapshot={snapshot} />
+          </ErrorBoundary>
+
+          <ErrorBoundary boundary="copilot-recommendations">
+            <AIRecommendationsCard />
           </ErrorBoundary>
         </div>
 

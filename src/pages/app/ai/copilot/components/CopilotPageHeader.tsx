@@ -5,12 +5,14 @@
 import { useState } from 'react';
 import { Link2 } from 'lucide-react';
 import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
+import ManualPortfolioPopup from '@/components/brokers/ManualPortfolioPopup';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 
 export function CopilotPageHeader() {
   const [showBrokerPopup, setShowBrokerPopup] = useState(false);
   const ib = useIBConnection();
+  const isManual = ib.broker === 'manual';
 
   return (
     <>
@@ -47,8 +49,8 @@ export function CopilotPageHeader() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70"></span>
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
             </span>
-            <span className="text-white/90">Interactive Brokers</span>
-            {ib.accountId && (
+            <span className="text-white/90">{isManual ? 'Manual Portfolio' : 'Interactive Brokers'}</span>
+            {!isManual && ib.accountId && (
               <span className="font-mono text-emerald-200/80 normal-case tracking-normal">{ib.accountId}</span>
             )}
           </button>
@@ -63,7 +65,11 @@ export function CopilotPageHeader() {
           </button>
         )}
       </div>
-      {showBrokerPopup && <IBConnectionPopup onClose={() => setShowBrokerPopup(false)} />}
+      {showBrokerPopup && (
+        isManual
+          ? <ManualPortfolioPopup onClose={() => setShowBrokerPopup(false)} />
+          : <IBConnectionPopup onClose={() => setShowBrokerPopup(false)} />
+      )}
     </>
   );
 }

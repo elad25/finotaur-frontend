@@ -341,7 +341,7 @@ export function CopilotHoldingsPage() {
       <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
         <CopilotEmptyState
           title="Connect to see your holdings"
-          description="Positions, market value, and unrealized P&L pulled live from your Interactive Brokers account."
+          description="Positions, market value, and unrealized P&L pulled live from your connected broker or manual portfolio."
         />
       </CopilotPageShell>
     );
