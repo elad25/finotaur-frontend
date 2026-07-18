@@ -16,12 +16,13 @@ import {
   selectAutoResult,
   selectAutoSetup,
   selectSelectedTradeIndex,
+  selectEffectiveInstrument,
 } from '@/store/useAutoBacktestStore';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
 import type { Detection } from '@/core/auto/types';
 import type { ReplayHandoff } from '@/core/auto/replayBridge';
 import { TradeChart } from '@/components/journal/TradeChart';
-import { autoPositionToTradeChartTrade, mapTimeframeToInterval } from './tradeChartAdapter';
+import { autoPositionToTradeChartTrade, mapTimeframeToInterval, resolveRunEntryDefaults } from './tradeChartAdapter';
 
 function fmtTime(sec?: number): string {
   if (!sec) return '—';
@@ -52,7 +53,17 @@ export function TradeDetailPanel() {
   const navigate = useNavigate();
   const result = useAutoBacktestStore(selectAutoResult);
   const setup = useAutoBacktestStore(selectAutoSetup);
+  const strategyV2 = useAutoBacktestStore((s) => s.strategyV2);
   const selectedIndex = useAutoBacktestStore(selectSelectedTradeIndex);
+  // The instrument the CURRENT result actually ran with — prefer this over
+  // `setup.instrument` (which is the v1-only editing slot and stays stale
+  // after a v2 run). See LastRunInstrument in the store for why.
+  const instrument = useAutoBacktestStore(selectEffectiveInstrument);
+  // Same reasoning for the other v1-setup-only scalars the "Inspect in
+  // Replay" handoff needs: for a v2 run these must come from `strategyV2`,
+  // not the (possibly stale/unrelated) v1 `setup` slot. Pure/testable — see
+  // resolveRunEntryDefaults in tradeChartAdapter.ts.
+  const entryDefaults = resolveRunEntryDefaults(instrument.engine, setup, strategyV2);
 
   if (!result || selectedIndex == null) return null;
 
@@ -72,8 +83,8 @@ export function TradeDetailPanel() {
   // Candle chart with entry/exit markers + SL/TP lines — chart against the
   // run's instrument, not AutoPosition.symbol (which often carries the
   // detection's 'AUTO' meta placeholder rather than a chartable symbol).
-  const chartTrade = autoPositionToTradeChartTrade(trade, setup.instrument.symbol);
-  const chartDefaultInterval = mapTimeframeToInterval(setup.instrument.timeframe);
+  const chartTrade = autoPositionToTradeChartTrade(trade, instrument.symbol);
+  const chartDefaultInterval = mapTimeframeToInterval(instrument.timeframe);
 
   const handleInspect = () => {
     // Trade times are in SECONDS (journal convention). The handoff carries ms.
@@ -83,17 +94,19 @@ export function TradeDetailPanel() {
     const padMs = 30 * 24 * 60 * 60 * 1000; // 30 days of context
 
     const handoff: ReplayHandoff = {
-      symbol: setup.instrument.symbol,
-      timeframe: setup.instrument.timeframe,
-      source: setup.instrument.source,
+      symbol: instrument.symbol,
+      timeframe: instrument.timeframe,
+      source: instrument.source,
       windowFrom: entryMs - padMs,
       windowTo: exitMs + padMs,
       focusTime: entryMs,
       ...(detection ? { detection } : {}),
       // Signal requires a `detection` (TradeSignal.detection is non-optional)
       // — only include it when we have one. armIndex/orderType/validForBars
-      // come from the run's own setup rules (per TradeSignal.armIndex's doc
-      // comment: "== detection.formedAtIndex"), not fabricated.
+      // come from the run's own rules (per TradeSignal.armIndex's doc
+      // comment: "== detection.formedAtIndex"), not fabricated — and from
+      // `strategyV2` rather than the v1 `setup` slot when the active run is
+      // v2 (entryDefaults above).
       ...(detection
         ? {
             signal: {
@@ -101,14 +114,14 @@ export function TradeDetailPanel() {
               direction: trade.type,
               armIndex: detection.formedAtIndex,
               entryPrice: trade.entryPrice,
-              orderType: setup.entry.orderType,
+              orderType: entryDefaults.orderType,
               stopLoss: trade.stopLoss,
               takeProfit: trade.takeProfit,
-              validForBars: setup.entry.validForBars,
+              validForBars: entryDefaults.validForBars,
             },
           }
         : {}),
-      initialBalance: setup.risk.initialBalance,
+      initialBalance: entryDefaults.initialBalance,
     };
 
     // Consumed by useBacktestStore.loadHandoff on the manual replay surface.
@@ -145,7 +158,7 @@ export function TradeDetailPanel() {
       <div className="grid gap-x-6 sm:grid-cols-2">
         <div className="divide-y divide-border-ds-subtle">
           <DetailRow label="Pattern" value={detection?.patternType ?? '—'} />
-          <DetailRow label="Symbol" value={setup.instrument.symbol} />
+          <DetailRow label="Symbol" value={instrument.symbol} />
           <DetailRow label="Entry time" value={fmtTime(trade.entryTime)} />
           <DetailRow label="Entry price" value={fmtPrice(trade.entryPrice)} />
           <DetailRow label="Stop loss" value={fmtPrice(trade.stopLoss)} />

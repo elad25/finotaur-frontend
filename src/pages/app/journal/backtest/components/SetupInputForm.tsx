@@ -18,6 +18,7 @@ import { getContractSpec } from '@/core/auto/contractSpecs';
 import { parseSetupFromText, parseStrategyV2FromText, patchStrategyV2 } from '@/services/backtest/aiSetupService';
 import { makeDefaultStrategyV2, validateStrategyStructure, type TF } from '@/core/auto/v2/types';
 import { mergeStrategyV2 } from '../lib/mergeStrategyV2';
+import { deriveStrategyName } from '../lib/deriveStrategyName';
 import { diffStrategyV2Fields } from '../lib/diffStrategyV2';
 import { cn } from '@/lib/utils';
 
@@ -219,6 +220,14 @@ export function SetupInputForm() {
         const base = makeDefaultStrategyV2(symbol, timeframe as TF);
         const parsed = await parseStrategyV2FromText(trimmed, { symbol, timeframe });
         const merged = mergeStrategyV2(base, parsed.definition);
+        // The AI often omits `name` — mergeStrategyV2 then leaves the
+        // base's placeholder ("... EMA cross (v2 default)"), which is
+        // misleading once the merge replaced the phases with a completely
+        // different strategy. Derive a real name from the merged content
+        // instead, but only when the AI didn't provide one itself.
+        if (parsed.definition.name === undefined) {
+          merged.name = deriveStrategyName(merged);
+        }
         // Sizing controls always win over the AI-inferred risk defaults —
         // same discipline as the v1 path below.
         merged.risk = {

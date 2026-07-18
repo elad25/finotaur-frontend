@@ -8,6 +8,8 @@
  */
 
 import type { AutoPosition } from '@/core/auto/signalToPosition';
+import type { SetupDefinition } from '@/core/auto/types';
+import type { StrategyDefinitionV2 } from '@/core/auto/v2/types';
 import type { TradeChartTrade } from '@/components/journal/TradeChart';
 import type { Interval } from '@/components/charting/types';
 
@@ -61,5 +63,40 @@ export function autoPositionToTradeChartTrade(
     pnl,
     stopLoss: trade.stopLoss,
     takeProfit: trade.takeProfit,
+  };
+}
+
+/** Entry/risk scalars an "Inspect in Replay" handoff needs beyond the instrument. */
+export interface RunEntryDefaults {
+  orderType: 'limit' | 'market';
+  validForBars: number;
+  initialBalance: number;
+}
+
+/**
+ * Resolve the entry/risk scalars TradeDetailPanel's "Inspect in Replay"
+ * handoff needs from whichever definition actually produced the CURRENT
+ * run: `strategyV2` when the resolved instrument's engine is `'v2'` (and a
+ * v2 definition is actually loaded), else the v1 `setup`. Mirrors the same
+ * "prefer the run that actually happened over the stale v1 slot" reasoning
+ * as `selectEffectiveInstrument` in the store — pure, no store/React
+ * import, trivially unit-testable.
+ */
+export function resolveRunEntryDefaults(
+  engine: 'v1' | 'v2',
+  setup: SetupDefinition,
+  strategyV2: StrategyDefinitionV2 | null,
+): RunEntryDefaults {
+  if (engine === 'v2' && strategyV2) {
+    return {
+      orderType: strategyV2.entry.orderType,
+      validForBars: strategyV2.entry.validForBars,
+      initialBalance: strategyV2.risk.initialBalance,
+    };
+  }
+  return {
+    orderType: setup.entry.orderType,
+    validForBars: setup.entry.validForBars,
+    initialBalance: setup.risk.initialBalance,
   };
 }

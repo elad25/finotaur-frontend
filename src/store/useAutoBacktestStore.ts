@@ -51,6 +51,25 @@ export interface AutoBacktestProgress {
   found: number;
 }
 
+/**
+ * The instrument/timeframe actually backing the CURRENT `result` — set from
+ * the definition actually being run (v1 `currentSetup.instrument` or v2
+ * `strategyV2.instrument`/`timeframes.execution`), not inferred after the
+ * fact. Exists because `currentSetup` (v1) is a separate, independently-
+ * edited slot from `strategyV2` (v2) — after a v2 run, `currentSetup` may
+ * still hold a stale instrument from an earlier v1 run (or the module
+ * default), which caused results-page components to chart/caption the WRONG
+ * symbol. Additive — components fall back to `currentSetup.instrument` when
+ * this is `null` (e.g. before any run has completed), preserving the
+ * classic v1-only path unchanged.
+ */
+export interface LastRunInstrument {
+  symbol: string;
+  timeframe: string;
+  source: string;
+  engine: 'v1' | 'v2';
+}
+
 export interface AutoBacktestState {
   /** The setup currently being edited / run. */
   currentSetup: SetupDefinition;
@@ -81,6 +100,11 @@ export interface AutoBacktestState {
    * `null` when no run has completed/loaded yet.
    */
   lastRunId: string | null;
+  /**
+   * The instrument actually backing the current `result` — see
+   * {@link LastRunInstrument}. `null` when no run has started/loaded yet.
+   */
+  lastRunInstrument: LastRunInstrument | null;
 }
 
 export interface AutoBacktestActions {
@@ -189,6 +213,7 @@ const initialState: AutoBacktestState = {
   savedRuns: [],
   selectedTradeIndex: null,
   lastRunId: null,
+  lastRunInstrument: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -318,7 +343,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
 
       async runBacktest() {
         const { currentSetup, from, to } = get();
-        const { symbol, timeframe } = currentSetup.instrument;
+        const { symbol, timeframe, source } = currentSetup.instrument;
 
         // 1. Load candles.
         set((state) => {
@@ -327,6 +352,8 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.result = null;
           state.progress = { scanned: 0, total: 0, found: 0 };
           state.selectedTradeIndex = null;
+          // Record the instrument actually being run — see LastRunInstrument.
+          state.lastRunInstrument = { symbol, timeframe, source, engine: 'v1' };
         });
 
         // Route by symbol, not by the setup's stored `instrument.source`:
@@ -428,7 +455,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
 
       async runStrategyV2Backtest(def) {
         const { from, to } = get();
-        const { symbol } = def.instrument;
+        const { symbol, source: instrumentSource } = def.instrument;
         const timeframe = def.timeframes.execution;
 
         set((state) => {
@@ -438,6 +465,11 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.result = null;
           state.progress = { scanned: 0, total: 0, found: 0 };
           state.selectedTradeIndex = null;
+          // Record the instrument actually being run — see LastRunInstrument.
+          // This is what fixes the v2-results-show-wrong-instrument bug: the
+          // v1 `currentSetup.instrument` slot is untouched by a v2 run, so
+          // components must read this instead of `selectAutoSetup`.
+          state.lastRunInstrument = { symbol, timeframe, source: instrumentSource, engine: 'v2' };
         });
 
         // Same routing rule as runBacktest(): route by symbol, not by the
@@ -642,6 +674,18 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           } else {
             state.currentSetup = found.setupSnapshot;
           }
+          // Restore the instrument this SavedRun actually ran with — same
+          // reasoning as runBacktest()/runStrategyV2Backtest(): a loaded v2
+          // run must not fall back to a stale `currentSetup.instrument`.
+          // `found.symbol`/`found.timeframe` are the run's own recorded
+          // meta (correct for both engines); `source` comes from the
+          // snapshot's instrument since SavedRun doesn't store it separately.
+          state.lastRunInstrument = {
+            symbol: found.symbol,
+            timeframe: found.timeframe,
+            source: found.setupSnapshot.instrument.source,
+            engine: isV2SetupDefinition(found.setupSnapshot) ? 'v2' : 'v1',
+          };
           state.from = found.from;
           state.to = found.to;
           state.result = {
@@ -707,6 +751,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.error = null;
           state.selectedTradeIndex = null;
           state.lastRunId = null;
+          state.lastRunInstrument = null;
           // Keep currentSetup and saved library intact.
         });
       },
@@ -774,3 +819,19 @@ export const selectSavedRuns = (s: AutoBacktestStore) => s.savedRuns;
 export const selectSelectedTradeIndex = (s: AutoBacktestStore) =>
   s.selectedTradeIndex;
 export const selectAutoRunId = (s: AutoBacktestStore) => s.lastRunId;
+export const selectLastRunInstrument = (s: AutoBacktestStore) => s.lastRunInstrument;
+
+/**
+ * The instrument/timeframe/source that results-consuming components should
+ * render: `lastRunInstrument` when a run has actually completed/loaded
+ * (correct for both v1 and v2), falling back to the v1 `currentSetup`'s
+ * instrument only when no run has happened yet (keeps the classic path's
+ * pre-run UI, if any, unchanged).
+ */
+export const selectEffectiveInstrument = (s: AutoBacktestStore): LastRunInstrument =>
+  s.lastRunInstrument ?? {
+    symbol: s.currentSetup.instrument.symbol,
+    timeframe: s.currentSetup.instrument.timeframe,
+    source: s.currentSetup.instrument.source,
+    engine: 'v1',
+  };
