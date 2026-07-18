@@ -211,7 +211,7 @@ export function ColorSwatchPicker({ value, onChange, label }: ColorSwatchPickerP
           align="start"
           sideOffset={4}
           collisionPadding={8}
-          className="z-[60] flex w-[240px] flex-col gap-2.5 rounded-lg border p-2.5 shadow-lg outline-none"
+          className="z-[10000] flex w-[240px] flex-col gap-2.5 rounded-lg border p-2.5 shadow-lg outline-none"
           style={{ background: '#0D0D0F', borderColor: 'rgba(201,166,70,0.25)' }}
           aria-label="Color picker"
         >
