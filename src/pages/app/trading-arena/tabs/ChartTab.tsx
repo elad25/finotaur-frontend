@@ -67,10 +67,11 @@ import {
   DatabentoYahooFallbackSource,
 } from '@/components/charting/dataSources';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
-import type { ChartDataSource, Indicator } from '@/components/charting/types';
+import type { ChartDataSource, ChartOrderLine, Indicator } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { useBacktestSession } from '@/hooks/useBacktestSession';
-import { PaperTradeRail } from '../components/PaperTradeRail';
+import { resolveFuturesSpec } from '@/components/charting/orderflow/futuresContracts';
+import { PaperTradeRail, formatQty } from '../components/PaperTradeRail';
 import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
   resolveIntervalPlan,
@@ -406,6 +407,14 @@ export function ChartTab({
   onOpenSettings,
 }: ChartTabProps) {
   const isCrypto = assetClass === 'crypto';
+  // Futures paper trading on delayed data (Task 4) — see the futures spec
+  // lookup + `futuresLastClose`/`handleLastBarClose` below for how the rail
+  // gets a "current price" proxy without a live tick feed.
+  const isFutures = assetClass === 'futures';
+  const futuresSpec = useMemo(
+    () => (isFutures ? resolveFuturesSpec(symbol) : undefined),
+    [isFutures, symbol],
+  );
 
   // `symbol` is kept as a dependency (unused inside the callback itself)
   // deliberately — it re-anchors the window to a fresh "now" on symbol
@@ -436,7 +445,29 @@ export function ChartTab({
   // this is passed — see PaperTradeRail.tsx's header comment.
   const paperSession = useBacktestSession(100_000, 'arena-paper');
   // Order qty shared between the rail's stepper and the context menu.
+  // Crypto uses fractional sizing (default 0.01 BTC-scale units), futures
+  // uses whole contracts (default 1) — reset only on the crypto↔futures/
+  // stock BOUNDARY crossing (isCrypto flips), so switching between two
+  // crypto symbols (or two futures symbols) preserves the user's chosen qty,
+  // matching pre-existing behavior for same-mode symbol switches.
   const [orderQty, setOrderQty] = useState(1);
+  useEffect(() => {
+    setOrderQty(isCrypto ? 0.01 : 1);
+  }, [isCrypto]);
+  const qtyMode: 'integer' | 'decimal' = isCrypto ? 'decimal' : 'integer';
+
+  // Futures "current price" proxy — FinotaurChart's onLastBarClose fires once
+  // per REST bar-fetch resolution (delayed data has no live tick feed; see
+  // that prop's doc comment). Reset to null on symbol change so a stale
+  // price from the PREVIOUS futures symbol never leaks into the fresh one
+  // during the brief window before the new fetch resolves.
+  const [futuresLastClose, setFuturesLastClose] = useState<number | null>(null);
+  useEffect(() => {
+    setFuturesLastClose(null);
+  }, [symbol]);
+  const handleLastBarClose = useCallback((close: number | null) => {
+    setFuturesLastClose(close);
+  }, []);
   // Right-click chart menu (viewport coords + series price at the click).
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; price: number | null } | null>(null);
 
@@ -533,6 +564,60 @@ export function ChartTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.getBook, livePrice]);
 
+  // Rail "current price": crypto uses the live Binance tick; futures (no
+  // live feed on delayed data) fall back to the freshest loaded bar's close
+  // (see handleLastBarClose above). Stocks/forex stay null — the rail is
+  // disabled for them (`enabled` below), same as before this change.
+  const railLivePrice = isCrypto ? livePrice : (isFutures ? futuresLastClose : null);
+
+  // Paper-trading order/position lines drawn on the chart (Task 2) — active
+  // position (solid, entry price, live PnL in the title) + pending orders
+  // (dashed, trigger price) + SL/TP legs (dashed). Rebuilds whenever the
+  // session state or the rail's live price changes so the position title's
+  // PnL stays current; FinotaurChart's orderLines diff updates existing ids
+  // in place (see that effect's doc comment) so this never flickers.
+  const orderLines = useMemo<ChartOrderLine[]>(() => {
+    const lines: ChartOrderLine[] = [];
+    const pos = paperSession.state.activePosition;
+    if (pos) {
+      const dir = pos.side === 'LONG' ? 1 : -1;
+      const unrealized = railLivePrice != null
+        ? (railLivePrice - pos.entryPrice) * dir * pos.size * (pos.pointValue ?? 1)
+        : null;
+      const sideColor = pos.side === 'LONG' ? '#3ddc9a' : '#ff6b93';
+      const pnlLabel = unrealized != null ? ` ${unrealized >= 0 ? '+' : ''}${unrealized.toFixed(2)}` : '';
+      lines.push({
+        id: `pos-${pos.id}`,
+        price: pos.entryPrice,
+        color: sideColor,
+        lineStyle: 'solid',
+        title: `${pos.side} ${formatQty(pos.size)}${pnlLabel}`,
+      });
+      if (pos.stopLoss != null) {
+        lines.push({ id: `pos-${pos.id}-sl`, price: pos.stopLoss, color: '#ff6b93', lineStyle: 'dashed', title: 'SL' });
+      }
+      if (pos.takeProfits && pos.takeProfits.length > 0) {
+        for (const leg of pos.takeProfits) {
+          if (leg.filled) continue;
+          lines.push({ id: `pos-${pos.id}-tp-${leg.id}`, price: leg.price, color: '#3ddc9a', lineStyle: 'dashed', title: 'TP' });
+        }
+      } else if (pos.takeProfit != null) {
+        lines.push({ id: `pos-${pos.id}-tp`, price: pos.takeProfit, color: '#3ddc9a', lineStyle: 'dashed', title: 'TP' });
+      }
+    }
+    for (const order of paperSession.state.pendingOrders) {
+      const sideColor = order.side === 'LONG' ? '#3ddc9a' : '#ff6b93';
+      lines.push({
+        id: `ord-${order.id}`,
+        price: order.triggerPrice,
+        color: sideColor,
+        lineStyle: 'dashed',
+        title: `${order.type} ${formatQty(order.size)}`,
+      });
+    }
+    return lines;
+  }, [paperSession.state.activePosition, paperSession.state.pendingOrders, railLivePrice]);
+
   // ── Resizable right rail (Task 1) ──────────────────────────────────────
   const [railWidth, setRailWidth] = useState<number>(readStoredRailWidth);
   const [isDraggingRail, setIsDraggingRail] = useState(false);
@@ -626,6 +711,8 @@ export function ChartTab({
             showRefocusButton
             enableBackfill={isCrypto}
             sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
+            orderLines={orderLines}
+            onLastBarClose={isFutures ? handleLastBarClose : undefined}
           />
         </div>
       </div>
@@ -651,15 +738,18 @@ export function ChartTab({
         <PaperTradeRail
           key={symbol}
           symbol={symbol}
-          livePrice={livePrice}
+          livePrice={railLivePrice}
           bid={bid}
           ask={ask}
-          enabled={isCrypto}
+          enabled={isCrypto || isFutures}
           disabledTitle="Live order entry unavailable"
-          disabledDescription="Switch to a crypto symbol to enable paper trading on the chart."
+          disabledDescription="Switch to a crypto or futures symbol to enable paper trading on the chart."
           session={paperSession}
           qty={orderQty}
           onQtyChange={setOrderQty}
+          qtyMode={qtyMode}
+          delayedData={isFutures}
+          pointValue={futuresSpec?.pointValue}
         />
       </div>
 

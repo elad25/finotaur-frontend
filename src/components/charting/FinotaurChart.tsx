@@ -66,6 +66,7 @@ import type {
   Bar,
   ChartDataSource,
   ChartMarker,
+  ChartOrderLine,
   ChartTheme,
   Indicator,
   IndicatorLineStyle,
@@ -815,6 +816,16 @@ export interface FinotaurChartProps {
    */
   priceLines?: OverlayPriceLine[];
   /**
+   * Optional paper-trading order/position lines drawn on the candle series
+   * (Trading Arena — active position, pending orders, SL/TP legs). Diffed by
+   * `id`: unlike `priceLines`, an existing id whose `price`/`color`/
+   * `lineStyle`/`title` changed is updated IN PLACE via `IPriceLine.applyOptions`
+   * (not removed/recreated) so a live-ticking PnL title doesn't flicker.
+   * When absent or empty the feature is a complete no-op — every other
+   * caller (Journal/Backtest/Scanner) is unaffected.
+   */
+  orderLines?: ChartOrderLine[];
+  /**
    * Optional time-aware wall segments rendered as lightweight-charts line series.
    * Each segment is a horizontal line from startTime to endTime (or to the newest bar
    * if endTime is null — alive wall). Dead walls (endTime set) are frozen and dimmed.
@@ -918,6 +929,17 @@ export interface FinotaurChartProps {
    * magnitude too coarse (see ChartTab.tsx / FuturesChartTab.tsx callers).
    */
   onBarsLoad?: (range: { high: number; low: number; avgBarRange: number } | null) => void;
+  /**
+   * Fired with the most recently loaded bar's close price whenever the REST
+   * bar fetch resolves (`null` if the window returned zero bars). Intended
+   * for callers on non-live-tick sources (delayed futures data has no
+   * websocket) that need a "current price" proxy — e.g. Trading Arena's
+   * futures paper-trading rail treats this as its `livePrice`. Deliberately
+   * NOT fired from the live-tick `subscribeBars` path (crypto) — that source
+   * already has its own live price via `useBinanceOrderBook`, and firing on
+   * every tick would add an unnecessary re-render there. No-op when omitted.
+   */
+  onLastBarClose?: (close: number | null) => void;
   /**
    * Optional footprint overlay (ATAS-style bid/ask clusters). When provided,
    * mounts a FootprintLayer canvas on top of candles, fed by `store`.
@@ -1039,6 +1061,8 @@ export function FinotaurChart({
   timeFitToken,
   showRefocusButton = false,
   priceLines,
+  orderLines,
+  onLastBarClose,
   wallSegments,
   wallRenderMode = 'series',
   depthMatrixColumns,
@@ -1116,6 +1140,14 @@ export function FinotaurChart({
    * via the chart.remove() call which destroys all series (and their lines).
    */
   const overlayPriceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  /**
+   * Active paper-trading order/position lines keyed by ChartOrderLine.id.
+   * Stores the last-applied value alongside the line handle so the diff
+   * effect below can detect price/color/lineStyle/title changes and update
+   * in place via `applyOptions` (id-only diffing, like overlayPriceLinesRef,
+   * would miss a live position's PnL-in-title updating every tick).
+   */
+  const orderLinesRef = useRef<Map<string, { line: IPriceLine; value: ChartOrderLine }>>(new Map());
   /**
    * Active wall-segment baseline series keyed by WallSegment.id.
    * Each entry is a dedicated ISeriesApi<'Baseline'> spanning startTime→endTime,
@@ -1250,6 +1282,8 @@ export function FinotaurChart({
       // Overlay price lines are destroyed with the chart — clear the map so
       // the next mount does not try to remove already-gone line handles.
       overlayPriceLinesRef.current.clear();
+      // Order/position lines are destroyed with the chart too — same reasoning.
+      orderLinesRef.current.clear();
       // Wall segment series belong to the destroyed chart — clear so the next
       // mount starts fresh without stale series handles.
       wallSegmentSeriesRef.current.clear();
@@ -1665,6 +1699,7 @@ export function FinotaurChart({
         seriesRef.current.setData(bars);
         barsRef.current = bars;
         setBarCount(bars.length);
+        onLastBarClose?.(bars.length > 0 ? bars[bars.length - 1].close : null);
 
         // Report candle hi/low to caller so it can include price action in the
         // liquidity band (makes the band authoritative for the visible candles).
@@ -1780,7 +1815,7 @@ export function FinotaurChart({
     };
     // refreshToken: deliberate extra dep (undefined for every caller except
     // FuturesChartTab) — see the prop doc comment on FinotaurChartProps.
-  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, refreshToken]);
+  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, onLastBarClose, refreshToken]);
 
   // ─── Left-pan backfill (older history) — see `enableBackfill` prop ────
   // As the user pans/zooms toward the left edge of the loaded bars, fetches
@@ -2102,6 +2137,66 @@ export function FinotaurChart({
       }
     }
   }, [priceLines]);
+
+  // ─── Apply paper-trading order/position lines ───────────────────
+  // Diffed by id: removed ids are dropped, new ids created, and EXISTING ids
+  // whose price/color/lineStyle/title changed are updated in place via
+  // applyOptions (not recreated) — a live position's title carries the
+  // ticking unrealized PnL, so this must not flicker/recreate every render.
+  // No-op when `orderLines` is absent/empty — zero impact on every other caller.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    const nextLines = orderLines ?? [];
+    const nextMap = new Map<string, ChartOrderLine>(nextLines.map((l) => [l.id, l]));
+    const activeMap = orderLinesRef.current;
+
+    // Remove lines no longer desired.
+    for (const [id, entry] of Array.from(activeMap.entries())) {
+      if (!nextMap.has(id)) {
+        try { series.removePriceLine(entry.line); } catch { /* series already gone */ }
+        activeMap.delete(id);
+      }
+    }
+
+    // Add or update lines.
+    for (const [id, spec] of nextMap.entries()) {
+      const lwLineStyle = spec.lineStyle === 'dashed' ? LineStyle.Dashed : LineStyle.Solid;
+      const existing = activeMap.get(id);
+      if (!existing) {
+        const line = series.createPriceLine({
+          price: spec.price,
+          color: spec.color,
+          lineWidth: 1,
+          lineStyle: lwLineStyle,
+          axisLabelVisible: true,
+          title: spec.title,
+        });
+        activeMap.set(id, { line, value: spec });
+        continue;
+      }
+      const prev = existing.value;
+      if (
+        prev.price !== spec.price
+        || prev.color !== spec.color
+        || prev.lineStyle !== spec.lineStyle
+        || prev.title !== spec.title
+      ) {
+        try {
+          existing.line.applyOptions({
+            price: spec.price,
+            color: spec.color,
+            lineStyle: lwLineStyle,
+            title: spec.title,
+          });
+        } catch {
+          // series already gone — ignore, next diff pass will reconcile.
+        }
+        activeMap.set(id, { line: existing.line, value: spec });
+      }
+    }
+  }, [orderLines]);
 
   // ─── Apply wall segments (time-aware liquidity history) ────────
   // Each segment is a dedicated BASELINE series spanning [startTime, endTime],
