@@ -54,7 +54,6 @@ import type { AssetClass } from '@/components/backtest/symbolUniverse';
 import { useKlineDelta } from '../hooks/useKlineDelta';
 import { resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
-import { DerivativesPanel } from '../components/DerivativesPanel';
 import { buildViewSyncKey, readViewState, writeViewState } from '../hooks/arenaViewState';
 
 // ---------------------------------------------------------------------------
@@ -574,8 +573,6 @@ function CvdChart({ symbol, interval, viewSyncKey }: CvdChartProps) {
         />
       </div>
       </div>
-
-      <DerivativesPanel key={symbol} symbol={symbol} />
     </div>
   );
 }

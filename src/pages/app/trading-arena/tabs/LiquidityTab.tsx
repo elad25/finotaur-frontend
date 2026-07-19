@@ -63,7 +63,6 @@ import {
 import { LiquiditySettingsMenu } from '../components/LiquiditySettingsMenu';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
-import { DerivativesPanel } from '../components/DerivativesPanel';
 
 interface LiquidityTabProps {
   symbol: string;
@@ -935,12 +934,6 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
             enabled
           />
         </PaperTradeRailShell>
-
-        {/* Crypto Derivatives panel (Binance perp) — own collapsible rail,
-            to the right of PaperTradeRail so the heatmap's flex-1 pane keeps
-            its own natural width unchanged; collapsing this panel reclaims
-            the space instead of ever shrinking the heatmap by force. */}
-        <DerivativesPanel key={symbol} symbol={symbol} />
       </div>
     </div>
   );
