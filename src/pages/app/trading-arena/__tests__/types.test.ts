@@ -15,6 +15,7 @@ describe('toTabId', () => {
   it('passes through every other valid TabId unchanged', () => {
     expect(toTabId('chart')).toBe('chart');
     expect(toTabId('order-flow')).toBe('order-flow');
+    expect(toTabId('cvd')).toBe('cvd');
     expect(toTabId('liquidity')).toBe('liquidity');
   });
 
@@ -26,7 +27,6 @@ describe('toTabId', () => {
 
   it("defaults unknown/removed slugs (including undefined) to 'chart'", () => {
     expect(toTabId('tape')).toBe('chart');
-    expect(toTabId('cvd')).toBe('chart');
     expect(toTabId('options')).toBe('chart');
     expect(toTabId('futures')).toBe('chart');
     expect(toTabId('forex')).toBe('chart');
@@ -41,6 +41,15 @@ describe('TRADING_ARENA_TABS', () => {
     const domTab = TRADING_ARENA_TABS.find((tab) => tab.id === 'dom');
     expect(domTab).toBeDefined();
     expect(domTab).toEqual({ id: 'dom', label: 'DOM', locked: false });
+  });
+
+  it('contains a cvd entry with the expected id/label/locked shape, positioned after order-flow', () => {
+    const cvdTab = TRADING_ARENA_TABS.find((tab) => tab.id === 'cvd');
+    expect(cvdTab).toBeDefined();
+    expect(cvdTab).toEqual({ id: 'cvd', label: 'CVD', locked: false });
+    const orderFlowIdx = TRADING_ARENA_TABS.findIndex((tab) => tab.id === 'order-flow');
+    const cvdIdx = TRADING_ARENA_TABS.findIndex((tab) => tab.id === 'cvd');
+    expect(cvdIdx).toBe(orderFlowIdx + 1);
   });
 
   it('every tab id round-trips through toTabId to itself', () => {

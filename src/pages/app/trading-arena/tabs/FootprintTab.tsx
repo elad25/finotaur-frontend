@@ -84,6 +84,7 @@ import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { cn } from '@/lib/utils';
 import { PaperTradeRail } from '../components/PaperTradeRail';
+import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
 import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
 
 /** Which futures source is active — 'nt8' is the default for ALL users; 'databento' is an admin-only delayed dev preview (see FuturesFootprintBody's compliance note). */
@@ -180,22 +181,24 @@ function ResizablePaperRail({ children }: { children: ReactNode }) {
   }, [isDraggingRail]);
 
   return (
-    <>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panel"
-        onMouseDown={handleRailHandleMouseDown}
-        className={cn(
-          'w-1.5 flex-shrink-0 cursor-col-resize border-l border-r border-transparent bg-[#050505] transition-colors hover:border-[rgba(201,166,70,0.35)] hover:bg-[rgba(201,166,70,0.10)]',
-          isDraggingRail && 'border-[rgba(201,166,70,0.55)] bg-[rgba(201,166,70,0.16)]',
-        )}
-        title="Drag to resize the trading panel"
-      />
-      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: railWidth }}>
-        {children}
-      </div>
-    </>
+    <PaperTradeRailShell
+      width={railWidth}
+      resizeHandle={
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          onMouseDown={handleRailHandleMouseDown}
+          className={cn(
+            'w-1.5 flex-shrink-0 cursor-col-resize border-l border-r border-transparent bg-[#050505] transition-colors hover:border-[rgba(201,166,70,0.35)] hover:bg-[rgba(201,166,70,0.10)]',
+            isDraggingRail && 'border-[rgba(201,166,70,0.55)] bg-[rgba(201,166,70,0.16)]',
+          )}
+          title="Drag to resize the trading panel"
+        />
+      }
+    >
+      {children}
+    </PaperTradeRailShell>
   );
 }
 

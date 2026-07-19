@@ -3,7 +3,7 @@
  */
 
 /** Active tab identifiers for the Trading Arena. */
-export type TabId = 'chart' | 'order-flow' | 'liquidity' | 'dom';
+export type TabId = 'chart' | 'order-flow' | 'cvd' | 'liquidity' | 'dom';
 
 export interface TradingArenaTab {
   id: TabId;
@@ -14,6 +14,7 @@ export interface TradingArenaTab {
 export const TRADING_ARENA_TABS: TradingArenaTab[] = [
   { id: 'chart',      label: 'Chart',      locked: false },
   { id: 'order-flow', label: 'Footprint Chart', locked: false },
+  { id: 'cvd',        label: 'CVD',        locked: false },
   { id: 'liquidity',  label: 'Liquidity',  locked: false },
   { id: 'dom',        label: 'DOM',        locked: false },
 ];
@@ -26,11 +27,12 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
  *     2026-07 rename) / 'footprint-chart' (the tab's current display-label
  *     slugified — accepted forward-compat in case a caller ever links by it)
  *     → 'order-flow', the dedicated footprint chart tab.
- *   - 'tape' / 'cvd' / 'options' / 'futures' / 'forex' (all removed from the
- *     tab bar) → 'chart', the safe default.
+ *   - 'tape' / 'options' / 'futures' / 'forex' (still removed from the tab
+ *     bar) → 'chart', the safe default. 'cvd' was restored to the tab bar
+ *     (2026-07-19) — see tabs/CvdTab.tsx.
  */
 export function toTabId(raw: string | undefined): TabId {
-  const valid: TabId[] = ['chart', 'order-flow', 'liquidity', 'dom'];
+  const valid: TabId[] = ['chart', 'order-flow', 'cvd', 'liquidity', 'dom'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
   if (raw === 'orderflow' || raw === 'footprint' || raw === 'footprint-chart') return 'order-flow';
   return 'chart';

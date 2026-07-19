@@ -24,6 +24,9 @@ const RAW_TRADE_RING_CAP = 250_000;
 const MAX_PRICE_BINS = 2000;
 
 type ChangeListener = () => void;
+// Raw-trade-batch listener — see FlowBinStore.onTrades' doc comment below for
+// why this exists separately from ChangeListener.
+type TradeBatchListener = (trades: FlowTrade[]) => void;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Serialization (local session recording — flowStorePersistence.ts). Compact
@@ -92,6 +95,8 @@ export class FlowBinStore {
   // Set for the duration of setConfig()'s replay so applySingleTrade's
   // caller (applyTrades) knows not to bump tradesIngested for replayed trades.
   private isReplaying = false;
+  // Raw-trade-batch subscribers — see onTrades() doc comment.
+  private tradeListeners = new Set<TradeBatchListener>();
   // Incrementally-tracked raw trade price extent (NOT bin-snapped) — cheap
   // O(1)-per-trade bookkeeping that lets setConfig() validate a candidate
   // rowSize against the bin-count cap without draining the raw ring. Reset
@@ -180,8 +185,38 @@ export class FlowBinStore {
       if (recordRaw) this.pushRaw(trade);
       this.applySingleTrade(trade);
     }
-    if (!this.isReplaying) this.tradesIngested += trades.length;
+    if (!this.isReplaying) {
+      this.tradesIngested += trades.length;
+      // Raw-batch fan-out — skipped during setConfig()'s internal re-bin
+      // replay (isReplaying), same guard as tradesIngested above, so a
+      // rowSize/intervalSec change never re-delivers already-seen trades to
+      // subscribers (see onTrades()' doc comment).
+      this.notifyTrades(trades);
+    }
     this.notify();
+  }
+
+  /**
+   * Subscribe to raw trade batches as they're ingested via applyTrades()
+   * (live ticks AND backfill/history chunks — NOT setConfig()'s internal
+   * re-bin replay, which never re-delivers already-seen trades here, mirror
+   * of tradesIngested's exclusion above). Added as a lightweight seam for
+   * consumers that need PER-TRADE data (e.g. a "big trade" notional
+   * threshold) rather than the aggregated per-bin view onChange()/getRange()
+   * expose — onChange() alone can't tell a caller WHICH trades just landed,
+   * only that "something changed". Purely additive: no existing caller of
+   * applyTrades()/onChange() is affected, and the listener set defaults to
+   * empty so there is zero behavior change for every pre-existing consumer.
+   * Batches are delivered exactly as received (same array reference, same
+   * batching cadence as whatever TradeSource produced them — e.g. Binance
+   * batches live ticks every ~250ms, see BinanceTradeSource.ts) — a consumer
+   * that only cares about genuinely-live (not historical/backfilled) trades
+   * should filter by `trade.time` recency itself, since this store has no
+   * concept of "live vs. backfill" at the ingestion layer.
+   */
+  onTrades(cb: TradeBatchListener): () => void {
+    this.tradeListeners.add(cb);
+    return () => this.tradeListeners.delete(cb);
   }
 
   /**
@@ -448,6 +483,10 @@ export class FlowBinStore {
 
   private notify(): void {
     for (const cb of this.listeners) cb();
+  }
+
+  private notifyTrades(trades: FlowTrade[]): void {
+    for (const cb of this.tradeListeners) cb(trades);
   }
 }
 
