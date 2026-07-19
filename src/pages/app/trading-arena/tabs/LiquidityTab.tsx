@@ -61,6 +61,8 @@ import {
 } from '@/components/charting/orderflow/futuresContracts';
 import { LiquiditySettingsMenu } from '../components/LiquiditySettingsMenu';
 import { PaperTradeRail } from '../components/PaperTradeRail';
+import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
+import { DerivativesPanel } from '../components/DerivativesPanel';
 
 interface LiquidityTabProps {
   symbol: string;
@@ -201,7 +203,7 @@ export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: L
       <div className="flex flex-1 min-w-0">
         <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />
       </div>
-      <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+      <PaperTradeRailShell width={320}>
         <PaperTradeRail
           symbol={symbol}
           livePrice={null}
@@ -211,7 +213,7 @@ export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: L
           disabledTitle="Depth feed unavailable"
           disabledDescription="Choose crypto or futures to enable this trading panel."
         />
-      </div>
+      </PaperTradeRailShell>
     </div>
   );
 }
@@ -430,7 +432,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
           )}
         </div>
 
-        <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+        <PaperTradeRailShell width={320}>
           <PaperTradeRail
             symbol={nt8Symbol}
             livePrice={book.lastPrice}
@@ -440,7 +442,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
             disabledTitle="NinjaTrader not connected"
             disabledDescription="Connect the desktop bridge to enable futures paper trading."
           />
-        </div>
+        </PaperTradeRailShell>
       </div>
     </div>
   );
@@ -873,19 +875,19 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
             ChartTab.tsx's crypto-only rail. This tab's crypto branch always
             has a live Binance book (see the `book.status === 'error'` early
             return above), so the rail is unconditional here. */}
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize panel"
-          onMouseDown={handleRailHandleMouseDown}
-          className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
-            isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
-          }`}
-        />
-
-        <div
-          className="flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto"
-          style={{ width: railWidth }}
+        <PaperTradeRailShell
+          width={railWidth}
+          resizeHandle={
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize panel"
+              onMouseDown={handleRailHandleMouseDown}
+              className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+                isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+              }`}
+            />
+          }
         >
           <PaperTradeRail
             key={symbol}
@@ -895,7 +897,13 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
             ask={ask}
             enabled
           />
-        </div>
+        </PaperTradeRailShell>
+
+        {/* Crypto Derivatives panel (Binance perp) — own collapsible rail,
+            to the right of PaperTradeRail so the heatmap's flex-1 pane keeps
+            its own natural width unchanged; collapsing this panel reclaims
+            the space instead of ever shrinking the heatmap by force. */}
+        <DerivativesPanel key={symbol} symbol={symbol} />
       </div>
     </div>
   );

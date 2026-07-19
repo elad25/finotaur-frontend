@@ -1,12 +1,14 @@
 /**
  * Trading Arena — full-screen trading workstation (admin + beta only).
  *
- * Tab restructure (2026-07): the tab bar is 4 tabs — Chart, Order Flow,
- * Liquidity, DOM. The former Tape / CVD / Options / Futures / Forex
- * tabs were removed from navigation (files kept on disk, just unrouted —
- * see tabs/TapeTab.tsx, tabs/CvdTab.tsx, tabs/LockedTab.tsx,
- * tabs/FuturesChartTab.tsx). Chart is a PLAIN candlestick chart — no order
- * flow overlay. The Order Flow tab (slug 'order-flow', component
+ * Tab restructure (2026-07): the tab bar is 5 tabs — Chart, Order Flow, CVD,
+ * Liquidity, DOM. The former Tape / Options / Futures / Forex tabs were
+ * removed from navigation (files kept on disk, just unrouted — see
+ * tabs/TapeTab.tsx, tabs/LockedTab.tsx, tabs/FuturesChartTab.tsx). CVD
+ * (tabs/CvdTab.tsx) was restored to the tab bar on 2026-07-19 — crypto-only
+ * (Binance klines via useKlineDelta), same TickDataRequiredState gating as
+ * Liquidity/DOM for non-crypto symbols. Chart is a PLAIN candlestick chart —
+ * no order flow overlay. The Order Flow tab (slug 'order-flow', component
  * tabs/FootprintTab.tsx — renamed from "Footprint" in the tab bar/nav, file
  * kept as-is) is the dedicated full-detail footprint chart; legacy
  * 'footprint' / 'orderflow' deep links still resolve there — see
@@ -24,6 +26,7 @@
  *   - Tabs (URL-driven via :section param):
  *       Chart       → FinotaurChart + BinanceSource, plain candlesticks
  *       Order Flow  → dedicated full-detail order-flow footprint (crypto + futures)
+ *       CVD         → Cumulative Volume Delta (crypto only)
  *       Liquidity   → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
  *       DOM         → clickable price ladder (crypto + futures via NT8 bridge)
  *
@@ -45,6 +48,7 @@ import { toTabId } from './types';
 import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
 import { ChartTab }    from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
+import { CvdTab }        from './tabs/CvdTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { DomTab }        from './tabs/DomTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
@@ -55,8 +59,10 @@ import { ArenaBrokerConnect } from './components/ArenaBrokerConnect';
 import { IndicatorSettingsDialog } from './components/IndicatorSettingsDialog';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
+import { useOrderFlowAlerts } from './hooks/useOrderFlowAlerts';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
 import { useArenaWorkspaces } from './hooks/useArenaWorkspaces';
+import { OrderFlowAlertsBell } from './components/OrderFlowAlertsBell';
 import { ChartStyleContext } from './components/chartStyleSettings';
 import {
   buildIndicatorsFromArenaSettings,
@@ -222,6 +228,12 @@ export default function TradingArena() {
   // active, so opening the Order Flow tab later paints instantly. Crypto
   // only — see the hook's own header comment.
   useArenaOrderflowPrefetch(symbol, assetClass);
+
+  // Order-flow alerts (v1) — session-scoped, client-side only. Own dedicated
+  // subscription so the bell works regardless of which tab is active — see
+  // that hook's header comment for the tradeoffs. Mounted at the Arena shell
+  // level (not per-tab) so it's visible in the header on every tab.
+  const orderFlowAlerts = useOrderFlowAlerts(symbol, assetClass, interval);
 
   const handleSymbolSelect = useCallback((picked: string) => {
     const detected = detectAssetClass(picked);
@@ -406,6 +418,25 @@ export default function TradingArena() {
             assetClass={assetClass}
           />
 
+          {/* Divider */}
+          <span
+            className="w-px h-5 flex-shrink-0"
+            style={{ background: 'rgba(201,166,70,0.12)' }}
+            aria-hidden="true"
+          />
+
+          {/* Order-Flow Alerts bell (v1) — visible on every tab, see
+              useOrderFlowAlerts.ts's header comment. */}
+          <OrderFlowAlertsBell
+            events={orderFlowAlerts.events}
+            unseenCount={orderFlowAlerts.unseenCount}
+            onMarkAllSeen={orderFlowAlerts.markAllSeen}
+            settings={orderFlowAlerts.settings}
+            onSettingsChange={orderFlowAlerts.updateSettings}
+            active={orderFlowAlerts.active}
+            light={light}
+          />
+
           {/* Per-instance TradingView-style settings (Inputs/Style/Visibility) —
               opened from ActiveIndicatorsLegend.tsx's gear icon, NOT the "+
               Indicators" catalog above. Rendered here (always mounted) so it
@@ -464,6 +495,14 @@ export default function TradingArena() {
               assetClass={assetClass}
               isAdmin={isAdmin}
               indicators={indicators}
+              onSelectSymbol={handleSymbolSelect}
+            />
+          )}
+          {activeTab === 'cvd' && (
+            <CvdTab
+              symbol={symbol}
+              interval={interval}
+              assetClass={assetClass}
               onSelectSymbol={handleSymbolSelect}
             />
           )}

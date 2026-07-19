@@ -72,6 +72,7 @@ import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderB
 import { useBacktestSession } from '@/hooks/useBacktestSession';
 import { resolveFuturesSpec } from '@/components/charting/orderflow/futuresContracts';
 import { PaperTradeRail, formatQty } from '../components/PaperTradeRail';
+import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
 import { ActiveIndicatorsLegend } from '../components/ActiveIndicatorsLegend';
 import {
   resolveIntervalPlan,
@@ -715,23 +716,23 @@ export function ChartTab({
         </div>
       </div>
 
-      {/* Drag handle — keeps the paper-trading rail visible in every symbol mode. */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panel"
-        onMouseDown={handleRailHandleMouseDown}
-        className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
-          isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
-        }`}
-      />
-
-      <div
-        className={cn(
-          'flex-shrink-0 border-l overflow-y-auto',
-          light ? 'border-[#e0e3eb] bg-[#ffffff]' : 'border-white/10 bg-[#0A0A0A]',
-        )}
-        style={{ width: railWidth }}
+      {/* Collapsible paper-trading rail — keeps a slim handle visible in
+          every symbol mode; drag-to-resize handle only renders while
+          expanded (see PaperTradeRailShell.tsx). */}
+      <PaperTradeRailShell
+        width={railWidth}
+        light={light}
+        resizeHandle={
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panel"
+            onMouseDown={handleRailHandleMouseDown}
+            className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+              isDraggingRail ? 'bg-[#C9A646]/60' : 'bg-transparent hover:bg-[#C9A646]/30'
+            }`}
+          />
+        }
       >
         <PaperTradeRail
           key={symbol}
@@ -749,7 +750,7 @@ export function ChartTab({
           delayedData={isFutures}
           pointValue={futuresSpec?.pointValue}
         />
-      </div>
+      </PaperTradeRailShell>
 
       {ctxMenu && (
         <ChartContextMenu

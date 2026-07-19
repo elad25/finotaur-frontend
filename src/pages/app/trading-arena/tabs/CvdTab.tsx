@@ -24,6 +24,17 @@
  * Divergence: SKIPPED. A reliable divergence detector needs a rolling
  * swing-high/low algorithm that is prone to false positives and adds visual
  * clutter if tuned wrong. Left as a // TODO for a dedicated future session.
+ *
+ * Availability (restored to the tab bar 2026-07-19 — see ../types.ts):
+ * crypto-only, same gating LiquidityTab.tsx/DomTab.tsx use for their own
+ * live-feed-only surfaces — non-crypto symbols get the shared
+ * TickDataRequiredState empty state instead of a broken fetch. Within
+ * crypto, useKlineDelta only understands Binance's fixed native kline
+ * intervals (1m/5m/15m/30m/1h/4h/1d) — an Arena custom/aggregated interval
+ * (e.g. '45m') has no native Binance kline, so `resolveKlineInterval` below
+ * mirrors FootprintTab.tsx's KLINE_DELTA_NATIVE gating for its CVD/Delta
+ * sub-panes and shows an inline "switch timeframe" notice instead of
+ * fetching a mismatched interval.
  */
 
 import { useEffect, useRef } from 'react';
@@ -39,7 +50,11 @@ import {
   type ChartOptions,
 } from 'lightweight-charts';
 import type { Interval } from '@/components/charting/types';
+import type { AssetClass } from '@/components/backtest/symbolUniverse';
 import { useKlineDelta } from '../hooks/useKlineDelta';
+import { resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
+import { TickDataRequiredState } from '../components/TickDataRequiredState';
+import { DerivativesPanel } from '../components/DerivativesPanel';
 
 // ---------------------------------------------------------------------------
 // Palette — FINOTAUR dark arena theme
@@ -124,15 +139,63 @@ function formatVolume(v: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// CvdTab component
+// Native-interval resolution — CVD/Delta only exist for Binance's fixed
+// native kline intervals (mirrors FootprintTab.tsx's KLINE_DELTA_NATIVE).
 // ---------------------------------------------------------------------------
 
-interface CvdTabProps {
+const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+
+/** Resolves an Arena (arbitrary) interval to a native Binance kline Interval useKlineDelta can fetch, or null if the current interval has no native match. */
+function resolveKlineInterval(interval: ArenaInterval): Interval | null {
+  const plan = resolveIntervalPlan('binance', interval);
+  if (plan.kind === 'native' && KLINE_DELTA_NATIVE.includes(plan.interval)) return plan.interval;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// CvdTab — public entry point (crypto-only gating + native-interval check)
+// ---------------------------------------------------------------------------
+
+export interface CvdTabProps {
+  symbol:     string;
+  interval:   ArenaInterval;
+  assetClass: AssetClass;
+  /** Wired to the Arena's symbol setter — powers the non-crypto empty state's quick-switch chips. */
+  onSelectSymbol?: (symbol: string) => void;
+}
+
+export function CvdTab({ symbol, interval, assetClass, onSelectSymbol }: CvdTabProps) {
+  if (assetClass !== 'crypto') {
+    return <TickDataRequiredState variant="footprint" onSelectSymbol={onSelectSymbol} />;
+  }
+
+  const klineInterval = resolveKlineInterval(interval);
+  if (!klineInterval) {
+    return (
+      <div className="flex h-full w-full items-center justify-center px-6">
+        <p className="max-w-sm text-center text-[13px] text-[#909090]">
+          CVD requires a standard interval (1m, 5m, 15m, 30m, 1h, 4h, or 1d). Switch timeframe to view.
+        </p>
+      </div>
+    );
+  }
+
+  // Keyed by symbol — clean remount (fresh chart instances + fresh fetch) on
+  // symbol change, same technique LiquidityTab.tsx/DomTab.tsx use.
+  return <CvdChart key={symbol} symbol={symbol} interval={klineInterval} />;
+}
+
+// ---------------------------------------------------------------------------
+// CvdChart — the actual two-pane chart, unchanged from the original CvdTab
+// (still takes the native `Interval`, not the Arena's arbitrary interval).
+// ---------------------------------------------------------------------------
+
+interface CvdChartProps {
   symbol:   string;
   interval: Interval;
 }
 
-export function CvdTab({ symbol, interval }: CvdTabProps) {
+function CvdChart({ symbol, interval }: CvdChartProps) {
   // DOM containers for the two chart panes
   const cvdContainerRef   = useRef<HTMLDivElement | null>(null);
   const deltaContainerRef = useRef<HTMLDivElement | null>(null);
@@ -318,8 +381,13 @@ export function CvdTab({ symbol, interval }: CvdTabProps) {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+  // Outer row: chart content (flex-1) + Crypto Derivatives panel as a right
+  // rail — this tab has no existing side panel to nest under, so the panel
+  // is mounted as its own collapsible rail (task's fallback option) rather
+  // than squeezed into the stacked CVD/Delta chart area below.
   return (
-    <div className="flex flex-col w-full h-full min-h-0 bg-[#08080a]">
+    <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-col flex-1 min-w-0 h-full min-h-0 bg-[#08080a]">
 
       {/* ── Controls / info bar ──────────────────────────────────── */}
       <div
@@ -431,6 +499,9 @@ export function CvdTab({ symbol, interval }: CvdTabProps) {
           aria-label="Per-bar volume delta histogram"
         />
       </div>
+      </div>
+
+      <DerivativesPanel key={symbol} symbol={symbol} />
     </div>
   );
 }

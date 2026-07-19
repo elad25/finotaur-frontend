@@ -56,6 +56,7 @@ import {
   type FuturesRoot,
 } from '@/components/charting/orderflow/futuresContracts';
 import { PaperTradeRail } from '../components/PaperTradeRail';
+import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
 import {
   OrderFlowControls,
   DEFAULT_ORDER_FLOW_CONTROLS,
@@ -414,7 +415,7 @@ export function FuturesChartTab({ interval, indicators }: FuturesChartTabProps) 
       </div>
 
       {/* Paper-trading right rail — fed the latest polled trade price */}
-      <div className="w-80 flex-shrink-0 border-l border-white/10 bg-[#0A0A0A] overflow-y-auto">
+      <PaperTradeRailShell width={320}>
         <PaperTradeRail
           key={contractSymbol}
           symbol={contractSymbol}
@@ -426,7 +427,7 @@ export function FuturesChartTab({ interval, indicators }: FuturesChartTabProps) 
           ask={null}
           enabled={!feedUnavailable}
         />
-      </div>
+      </PaperTradeRailShell>
     </div>
   );
 }

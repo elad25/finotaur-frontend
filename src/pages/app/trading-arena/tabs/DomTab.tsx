@@ -31,6 +31,7 @@ import { DomLadder } from '../components/DomLadder';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { PaperTradeRail } from '../components/PaperTradeRail';
+import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
 import { onNt8BridgeStatus, getNt8BridgeStatus, type BridgeStatus } from '@/components/charting/orderflow/nt8Bridge';
 import { FUTURES_CONTRACTS, FUTURES_ROOTS, toNt8Symbol, type FuturesRoot } from '@/components/charting/orderflow/futuresContracts';
 import type { ArenaInterval } from '../utils/intervals';
@@ -63,7 +64,7 @@ export function DomTab({ symbol, interval: _interval, assetClass, onSelectSymbol
       <div className="flex flex-1 min-w-0">
         <TickDataRequiredState variant="depth" onSelectSymbol={onSelectSymbol} />
       </div>
-      <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+      <PaperTradeRailShell width={RAIL_WIDTH}>
         <PaperTradeRail
           symbol={symbol}
           livePrice={null}
@@ -73,7 +74,7 @@ export function DomTab({ symbol, interval: _interval, assetClass, onSelectSymbol
           disabledTitle="Depth feed unavailable"
           disabledDescription="Choose crypto or futures to enable this trading panel."
         />
-      </div>
+      </PaperTradeRailShell>
     </div>
   );
 }
@@ -149,7 +150,7 @@ function DomBody({ symbol }: DomBodyProps) {
           />
         </div>
 
-        <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+        <PaperTradeRailShell width={RAIL_WIDTH}>
           <PaperTradeRail
             symbol={symbol}
             livePrice={book.lastPrice}
@@ -158,7 +159,7 @@ function DomBody({ symbol }: DomBodyProps) {
             enabled
             session={session}
           />
-        </div>
+        </PaperTradeRailShell>
       </div>
     </div>
   );
@@ -265,7 +266,7 @@ function FuturesDomBody() {
               />
             </div>
 
-            <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+            <PaperTradeRailShell width={RAIL_WIDTH}>
               <PaperTradeRail
                 symbol={nt8Symbol}
                 livePrice={book.lastPrice}
@@ -274,7 +275,7 @@ function FuturesDomBody() {
                 enabled
                 session={session}
               />
-            </div>
+            </PaperTradeRailShell>
           </>
         ) : (
           <>
@@ -282,7 +283,7 @@ function FuturesDomBody() {
               <Nt8ConnectPanel variant="depth" />
             </div>
 
-            <div className="flex-shrink-0 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]" style={{ width: RAIL_WIDTH }}>
+            <PaperTradeRailShell width={RAIL_WIDTH}>
               <PaperTradeRail
                 symbol={nt8Symbol}
                 livePrice={book.lastPrice}
@@ -293,7 +294,7 @@ function FuturesDomBody() {
                 disabledDescription="Connect the desktop bridge to enable futures paper trading."
                 session={session}
               />
-            </div>
+            </PaperTradeRailShell>
           </>
         )}
       </div>
