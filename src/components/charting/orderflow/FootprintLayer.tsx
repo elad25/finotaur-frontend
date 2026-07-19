@@ -21,7 +21,10 @@
 //   - Per-candle draw structures (sorted/merged bins, imbalance flags) are
 //     rebuilt ONLY when data or config is dirty — never on pan/zoom frames.
 //     Pan/zoom frames only re-project coordinates and redraw from the
-//     already-prepared structures (footprintRender.ts).
+//     already-prepared structures (footprintRender.ts). Data-dirty eviction
+//     is per-candle (store.onChange's changedTimes Set), so a live tick on
+//     the forming candle only evicts THAT candle's cache entry, not every
+//     loaded candle's — see the store.onChange subscription below.
 //   - try/finally with ctx.setTransform(1,0,0,1,0,0) restoration — a
 //     mid-frame throw must never corrupt the transform stack.
 //   - Clipped at timeScale().width() so nothing paints over the price axis.
@@ -244,8 +247,23 @@ export function FootprintLayer({
 
   // ── Mark dirty when the store emits new data ─────────────────────────────
   useEffect(() => {
-    const unsubscribe = store.onChange(() => {
+    const unsubscribe = store.onChange((changedTimes) => {
       dirtyRef.current = true;
+      // Selective eviction — a defined Set means only these candle times
+      // changed (a live tick), so evict just their cached entries instead of
+      // clearing everything every frame. undefined (clear/hydrate/setConfig
+      // re-bin) means "anything may have changed" — clear wholesale.
+      if (changedTimes) {
+        for (const t of changedTimes) {
+          preparedCacheRef.current.delete(t);
+          mergeFactorCacheRef.current.delete(t);
+          statsCacheRef.current.delete(t);
+        }
+      } else {
+        preparedCacheRef.current.clear();
+        mergeFactorCacheRef.current.clear();
+        statsCacheRef.current.clear();
+      }
     });
     dirtyRef.current = true; // store identity changed (symbol/interval swap) — force rebuild
     preparedCacheRef.current.clear();

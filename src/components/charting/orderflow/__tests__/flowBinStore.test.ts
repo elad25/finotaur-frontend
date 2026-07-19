@@ -451,3 +451,84 @@ describe('FlowBinStore — render-loop fixed-point simulation', () => {
     expect(store.getRawTrades().length).toBe(2000);
   });
 });
+
+describe('FlowBinStore — onChange() changedTimes payload', () => {
+  // Regression tests for the footprint-freeze fix: FootprintLayer's
+  // per-candle render caches (prepared/mergeFactor/stats) were never evicted
+  // on a live tick, so the forming candle's numbers froze. notify() now
+  // forwards the exact set of candle bucket times an applyTrades() batch
+  // touched, so listeners can evict just those entries. A defined (possibly
+  // empty) Set means "only these candle times changed"; undefined means
+  // "anything may have changed — treat all cached data as stale".
+
+  it('applyTrades() with 2 trades in the SAME candle bucket notifies with a Set of size 1', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    const listener = vi.fn();
+    store.onChange(listener);
+
+    store.applyTrades([
+      { time: 0, price: 100.4, qty: 1, buyerAggressor: true },
+      { time: 10_000, price: 100.6, qty: 1, buyerAggressor: false }, // same 60s bucket (t=0)
+    ]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const changedTimes = listener.mock.calls[0][0] as ReadonlySet<number>;
+    expect(changedTimes).toBeInstanceOf(Set);
+    expect(changedTimes.size).toBe(1);
+    expect(Array.from(changedTimes)).toEqual([0]);
+  });
+
+  it('applyTrades() with trades in TWO different candle buckets notifies with a Set of size 2', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    const listener = vi.fn();
+    store.onChange(listener);
+
+    store.applyTrades([
+      { time: 0, price: 100.4, qty: 1, buyerAggressor: true }, // bucket t=0
+      { time: 61_000, price: 100.6, qty: 1, buyerAggressor: false }, // bucket t=60
+    ]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const changedTimes = listener.mock.calls[0][0] as ReadonlySet<number>;
+    expect(changedTimes.size).toBe(2);
+    expect(Array.from(changedTimes).sort((a, b) => a - b)).toEqual([0, 60]);
+  });
+
+  it('clear() notifies listeners with undefined', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(5, 0, 60_000));
+
+    const listener = vi.fn();
+    store.onChange(listener);
+    store.clear();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it('hydrate() notifies listeners with undefined', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(5, 0, 60_000));
+    const snapshot = store.serialize();
+
+    const store2 = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    const listener = vi.fn();
+    store2.onChange(listener);
+    store2.hydrate(snapshot);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it('setConfig() re-bin replay notifies listeners with undefined (not a partial Set)', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades(buildTrades(5, 0, 60_000));
+
+    const listener = vi.fn();
+    store.onChange(listener);
+    store.setConfig({ intervalSec: 60, rowSize: 5 }); // actually different — replays + notifies
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toBeUndefined();
+  });
+});
