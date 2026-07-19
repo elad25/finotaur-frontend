@@ -44,6 +44,7 @@ import type { Interval } from '@/components/charting/types';
 import { cn } from '@/lib/utils';
 import { intervalToSeconds, resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
 import { useLiquidityPreferences } from '../hooks/useLiquidityPreferences';
+import { buildViewSyncKey } from '../hooks/arenaViewState';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
@@ -132,6 +133,14 @@ function lookbackSeconds(iv: ArenaInterval): number {
 // Visible window on open — 120 bars, matching MarketScanner's own default framing.
 const VISIBLE_BARS = 120;
 
+// View-sync bounded-restore bound (viewSyncRestoreMaxBars — see
+// FinotaurChart's prop doc comment) for the CRYPTO liquidity body only:
+// lets a fresh sync window from Chart/CVD win over this tab's own
+// depth-coverage-driven focusRange on the INITIAL mount. A heatmap
+// tolerates a much wider window than a footprint chart (no per-cell text
+// legibility constraint), hence the looser cap than Footprint's 120.
+const VIEW_SYNC_RESTORE_MAX_BARS = 500;
+
 // Approximate bar-spacing px used only to pick the depth-slice resolution
 // tier (5s vs 1m) — same conservative constant MarketScanner uses.
 const APPROX_BAR_SPACING_PX = 8;
@@ -188,7 +197,14 @@ export function LiquidityTab({ symbol, interval, assetClass, onSelectSymbol }: L
     // Keyed by symbol — forces a clean remount (and therefore a clean WS
     // reconnect + wall-history refetch) on symbol change, same technique
     // MarketScanner.tsx uses for its own WorkstationInner.
-    return <LiquidityBody key={symbol} symbol={symbol} interval={interval} />;
+    return (
+      <LiquidityBody
+        key={symbol}
+        symbol={symbol}
+        interval={interval}
+        viewSyncKey={buildViewSyncKey(assetClass, symbol, interval)}
+      />
+    );
   }
 
   if (assetClass === 'futures') {
@@ -345,6 +361,14 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
 
   const focusRange = useMemo(() => ({ from: to - FUTURES_VISIBLE_BARS * intervalSec, to }), [to, intervalSec]);
 
+  // ATAS-parity "synced price scale" (arenaViewState.ts). Keyed by the
+  // CONTRACT ROOT ('NQ'), not the Arena's top-level symbol selection — this
+  // body's futures contract picker (FUTURES_ROOTS pills below) is its own
+  // independent instrument selection, unrelated to whatever top-level
+  // symbol ChartTab happens to show. Using the top-level symbol here would
+  // risk associating a saved price/time window with the WRONG instrument.
+  const viewSyncKey = useMemo(() => buildViewSyncKey('futures', root, interval), [root, interval]);
+
   const [timeFitToken, setTimeFitToken] = useState(0);
   useEffect(() => {
     setTimeFitToken((t) => t + 1);
@@ -430,6 +454,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
                 binSize: depth.binSize,
                 visible: preferences.sideProfile,
               }}
+              viewSyncKey={viewSyncKey}
             />
           ) : (
             <Nt8ConnectPanel variant="depth" />
@@ -455,9 +480,11 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
 interface LiquidityBodyProps {
   symbol: string;
   interval: ArenaInterval;
+  /** ATAS-parity "synced price scale" (arenaViewState.ts) — see FinotaurChart's `viewSyncKey` prop doc comment. */
+  viewSyncKey: string;
 }
 
-function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
+function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
   const book = useBinanceOrderBook(symbol);
 
   // Best bid/ask for PaperTradeRail's "Buy Bid" / "Sell Ask" limit orders —
@@ -875,6 +902,8 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
                 binSize: depthMatrix.binSize,
                 visible: preferences.sideProfile,
               }}
+              viewSyncKey={viewSyncKey}
+              viewSyncRestoreMaxBars={VIEW_SYNC_RESTORE_MAX_BARS}
             />
           </div>
         </div>

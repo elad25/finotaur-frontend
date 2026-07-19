@@ -55,6 +55,7 @@ import { useKlineDelta } from '../hooks/useKlineDelta';
 import { resolveIntervalPlan, type ArenaInterval } from '../utils/intervals';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { DerivativesPanel } from '../components/DerivativesPanel';
+import { buildViewSyncKey, readViewState, writeViewState } from '../hooks/arenaViewState';
 
 // ---------------------------------------------------------------------------
 // Palette — FINOTAUR dark arena theme
@@ -182,7 +183,14 @@ export function CvdTab({ symbol, interval, assetClass, onSelectSymbol }: CvdTabP
 
   // Keyed by symbol — clean remount (fresh chart instances + fresh fetch) on
   // symbol change, same technique LiquidityTab.tsx/DomTab.tsx use.
-  return <CvdChart key={symbol} symbol={symbol} interval={klineInterval} />;
+  return (
+    <CvdChart
+      key={symbol}
+      symbol={symbol}
+      interval={klineInterval}
+      viewSyncKey={buildViewSyncKey(assetClass, symbol, interval)}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +201,20 @@ export function CvdTab({ symbol, interval, assetClass, onSelectSymbol }: CvdTabP
 interface CvdChartProps {
   symbol:   string;
   interval: Interval;
+  /**
+   * ATAS-parity "synced price scale" (arenaViewState.ts) — see
+   * FinotaurChart.tsx's `viewSyncKey` prop doc comment for the full
+   * contract. CvdChart wires it directly (it doesn't use FinotaurChart) and
+   * TIME-only: the CVD/delta panes have no real "price" axis (their y-axis
+   * is cumulative volume delta, not price), so only the visible time
+   * window is restored/captured here. The delta pane needs no separate
+   * wiring — it already mirrors the CVD pane's visible range via the
+   * existing subscribeVisibleLogicalRangeChange sync below.
+   */
+  viewSyncKey: string;
 }
 
-function CvdChart({ symbol, interval }: CvdChartProps) {
+function CvdChart({ symbol, interval, viewSyncKey }: CvdChartProps) {
   // DOM containers for the two chart panes
   const cvdContainerRef   = useRef<HTMLDivElement | null>(null);
   const deltaContainerRef = useRef<HTMLDivElement | null>(null);
@@ -315,6 +334,48 @@ function CvdChart({ symbol, interval }: CvdChartProps) {
   }, []); // mount once — data is pushed via the hook-consuming effect below
 
   // ---------------------------------------------------------------------------
+  // View-sync (viewSyncKey) CAPTURE — TIME only, see CvdChartProps' doc
+  // comment. Writes the CVD pane's visible time window to arenaViewState.ts
+  // (throttled 300ms) whenever the user pans/zooms, so switching to
+  // Chart/Footprint/Liquidity for the same symbol+interval reopens on the
+  // same window. Preserves whatever PRICE range those views already saved
+  // (this pane has no real "price" axis to contribute) by reading the
+  // existing entry first instead of overwriting it with null.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const cvdChart = cvdChartRef.current;
+    if (!cvdChart) return;
+
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingRange: { from: number; to: number } | null = null;
+
+    const flush = () => {
+      throttleTimer = null;
+      if (!pendingRange) return;
+      const range = pendingRange;
+      pendingRange = null;
+      const existing = readViewState(viewSyncKey);
+      writeViewState(viewSyncKey, { timeRange: range, priceRange: existing?.priceRange ?? null });
+    };
+
+    const handleVisibleTimeRangeChange = (range: { from: unknown; to: unknown } | null) => {
+      if (!range) return;
+      pendingRange = { from: range.from as unknown as number, to: range.to as unknown as number };
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(flush, 300);
+    };
+
+    cvdChart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+
+    return () => {
+      if (throttleTimer) clearTimeout(throttleTimer);
+      try {
+        cvdChart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+      } catch { /* chart may already be torn down */ }
+    };
+  }, [viewSyncKey]);
+
+  // ---------------------------------------------------------------------------
   // ResizeObserver — keep both charts fitting the outer container
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -361,9 +422,22 @@ function CvdChart({ symbol, interval }: CvdChartProps) {
       })),
     );
 
-    // Fit content once so the full window is visible on first load
-    cvdChart.timeScale().fitContent();
-  }, [cvd, delta, loadState]);
+    // View-sync (viewSyncKey) RESTORE — TIME only, see CvdChartProps' doc
+    // comment. Falls back to the original fitContent() when there's no
+    // fresh saved state. Setting the CVD pane's visible range also fires
+    // its own subscribeVisibleLogicalRangeChange listener (mount effect
+    // above), which mirrors onto the delta pane automatically — no
+    // separate wiring needed there.
+    const saved = readViewState(viewSyncKey);
+    if (saved) {
+      cvdChart.timeScale().setVisibleRange({
+        from: saved.timeRange.from as never,
+        to: saved.timeRange.to as never,
+      });
+    } else {
+      cvdChart.timeScale().fitContent();
+    }
+  }, [cvd, delta, loadState, viewSyncKey]);
 
   // ---------------------------------------------------------------------------
   // Derived display values

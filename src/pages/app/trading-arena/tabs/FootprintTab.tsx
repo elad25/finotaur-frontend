@@ -76,6 +76,7 @@ import {
 } from '@/components/charting/orderflow/futuresContracts';
 import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
 import { useChartStylePreferences } from '../hooks/useChartStylePreferences';
+import { buildViewSyncKey } from '../hooks/arenaViewState';
 import { DEFAULT_FOOTPRINT_SETTINGS, footprintSettingsToConfig, resolveEffectiveRowSize, type FootprintSettings } from '../components/footprintSettings';
 import { FootprintSettingsDialog } from '../components/FootprintSettingsDialog';
 import type { ChartStyleSettings } from '../components/chartStyleSettings';
@@ -110,6 +111,14 @@ interface FootprintTabProps {
 // geometry (row-merge factor, font size) still derives from actual on-screen
 // px — this initial framing is what keeps that geometry sane by default.
 const INITIAL_VISIBLE_BARS = 20;
+// View-sync bounded-restore bound (viewSyncRestoreMaxBars — see
+// FinotaurChart's prop doc comment) for the crypto footprint body only:
+// lets a fresh sync window from Chart/CVD win over this tab's own
+// legibility-driven focusRange on the INITIAL mount, but only up to ~120
+// bars — wider than that and footprint cells would render too narrow to
+// read (same rationale as INITIAL_VISIBLE_BARS above, just a looser cap
+// since this is a ceiling, not the default framing).
+const VIEW_SYNC_RESTORE_MAX_BARS = 120;
 const RAIL_WIDTH_STORAGE_KEY = 'arena-footprint-rail-width';
 const RAIL_DEFAULT_WIDTH = 320;
 const RAIL_MIN_WIDTH = 280;
@@ -270,6 +279,7 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
         chartStyle={chartStyle}
         onChartStyleChange={updateChartStyle}
         onChartStyleReset={resetChartStyle}
+        viewSyncKey={buildViewSyncKey(assetClass, symbol, interval)}
       />
     );
   }
@@ -446,6 +456,8 @@ interface CryptoFootprintBodyProps {
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
   onChartStyleReset: () => void;
+  /** ATAS-parity "synced price scale" (arenaViewState.ts) — see FinotaurChart's `viewSyncKey` prop doc comment. */
+  viewSyncKey: string;
 }
 
 // Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
@@ -453,7 +465,7 @@ interface CryptoFootprintBodyProps {
 // those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
 const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
-function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChartStyleChange, onChartStyleReset }: CryptoFootprintBodyProps) {
+function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChartStyleChange, onChartStyleReset, viewSyncKey }: CryptoFootprintBodyProps) {
   // resolveTradeSource('crypto', ...) never returns null (see its doc
   // comment) — the isAdmin opt is only consulted on the 'futures' branch.
   // tickSize here is the synchronous hardcoded-map value (cryptoTickSizes.ts);
@@ -668,6 +680,8 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
               }}
               volumeProfile={{ store, visible: settings.showVolumeProfile }}
               mutedCandles={mutedCandles}
+              viewSyncKey={viewSyncKey}
+              viewSyncRestoreMaxBars={VIEW_SYNC_RESTORE_MAX_BARS}
             />
           </div>
 
