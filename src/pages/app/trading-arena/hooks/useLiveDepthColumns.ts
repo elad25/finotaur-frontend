@@ -36,6 +36,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { BinRecord, DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
+import {
+  buildGapColumn,
+  loadDepthHistory,
+  needsGapColumn,
+  pruneDepthHistory,
+  saveDepthHistory,
+} from './depthHistoryStore';
 
 export interface LiveDepthColumnsOptions {
   /** Stable accessor to the current live order book (same shape useNt8OrderBook/useBinanceOrderBook expose). */
@@ -46,14 +53,36 @@ export interface LiveDepthColumnsOptions {
   notionalMultiplier?: number;
   /** Bins whose notional falls below this are dropped. Default 0 (no floor — LiquidityTab applies its own floor via depthMatrixFloorUsd on the render side). */
   floorUsd?: number;
+  /**
+   * Stable per-source persistence key (e.g. "nt8|NQ") — when provided, the
+   * ring is persisted to IndexedDB (depthHistoryStore.ts) so it survives
+   * tab switches and page reloads, and restored on mount / whenever this
+   * key changes (e.g. contract-root switch). Omit to keep the hook purely
+   * in-memory (its original behavior).
+   */
+  persistKey?: string;
 }
 
 export interface LiveDepthColumnsState {
   columns: DecodedColumn[];
   binSize: number;
-  /** Epoch ms of the first sample taken this mount, or null before the first sample lands. */
+  /** Epoch ms of the first sample taken this mount, or (after a successful restore) the oldest restored column's t. */
   recordingSinceMs: number | null;
+  /** Epoch ms of the oldest column restored from IndexedDB this mount, or null when nothing was restored (fresh session / no persistKey / stale >48h snapshot). Lets UI distinguish "restored" from "recording since connect". */
+  restoredFromMs: number | null;
 }
+
+// How often the ring is opportunistically flushed to IndexedDB while
+// sampling — independent of SAMPLE_INTERVAL_MS so a bridge disconnect
+// mid-window doesn't lose more than ~30s of otherwise-persisted history
+// (a final flush also happens on cleanup/unmount, see below).
+const PERSIST_SAVE_INTERVAL_MS = 30_000;
+
+// A restored snapshot is only seeded into the ring if its newest column is
+// younger than this — mirrors flowStorePersistence.ts's PRUNE_MAX_AGE_MS;
+// older than this and the history is stale enough that a blank/fresh start
+// is more honest than a huge visible gap.
+const RESTORE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 export const SAMPLE_INTERVAL_MS = 5_000;
 // ~4h at one column per 5s.
@@ -161,28 +190,139 @@ export function appendColumnToRing(ring: DecodedColumn[], col: DecodedColumn, ca
 }
 
 export function useLiveDepthColumns(opts: LiveDepthColumnsOptions): LiveDepthColumnsState {
-  const { getBook, isLive, notionalMultiplier = 1, floorUsd = 0 } = opts;
+  const { getBook, isLive, notionalMultiplier = 1, floorUsd = 0, persistKey } = opts;
 
-  const [state, setState] = useState<LiveDepthColumnsState>({ columns: [], binSize: 1, recordingSinceMs: null });
+  const [state, setState] = useState<LiveDepthColumnsState>({
+    columns: [],
+    binSize: 1,
+    recordingSinceMs: null,
+    restoredFromMs: null,
+  });
   const ringRef = useRef<DecodedColumn[]>([]);
   const recordingSinceRef = useRef<number | null>(null);
+  const restoredFromRef = useRef<number | null>(null);
+  const lastSaveMsRef = useRef<number>(0);
+  const persistKeyRef = useRef<string | undefined>(persistKey);
+  // Gates sampling until this persistKey's restore attempt has settled
+  // (hit, miss, or failure) — prevents the async loadDepthHistory()
+  // resolution from clobbering a live sample that landed first. Starts
+  // `true` when there's no persistKey to restore from (nothing to wait
+  // for).
+  const restoreReadyRef = useRef<boolean>(!persistKey);
+  // Set once on a successful restore to the newest restored column — the
+  // next live sample checks this to decide whether to splice in a
+  // transparent gap column before it, then clears it (fires at most once
+  // per restore).
+  const pendingGapRef = useRef<DecodedColumn | null>(null);
+
+  // Restore-on-mount / persistKey-change: flush the OLD key's ring (if
+  // any), reset local state for the new key, then load + seed from
+  // IndexedDB. Runs independently of `isLive` so a restored heatmap is
+  // visible even before the bridge reconnects.
+  useEffect(() => {
+    const prevKey = persistKeyRef.current;
+    const nextKey = persistKey;
+    let cancelled = false;
+
+    restoreReadyRef.current = !nextKey;
+
+    if (prevKey !== nextKey) {
+      if (prevKey && ringRef.current.length > 0) {
+        void saveDepthHistory(prevKey, ringRef.current, { notionalMultiplier });
+      }
+      ringRef.current = [];
+      recordingSinceRef.current = null;
+      restoredFromRef.current = null;
+      pendingGapRef.current = null;
+      persistKeyRef.current = nextKey;
+      setState({ columns: [], binSize: 1, recordingSinceMs: null, restoredFromMs: null });
+    }
+
+    if (!nextKey) return;
+
+    void pruneDepthHistory();
+    void loadDepthHistory(nextKey).then((loaded) => {
+      if (cancelled) return;
+      if (!loaded || loaded.columns.length === 0) {
+        restoreReadyRef.current = true;
+        return;
+      }
+
+      const newest = loaded.columns[loaded.columns.length - 1];
+      if (Date.now() - newest.t >= RESTORE_MAX_AGE_MS) {
+        // Stale — leave the ring empty, start fresh like a brand-new session.
+        restoreReadyRef.current = true;
+        return;
+      }
+
+      const oldest = loaded.columns[0];
+      ringRef.current = loaded.columns.slice();
+      recordingSinceRef.current = oldest.t;
+      restoredFromRef.current = oldest.t;
+      pendingGapRef.current = newest;
+
+      setState({
+        columns: ringRef.current.slice(),
+        binSize: newest.binSize,
+        recordingSinceMs: oldest.t,
+        restoredFromMs: oldest.t,
+      });
+      restoreReadyRef.current = true;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- notionalMultiplier is read only for the flush-on-switch save, not a restore trigger
+  }, [persistKey]);
 
   useEffect(() => {
     if (!isLive) return;
 
     const sample = () => {
+      if (!restoreReadyRef.current) return; // wait for this persistKey's restore to settle first
+
       const col = sampleBookToColumn(getBook(), { notionalMultiplier, floorUsd, nowMs: Date.now() });
       if (!col) return;
 
       if (recordingSinceRef.current === null) recordingSinceRef.current = col.t;
 
+      if (pendingGapRef.current) {
+        const afterColumn = pendingGapRef.current;
+        pendingGapRef.current = null;
+        if (needsGapColumn(afterColumn.t, col.t, SAMPLE_INTERVAL_MS)) {
+          const gap = buildGapColumn(afterColumn, afterColumn.t + SAMPLE_INTERVAL_MS);
+          appendColumnToRing(ringRef.current, gap, RING_CAP);
+        }
+      }
+
       const ring = appendColumnToRing(ringRef.current, col, RING_CAP);
-      setState({ columns: ring.slice(), binSize: col.binSize, recordingSinceMs: recordingSinceRef.current });
+      setState({
+        columns: ring.slice(),
+        binSize: col.binSize,
+        recordingSinceMs: recordingSinceRef.current,
+        restoredFromMs: restoredFromRef.current,
+      });
+
+      const key = persistKeyRef.current;
+      if (key) {
+        const now = Date.now();
+        if (now - lastSaveMsRef.current >= PERSIST_SAVE_INTERVAL_MS) {
+          lastSaveMsRef.current = now;
+          void saveDepthHistory(key, ringRef.current, { notionalMultiplier });
+        }
+      }
     };
 
     sample();
     const id = setInterval(sample, SAMPLE_INTERVAL_MS);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      const key = persistKeyRef.current;
+      if (key && ringRef.current.length > 0) {
+        void saveDepthHistory(key, ringRef.current, { notionalMultiplier });
+      }
+    };
   }, [isLive, getBook, notionalMultiplier, floorUsd]);
 
   return state;

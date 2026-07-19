@@ -10,9 +10,27 @@
 //   - Re-bucket columns whose binSize differs from the dominant binSize
 //     (merging by SUM of decoded USD, then re-quantizing)
 //   - Return the final DecodedColumn[] array and the dominant binSize
+//   - (phase 2, "pulled-liquidity memory") Persist the merged column set to
+//     IndexedDB (depthHistoryStore.ts, shared with the NT8
+//     useLiveDepthColumns.ts hook) under `binance|<symbol>`, and restore it
+//     on mount so the heatmap survives symbol switches, tab switches, and
+//     reloads even though `crypto_depth_slices` is UNLOGGED server-side
+//     (wiped on every DB restart). See rebuildState's comment below for why
+//     the merge is a dedupe-by-t "fill the gaps" join (mergeRestoredColumns
+//     in depthHistoryStore.ts) rather than the NT8 ring's splice-a-gap
+//     approach — this hook already re-derives its visible columns from two
+//     source maps onto a uniform grid every render, so a third source
+//     (restoredRef) feeding that same pipeline is the smallest fit.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RawSlice, DecodedColumn, BinRecord } from './depthTypes';
+import {
+  capColumnsForSave,
+  loadDepthHistory,
+  mergeRestoredColumns,
+  pruneDepthHistory,
+  saveDepthHistory,
+} from '@/pages/app/trading-arena/hooks/depthHistoryStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +40,8 @@ export interface DepthSliceState {
   columns: DecodedColumn[];
   binSize: number;        // dominant bin size across all loaded columns
   resolution: SliceResolution;
+  /** Epoch ms of the oldest column restored from IndexedDB this mount, or null when nothing was restored (fresh session / no prior save / stale >48h snapshot). Mirrors useLiveDepthColumns.ts's field of the same name. */
+  restoredFromMs: number | null;
 }
 
 export interface DepthSlicesOptions {
@@ -210,6 +230,15 @@ function dominantBinSize(columns: DecodedColumn[]): number {
 const LIVE_EDGE_INTERVAL_MS = 5_000;
 const WORKER_TIMEOUT_MS = 10_000;
 
+// Phase 2 persistence tuning — duplicated (not imported) from
+// useLiveDepthColumns.ts's PERSIST_SAVE_INTERVAL_MS / RESTORE_MAX_AGE_MS,
+// same convention that file's header comment documents for
+// depthHistoryStore.ts's own PRUNE_MAX_AGE_MS: independent copies rather
+// than a shared constant, since each hook owns its own persistence
+// lifecycle.
+const PERSIST_SAVE_INTERVAL_MS = 30_000;
+const RESTORE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
 export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   const {
     symbol,
@@ -222,11 +251,17 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     isLive = false,
   } = opts;
 
-  // All decoded columns (historical + live edge), sorted by t ascending.
+  // Stable per-symbol persistence key — LiquidityTab.tsx keys its crypto
+  // body component by symbol (full remount on switch), so this only needs
+  // to be recomputed when `symbol` itself changes under a live instance.
+  const persistKey = symbol ? `binance|${symbol}` : undefined;
+
+  // All decoded columns (historical + live edge + restored), sorted by t ascending.
   const [state, setState] = useState<DepthSliceState>({
     columns: [],
     binSize: 1,
     resolution: '5s',
+    restoredFromMs: null,
   });
 
   // Worker instance — created once per hook mount.
@@ -244,6 +279,21 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   const fetchedWindowsRef = useRef<FetchedRange[]>([]);
 
   const resolutionRef = useRef<SliceResolution>('5s');
+
+  // Phase 2 persistence (depthHistoryStore.ts) — columns restored from
+  // IndexedDB on mount. Deliberately NOT merged into historicalRef: this
+  // hook's own coverage tracking (fetchedWindowsRef) must stay driven only
+  // by real server responses, so a restore never fools fetchWindow into
+  // skipping a gap the server hasn't actually confirmed. Read by
+  // rebuildState via mergeRestoredColumns (server/live wins on any exact-t
+  // collision).
+  const restoredRef = useRef<DecodedColumn[]>([]);
+  const restoredFromMsRef = useRef<number | null>(null);
+  // Mirrors the latest columns rebuildState computed — read by the
+  // unmount/persistKey-change flush effect, which can't rely on `state`
+  // (stale closure risk) or firing an extra render just to save.
+  const columnsRef = useRef<DecodedColumn[]>([]);
+  const lastSaveMsRef = useRef<number>(0);
 
   // ── Worker lifecycle ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -311,6 +361,24 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   const rebuildState = useCallback((res: SliceResolution) => {
     const stepMs = stepMsFor(res);
 
+    // Fold in the phase-2 IndexedDB restore (if any) before gridding.
+    // mergeRestoredColumns dedupes by exact column `t`, and authoritative
+    // (server backfill + live edge) always wins a collision — see its
+    // header comment in depthHistoryStore.ts. Any grid slot the merge still
+    // leaves uncovered gets a transparent flags-bit0 gap column from the
+    // loop below anyway (same mechanism that already paints gaps between
+    // historical chunks), so no separate needsGapColumn/buildGapColumn
+    // splice is needed on top for this hook's shape — unlike the NT8 ring
+    // (a single ordered array with one splice point), this hook already
+    // re-derives the grid from scratch every call.
+    const authoritative: DecodedColumn[] = [
+      ...historicalRef.current.values(),
+      ...liveEdgeRef.current.values(),
+    ];
+    const merged = restoredRef.current.length > 0
+      ? mergeRestoredColumns(restoredRef.current, authoritative)
+      : authoritative;
+
     // Snap every real column onto its resolution grid slot. Live-edge columns
     // are sampled every 5s regardless of resolution, so at 1m they collapse
     // into 60s slots — the most recent observation for a slot wins.
@@ -320,11 +388,11 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       const prev = bySlot.get(slot);
       if (!prev || col.t >= prev.t) bySlot.set(slot, { ...col, t: slot });
     };
-    for (const col of historicalRef.current.values()) placeOnGrid(col);
-    for (const col of liveEdgeRef.current.values())   placeOnGrid(col);
+    for (const col of merged) placeOnGrid(col);
 
     if (bySlot.size === 0) {
-      setState({ columns: [], binSize: 1, resolution: res });
+      columnsRef.current = [];
+      setState({ columns: [], binSize: 1, resolution: res, restoredFromMs: restoredFromMsRef.current });
       return;
     }
 
@@ -356,8 +424,64 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       }
     }
 
-    setState({ columns, binSize: domSize, resolution: res });
-  }, [floorUsd]);
+    columnsRef.current = columns;
+    setState({ columns, binSize: domSize, resolution: res, restoredFromMs: restoredFromMsRef.current });
+
+    // Throttled persistence (phase 2) — save the MERGED (server + live +
+    // restored) column set, capped defensively via capColumnsForSave, at
+    // most once per PERSIST_SAVE_INTERVAL_MS. rebuildState is the single
+    // choke point every columns-changing path (backfill decode, live-edge
+    // tick) already funnels through, so gating the save here — rather than
+    // duplicating the throttle check at each call site — covers "every
+    // columns update" with the smallest change. A final unconditional save
+    // also runs on unmount/persistKey change (see the flush effect below).
+    if (persistKey) {
+      const now = Date.now();
+      if (now - lastSaveMsRef.current >= PERSIST_SAVE_INTERVAL_MS) {
+        lastSaveMsRef.current = now;
+        void saveDepthHistory(persistKey, capColumnsForSave(columns));
+      }
+    }
+  }, [floorUsd, persistKey]);
+
+  // ── Phase 2: restore-on-mount from IndexedDB ──────────────────────────────
+  // Runs independently of isLive/backfill so a restored heatmap paints
+  // immediately, before the worker/fetch effects below produce anything —
+  // matches useLiveDepthColumns.ts's restore-on-mount behavior for NT8.
+  useEffect(() => {
+    if (!persistKey) return;
+    let cancelled = false;
+
+    void pruneDepthHistory();
+    void loadDepthHistory(persistKey).then((loaded) => {
+      if (cancelled) return;
+      if (!loaded || loaded.columns.length === 0) return;
+
+      const newest = loaded.columns[loaded.columns.length - 1];
+      if (Date.now() - newest.t >= RESTORE_MAX_AGE_MS) return; // stale — start fresh like a brand-new session
+
+      const oldest = loaded.columns[0];
+      restoredRef.current = loaded.columns;
+      restoredFromMsRef.current = oldest.t;
+      rebuildState(resolutionRef.current); // instant paint before any server response
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot restore per persistKey; the consuming component remounts on symbol change (LiquidityTab.tsx keys it by symbol), so this doesn't need to react to rebuildState identity churn
+  }, [persistKey]);
+
+  // Final flush on unmount / persistKey change — mirrors
+  // useLiveDepthColumns.ts's cleanup save. Reads columnsRef (not `state`)
+  // to avoid a stale-closure risk.
+  useEffect(() => {
+    return () => {
+      if (persistKey && columnsRef.current.length > 0) {
+        void saveDepthHistory(persistKey, capColumnsForSave(columnsRef.current));
+      }
+    };
+  }, [persistKey]);
 
   // ── Fetch historical window ───────────────────────────────────────────────
   const fetchWindow = useCallback(async (
