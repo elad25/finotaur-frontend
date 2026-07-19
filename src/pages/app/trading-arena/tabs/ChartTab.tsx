@@ -83,6 +83,7 @@ import {
 import { ChartStyleContext, DEFAULT_CHART_STYLE } from '../components/chartStyleSettings';
 import type { SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
 import type { ArenaIndicatorInstance } from '../components/indicatorsSettings';
+import { buildViewSyncKey, readViewState } from '../hooks/arenaViewState';
 
 interface ChartTabProps {
   symbol: string;
@@ -416,15 +417,36 @@ export function ChartTab({
     [isFutures, symbol],
   );
 
+  // ATAS-parity "synced price scale" (arenaViewState.ts) — keyed by
+  // assetClass|symbol|interval so this tab agrees with FootprintTab/
+  // LiquidityTab/CvdTab on the same underlying symbol+interval selection.
+  const viewSyncKey = useMemo(
+    () => buildViewSyncKey(assetClass, symbol, interval),
+    [assetClass, symbol, interval],
+  );
+
   // `symbol` is kept as a dependency (unused inside the callback itself)
   // deliberately — it re-anchors the window to a fresh "now" on symbol
   // switch, matching this memo's pre-existing intent before this window
   // became interval-aware.
-  const { from, to } = useMemo(
-    () => (isCrypto ? cryptoInitialWindow(intervalToSeconds(interval)) : nowWindow()),
+  //
+  // When a fresh view-sync state exists for this key, the rolling-24h/
+  // cryptoInitialWindow "natural" window is WIDENED (never narrowed) to
+  // guarantee bars actually cover the saved time range — otherwise
+  // FinotaurChart would restore a visible window pointing at candles that
+  // were never fetched. Saved state wins per the `viewSyncKey` contract;
+  // this only decides what to FETCH, not what's visible (FinotaurChart's
+  // own RESTORE logic decides the visible window from the same store).
+  const { from, to } = useMemo(() => {
+    const natural = isCrypto ? cryptoInitialWindow(intervalToSeconds(interval)) : nowWindow();
+    const saved = readViewState(viewSyncKey);
+    if (!saved) return natural;
+    return {
+      from: Math.min(natural.from, saved.timeRange.from),
+      to: Math.max(natural.to, saved.timeRange.to),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [symbol, interval, isCrypto],
-  );
+  }, [symbol, interval, isCrypto, viewSyncKey]);
 
   // Chart ▾ Chart Settings (see chartStyleSettings.ts) — read directly via
   // context (ChartTab sits inside TradingArena.tsx's ChartStyleContext.Provider)
@@ -712,6 +734,7 @@ export function ChartTab({
             sessionVolumeProfile={{ settings: sessionVolumeProfileSettings, visible: volumeProfileEnabled }}
             orderLines={orderLines}
             onLastBarClose={isFutures ? handleLastBarClose : undefined}
+            viewSyncKey={viewSyncKey}
           />
         </div>
       </div>

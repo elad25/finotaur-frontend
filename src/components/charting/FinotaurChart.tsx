@@ -49,6 +49,7 @@ import { ChartStyleContext, type ChartStyleSettings } from '@/pages/app/trading-
 import { DepthProfileGutter } from '@/pages/app/trading-arena/components/DepthProfileGutter';
 import { chartStyleToChartOptions, chartStyleToSeriesOptions } from '@/pages/app/trading-arena/components/chartStyleMapping';
 import { MACD_HISTOGRAM_AUTO_COLOR } from '@/pages/app/trading-arena/components/indicatorsSettings';
+import { readViewState, writeViewState, type ArenaPriceRange } from '@/pages/app/trading-arena/hooks/arenaViewState';
 import {
   createChart,
   ColorType,
@@ -1072,6 +1073,57 @@ export interface FinotaurChartProps {
    * Order Flow / CVD tabs keep today's native snapping behavior.
    */
   freeVerticalCrosshair?: boolean;
+  /**
+   * ATAS-parity "synced price scale" (see arenaViewState.ts's header
+   * comment). When set, this chart RESTORES its time (and, best-effort,
+   * price) window from the last window saved under this key by ANY Arena
+   * chart view for the same `${assetClass}|${symbol}|${interval}`, instead
+   * of the default fitContent()/focusRange() — and CAPTURES its own
+   * pan/zoom back to the same key (throttled 300ms) so switching to
+   * another view reopens on the same window.
+   *
+   * RESTORE precedence: a fresh saved time range wins over `focusRange`/
+   * fitContent() when `timeFitToken` is undefined (ChartTab/CVD). For
+   * token-driven callers (Footprint/Liquidity tabs), restore can ALSO win —
+   * but only on the INITIAL mount, and only when `viewSyncRestoreMaxBars`
+   * is set and the saved range is "legible" for this view (see that prop).
+   * An explicit `timeFitToken` BUMP (the caller's own re-focus action —
+   * "Fit" click, backfill-coverage snap — firing on an ALREADY-mounted
+   * chart) always wins over restore; that codepath lives in a separate
+   * effect (below) and is untouched by `viewSyncKey`.
+   *
+   * Price RESTORE is a deliberate v1 simplification (see the candlestick
+   * series' `autoscaleInfoProvider`): applied ONCE on the first autoscale
+   * recompute after data loads, and ONLY when it differs from what plain
+   * autoscale would have picked by more than 2% — otherwise every
+   * subsequent bar/tick update reverts to normal autoscale. This avoids
+   * permanently pinning the price axis (which would fight the user's next
+   * zoom) while still landing the price window close to where they left
+   * off.
+   *
+   * 🔴 Undefined (every existing caller — Journal/Backtest/Scanner/Replay)
+   * is a COMPLETE no-op.
+   */
+  viewSyncKey?: string;
+  /**
+   * Bounded-restore opt-in for `timeFitToken`-driven callers (Footprint/
+   * Liquidity tabs). Without this, those callers NEVER restore from
+   * `viewSyncKey` (their own `focusRange` always wins — see that prop's
+   * doc comment). Set this to let restore compete with `focusRange` on the
+   * INITIAL mount ONLY, gated by legibility: restore is used only when
+   * `(saved.timeRange.to - saved.timeRange.from) / <seconds-per-bar> <=
+   * viewSyncRestoreMaxBars` — i.e. the saved window isn't so wide it would
+   * make this view's cells/heatmap illegible. Otherwise falls back to the
+   * existing `focusRange`/`timeFitToken` framing untouched.
+   *
+   * Suggested values: ~120 for a footprint chart (cells must stay
+   * readable), ~500 for a liquidity heatmap (tolerates wider windows).
+   *
+   * 🔴 Undefined (every existing caller, including ChartTab/CVD which never
+   * need this) is a COMPLETE no-op — behavior is exactly the pre-existing
+   * `viewSyncKey` contract above.
+   */
+  viewSyncRestoreMaxBars?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1119,6 +1171,8 @@ export function FinotaurChart({
   chartStyle,
   enableBackfill = false,
   freeVerticalCrosshair = false,
+  viewSyncKey,
+  viewSyncRestoreMaxBars,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1261,6 +1315,15 @@ export function FinotaurChart({
    */
   const liquidityBandRef = useRef<{ minPrice: number; maxPrice: number } | null>(liquidityBand);
 
+  /**
+   * View-sync (`viewSyncKey`) price RESTORE — armed by the bar-load effect
+   * right before `series.setData()` (so the very next autoscale recompute
+   * that `setData` triggers sees it), consumed ONCE by the candlestick
+   * series' `autoscaleInfoProvider` below, then cleared. See the
+   * `viewSyncKey` prop doc comment for the full v1 strategy.
+   */
+  const syncPriceRestoreRef = useRef<ArenaPriceRange | null>(null);
+
   // One-time auto-fit guard: token-driven callers (the scanner) fit the visible
   // time range only on the FIRST load per symbol/interval — NOT on every 30s
   // window slide, which used to snap the view back and fight the user's pan.
@@ -1313,6 +1376,30 @@ export function FinotaurChart({
           return {
             priceRange: { minValue: band.minPrice, maxValue: band.maxPrice },
           };
+        }
+        // View-sync price RESTORE (viewSyncKey) — one-shot: consumed on the
+        // very FIRST recompute after being armed (see the bar-load effect),
+        // then cleared, so every LATER recompute (new bar, live tick,
+        // pan/zoom) falls straight through to normal autoscale below. Only
+        // overrides when the saved range differs meaningfully (>2% of the
+        // base autoscale's width) from what autoscale would have picked
+        // anyway — avoids a visible "snap" for a saved range that's
+        // basically what autoscale would compute already.
+        const pendingSync = syncPriceRestoreRef.current;
+        if (pendingSync) {
+          syncPriceRestoreRef.current = null;
+          const base = baseImpl();
+          if (base?.priceRange) {
+            const baseWidth = base.priceRange.maxValue - base.priceRange.minValue;
+            const baseMid = (base.priceRange.minValue + base.priceRange.maxValue) / 2;
+            const savedMid = (pendingSync.min + pendingSync.max) / 2;
+            const relDiff = baseWidth > 0 ? Math.abs(savedMid - baseMid) / baseWidth : 1;
+            if (relDiff > 0.02) {
+              return { priceRange: { minValue: pendingSync.min, maxValue: pendingSync.max } };
+            }
+            return base;
+          }
+          return { priceRange: { minValue: pendingSync.min, maxValue: pendingSync.max } };
         }
         return baseImpl();
       },
@@ -1802,6 +1889,48 @@ export function FinotaurChart({
       .getBars(symbol, interval, from as never, to as never)
       .then((bars: Bar[]) => {
         if (cancelled || !seriesRef.current) return;
+
+        // ─── View-sync (viewSyncKey) RESTORE — read BEFORE setData() so the
+        // candlestick series' autoscaleInfoProvider (armed via
+        // syncPriceRestoreRef) sees the pending saved price range on the
+        // very first recompute, which setData() triggers synchronously
+        // below.
+        //
+        // Non-token callers (ChartTab/CVD, no `timeFitToken`): restore
+        // always wins over focusRange/fitContent — see the `viewSyncKey`
+        // prop doc comment.
+        //
+        // Token-driven callers (Footprint/Liquidity tabs pass
+        // `timeFitToken`): restore is OFF by default (their own focusRange
+        // encodes an explicit legibility/coverage-driven framing). Opting
+        // into `viewSyncRestoreMaxBars` lets restore compete with that
+        // framing, but ONLY on the INITIAL mount (`!didInitialFitRef.current`
+        // — read here, still false the first time this effect resolves for
+        // a fresh symbol/interval) and ONLY when the saved window's bar
+        // span is within the legibility bound. A LATER explicit
+        // `timeFitToken` bump (Fit click / backfill-coverage snap on an
+        // already-mounted chart) is handled by the separate token-watching
+        // effect below and is untouched by any of this — it always wins.
+        const tokenDriven = timeFitToken !== undefined;
+        let restoredTimeRange: { from: number; to: number } | null = null;
+        if (viewSyncKey) {
+          const saved = readViewState(viewSyncKey);
+          if (saved) {
+            let allowRestore = !tokenDriven;
+            if (!allowRestore && viewSyncRestoreMaxBars !== undefined && !didInitialFitRef.current) {
+              const intervalSec = LIVE_EDGE_INTERVAL_SECONDS[interval] ?? 60;
+              const savedSpanBars = (saved.timeRange.to - saved.timeRange.from) / intervalSec;
+              allowRestore = savedSpanBars <= viewSyncRestoreMaxBars;
+            }
+            if (allowRestore) {
+              restoredTimeRange = saved.timeRange;
+              if (saved.priceRange) {
+                syncPriceRestoreRef.current = saved.priceRange;
+              }
+            }
+          }
+        }
+
         seriesRef.current.setData(bars);
         barsRef.current = bars;
         setBarCount(bars.length);
@@ -1854,9 +1983,15 @@ export function FinotaurChart({
           // untouched. The scanner re-centres explicitly via the timeFitToken
           // effect (Fit button / interval change). Non-token callers (journal /
           // backtest) keep the original always-fit behaviour.
-          const tokenDriven = timeFitToken !== undefined;
           if (!tokenDriven || !didInitialFitRef.current) {
-            if (focusRange) {
+            if (restoredTimeRange) {
+              // View-sync RESTORE wins over focusRange/fitContent — see the
+              // RESTORE read above this promise callback.
+              chartRef.current?.timeScale().setVisibleRange({
+                from: restoredTimeRange.from as never,
+                to: restoredTimeRange.to as never,
+              });
+            } else if (focusRange) {
               chartRef.current?.timeScale().setVisibleRange({
                 from: focusRange.from as never,
                 to: focusRange.to as never,
@@ -1921,7 +2056,77 @@ export function FinotaurChart({
     };
     // refreshToken: deliberate extra dep (undefined for every caller except
     // FuturesChartTab) — see the prop doc comment on FinotaurChartProps.
-  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, onLastBarClose, refreshToken]);
+  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, onLastBarClose, refreshToken, viewSyncKey, viewSyncRestoreMaxBars]);
+
+  // ─── View-sync (viewSyncKey) CAPTURE ────────────────────────
+  // Writes the current time+price window to arenaViewState.ts (throttled
+  // 300ms) whenever the user pans/zooms, so switching to another Arena
+  // chart view for the same `${assetClass}|${symbol}|${interval}` reopens
+  // on the same window — see RESTORE above + the `viewSyncKey` prop doc
+  // comment. No-op entirely when `viewSyncKey` is undefined (every non-Arena
+  // caller, and any Arena caller that hasn't opted in).
+  useEffect(() => {
+    if (!viewSyncKey) return;
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingRange: { from: number; to: number } | null = null;
+
+    const flush = () => {
+      throttleTimer = null;
+      if (!pendingRange) return;
+      const range = pendingRange;
+      pendingRange = null;
+
+      // Derive the visible PRICE window from the candlestick series' own
+      // pixel-to-price mapping — lightweight-charts v4 has no public
+      // `priceScale.getVisibleRange()`, so this reads the top/bottom of the
+      // chart PANE (not the container — excludes the time-axis strip) via
+      // `coordinateToPrice`, mirroring the pattern this file already uses
+      // for crosshair price lookups (see `param.point.y` usage elsewhere).
+      let priceRange: ArenaPriceRange | null = null;
+      try {
+        const paneHeight = chart.paneSize().height;
+        const topPrice = series.coordinateToPrice(0);
+        const bottomPrice = series.coordinateToPrice(paneHeight);
+        if (topPrice !== null && bottomPrice !== null) {
+          priceRange = {
+            min: Math.min(topPrice, bottomPrice),
+            max: Math.max(topPrice, bottomPrice),
+          };
+        }
+      } catch {
+        // Chart may be mid-teardown — skip price capture this tick; the time range below still saves.
+      }
+
+      writeViewState(viewSyncKey, { timeRange: range, priceRange });
+    };
+
+    const handleVisibleTimeRangeChange = (range: { from: UTCTimestamp; to: UTCTimestamp } | null) => {
+      if (!range) return;
+      pendingRange = { from: range.from as unknown as number, to: range.to as unknown as number };
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(flush, 300);
+    };
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+
+    return () => {
+      if (throttleTimer) clearTimeout(throttleTimer);
+      try {
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+      } catch {
+        // Chart may already be torn down.
+      }
+    };
+    // Re-subscribe whenever the chart is remounted (theme change rebuilds
+    // chartRef/seriesRef — same rationale as the mount effect's own [theme]
+    // dep) or the sync key changes (symbol/interval/assetClass switch) —
+    // the closure captures `viewSyncKey` for `writeViewState`, so a stale
+    // key must never keep receiving writes after a switch.
+  }, [viewSyncKey, theme]);
 
   // ─── Left-pan backfill (older history) — see `enableBackfill` prop ────
   // As the user pans/zooms toward the left edge of the loaded bars, fetches
