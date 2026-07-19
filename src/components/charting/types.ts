@@ -121,6 +121,41 @@ export type IndicatorType =
   | 'ATR';
 
 /**
+ * Optional per-line visual style override for one series line of an
+ * indicator. Added for the Trading Arena's TradingView-style per-indicator
+ * settings dialog (see trading-arena/components/IndicatorSettingsDialog.tsx
+ * + indicatorsSettings.ts's `ArenaIndicatorLineStyle`, which is structurally
+ * identical). Every field is OPTIONAL — when a caller never sets
+ * `Indicator.lineStyles`, FinotaurChart's series creation is byte-for-byte
+ * identical to its pre-existing hardcoded appearance (Journal/Backtest/
+ * ReplayChart never set this field).
+ */
+export interface IndicatorLineStyle {
+  visible?: boolean;
+  color?: string;
+  /** 0-1 opacity multiplier applied on top of `color`. */
+  opacity?: number;
+  thickness?: 1 | 2 | 3 | 4;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+}
+
+/**
+ * Named style slots covering every indicator's output line(s):
+ *  - single-line indicators (SMA/EMA/VWAP/RSI/ATR) use `line`
+ *  - MACD uses `macdLine` / `signalLine` / `histogram`
+ *  - BBANDS uses `basis` / `upper` / `lower`
+ */
+export interface IndicatorLineStyles {
+  line?: IndicatorLineStyle;
+  macdLine?: IndicatorLineStyle;
+  signalLine?: IndicatorLineStyle;
+  histogram?: IndicatorLineStyle;
+  basis?: IndicatorLineStyle;
+  upper?: IndicatorLineStyle;
+  lower?: IndicatorLineStyle;
+}
+
+/**
  * A single indicator overlay on the chart.
  *
  * Phase 2:
@@ -157,6 +192,11 @@ export interface Indicator {
   macdParams?: { fast: number; slow: number; signal: number };
   /** BBANDS-only override for the standard-deviation multiplier. */
   bbandsStdDev?: number;
+  /**
+   * Optional per-line style overrides (Trading Arena only — see
+   * `IndicatorLineStyles` above). Absent for every non-Arena caller.
+   */
+  lineStyles?: IndicatorLineStyles;
 }
 
 /**

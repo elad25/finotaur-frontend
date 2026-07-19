@@ -28,6 +28,7 @@ import {
   INDICATOR_DEFAULTS,
   INDICATOR_PERIODS,
   type Indicator,
+  type IndicatorLineStyle,
   type IndicatorSettings,
 } from '@/components/charting/types';
 import { isIntradayInterval } from '@/components/charting/indicators';
@@ -176,6 +177,182 @@ export const ARENA_INDICATOR_PARAM_DEFAULTS: ArenaIndicatorParams = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// Per-indicator STYLE (TradingView-style Inputs/Style/Visibility dialog —
+// see IndicatorSettingsDialog.tsx) — colors/opacity/thickness/line-style
+// per output line, one entry per indicator EXCEPT `volumeProfile` (its
+// styling stays under chartStyleSettings.ts's ChartStyleSettings.volumeProfile,
+// unchanged by this feature).
+// ═══════════════════════════════════════════════════════════════
+export type ArenaLineStyleKind = 'solid' | 'dashed' | 'dotted';
+
+/** Structurally identical to `IndicatorLineStyle` (types.ts) minus optionality — this is the persisted/edited shape; the chart consumes the optional version. */
+export interface ArenaIndicatorLineStyle {
+  visible: boolean;
+  color: string;
+  /** 0-1. */
+  opacity: number;
+  thickness: 1 | 2 | 3 | 4;
+  lineStyle: ArenaLineStyleKind;
+}
+
+export interface ArenaSingleLineStyle {
+  line: ArenaIndicatorLineStyle;
+}
+
+export interface ArenaMacdStyle {
+  macdLine: ArenaIndicatorLineStyle;
+  signalLine: ArenaIndicatorLineStyle;
+  histogram: ArenaIndicatorLineStyle;
+}
+
+export interface ArenaBbandsStyle {
+  basis: ArenaIndicatorLineStyle;
+  upper: ArenaIndicatorLineStyle;
+  lower: ArenaIndicatorLineStyle;
+}
+
+export interface ArenaIndicatorStyles {
+  ema: ArenaSingleLineStyle;
+  sma: ArenaSingleLineStyle;
+  vwap: ArenaSingleLineStyle;
+  rsi: ArenaSingleLineStyle;
+  atr: ArenaSingleLineStyle;
+  macd: ArenaMacdStyle;
+  bbands: ArenaBbandsStyle;
+}
+
+/**
+ * `updateStyles(key, patch)` (see useArenaIndicatorPreferences.ts) deep-merges
+ * ONE indicator's line entries — this is the patch shape: every named line
+ * slot is optional, and when present is itself a PARTIAL line-style patch
+ * (e.g. `{ macdLine: { color: '#fff' } }` touches only macdLine.color).
+ */
+export type ArenaIndicatorStylePatch<K extends keyof ArenaIndicatorStyles> = {
+  [L in keyof ArenaIndicatorStyles[K]]?: Partial<ArenaIndicatorStyles[K][L]>;
+};
+
+/**
+ * Sentinel value for MACD's histogram color meaning "use the built-in
+ * per-bar green/red momentum coloring" (see indicators.ts's computeMACD /
+ * MACD_HIST_UP_COLOR / MACD_HIST_DOWN_COLOR) instead of a flat user color.
+ * Not a valid CSS color — FinotaurChart checks for this exact string.
+ */
+export const MACD_HISTOGRAM_AUTO_COLOR = 'auto';
+
+function defaultLineStyle(color: string, opacity = 1, thickness: 1 | 2 | 3 | 4 = 2): ArenaIndicatorLineStyle {
+  return { visible: true, color, opacity, thickness, lineStyle: 'solid' };
+}
+
+/**
+ * Defaults are EXACTLY today's hardcoded FinotaurChart.tsx appearance
+ * (INDICATOR_COLORS / MACD_SIGNAL_COLOR / BBANDS_BAND_COLOR, lineWidth 2,
+ * solid) — so a fresh user (no styles saved yet) sees a pixel-identical
+ * chart to before this feature shipped.
+ */
+export const DEFAULT_ARENA_INDICATOR_STYLES: ArenaIndicatorStyles = {
+  ema: { line: defaultLineStyle('#fcd34d') },
+  sma: { line: defaultLineStyle('#7dd3fc') },
+  vwap: { line: defaultLineStyle('#c4b5fd') },
+  rsi: { line: defaultLineStyle('#d4d4d8') },
+  atr: { line: defaultLineStyle('#94a3b8') },
+  macd: {
+    macdLine: defaultLineStyle('#fcd34d'),
+    signalLine: defaultLineStyle('#fbbf24'),
+    histogram: defaultLineStyle(MACD_HISTOGRAM_AUTO_COLOR, 1, 2),
+  },
+  bbands: {
+    basis: defaultLineStyle('#a78bfa'),
+    upper: defaultLineStyle('#a78bfa', 0.5, 1),
+    lower: defaultLineStyle('#a78bfa', 0.5, 1),
+  },
+};
+
+/** ~20-color swatch palette shown in the Style tab's color popover. */
+export const INDICATOR_COLOR_SWATCHES: string[] = [
+  '#FFFFFF', '#D4D4D8', '#94A3B8', '#707070',
+  '#7DD3FC', '#38BDF8', '#0EA5E9',
+  '#FCD34D', '#FBBF24', '#F59E0B',
+  '#C4B5FD', '#A78BFA', '#8B5CF6',
+  '#F87171', '#EF4444', '#DC2626',
+  '#4ADE80', '#22C55E', '#16A34A',
+  '#C9A646',
+];
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL visibility config — gates whether ANY Arena indicator renders on
+// the current timeframe, bucketed by unit (seconds/minutes/hours/days/
+// weeks/months — mirrors utils/intervals.ts's ArenaInterval `<N><unit>`
+// encoding). Applies to every indicator uniformly (edited from the
+// Visibility tab, see IndicatorSettingsDialog.tsx).
+// ═══════════════════════════════════════════════════════════════
+export interface ArenaVisibilityBucket {
+  enabled: boolean;
+  min: number;
+  max: number;
+}
+
+export type ArenaVisibilityBucketKey = 'seconds' | 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+
+export interface ArenaIndicatorVisibility {
+  seconds: ArenaVisibilityBucket;
+  minutes: ArenaVisibilityBucket;
+  hours: ArenaVisibilityBucket;
+  days: ArenaVisibilityBucket;
+  weeks: ArenaVisibilityBucket;
+  months: ArenaVisibilityBucket;
+}
+
+export const ARENA_VISIBILITY_BUCKET_RANGE: Record<ArenaVisibilityBucketKey, { min: number; max: number }> = {
+  seconds: { min: 1, max: 59 },
+  minutes: { min: 1, max: 59 },
+  hours: { min: 1, max: 24 },
+  days: { min: 1, max: 366 },
+  weeks: { min: 1, max: 52 },
+  months: { min: 1, max: 12 },
+};
+
+/** Defaults: every bucket enabled, full range — indistinguishable from "no gating" until the user narrows one. */
+export const DEFAULT_ARENA_INDICATOR_VISIBILITY: ArenaIndicatorVisibility = {
+  seconds: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.seconds.min, max: ARENA_VISIBILITY_BUCKET_RANGE.seconds.max },
+  minutes: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.minutes.min, max: ARENA_VISIBILITY_BUCKET_RANGE.minutes.max },
+  hours: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.hours.min, max: ARENA_VISIBILITY_BUCKET_RANGE.hours.max },
+  days: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.days.min, max: ARENA_VISIBILITY_BUCKET_RANGE.days.max },
+  weeks: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.weeks.min, max: ARENA_VISIBILITY_BUCKET_RANGE.weeks.max },
+  months: { enabled: true, min: ARENA_VISIBILITY_BUCKET_RANGE.months.min, max: ARENA_VISIBILITY_BUCKET_RANGE.months.max },
+};
+
+const ARENA_VISIBILITY_UNIT_TO_BUCKET: Record<string, ArenaVisibilityBucketKey> = {
+  s: 'seconds',
+  m: 'minutes',
+  h: 'hours',
+  D: 'days',
+  W: 'weeks',
+  M: 'months',
+};
+
+// Mirrors utils/intervals.ts's INTERVAL_RE — duplicated locally (not
+// imported) to avoid this settings module depending on the Arena's
+// interval-parsing module; both encode the same `<N><unit>` grammar.
+const ARENA_VISIBILITY_INTERVAL_RE = /^(\d+)(s|m|h|D|W|M)$/;
+
+/**
+ * Whether Arena indicators should render at all on `interval`, per the
+ * GLOBAL visibility config. An unparseable interval string is treated as
+ * visible (fail-open — never silently hides indicators on a format this
+ * function doesn't recognize).
+ */
+export function isIntervalVisibleForIndicators(interval: string, visibility: ArenaIndicatorVisibility): boolean {
+  const match = ARENA_VISIBILITY_INTERVAL_RE.exec(interval);
+  if (!match) return true;
+  const count = Number(match[1]);
+  const bucketKey = ARENA_VISIBILITY_UNIT_TO_BUCKET[match[2]];
+  if (!bucketKey || !Number.isFinite(count)) return true;
+  const bucket = visibility[bucketKey];
+  if (!bucket.enabled) return false;
+  return count >= bucket.min && count <= bucket.max;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Combined persisted shape
 // ═══════════════════════════════════════════════════════════════
 export interface ArenaIndicatorPreferences {
@@ -186,6 +363,27 @@ export interface ArenaIndicatorPreferences {
 export const DEFAULT_ARENA_INDICATOR_PREFERENCES: ArenaIndicatorPreferences = {
   enabled: ARENA_INDICATOR_ENABLED_DEFAULTS,
   params: ARENA_INDICATOR_PARAM_DEFAULTS,
+};
+
+/**
+ * v3 persisted shape — superset of `ArenaIndicatorPreferences` (v2) adding
+ * `styles` + `visibility`. Kept as a SEPARATE type/const (not a mutation of
+ * the v2 ones above) so the v2 sanitizers/tests
+ * (useArenaIndicatorPreferences.test.ts) stay byte-for-byte unaffected —
+ * see useArenaIndicatorPreferences.ts's v2→v3 read/migrate chain.
+ */
+export interface ArenaIndicatorPreferencesV3 {
+  enabled: ArenaIndicatorEnabled;
+  params: ArenaIndicatorParams;
+  styles: ArenaIndicatorStyles;
+  visibility: ArenaIndicatorVisibility;
+}
+
+export const DEFAULT_ARENA_INDICATOR_PREFERENCES_V3: ArenaIndicatorPreferencesV3 = {
+  enabled: ARENA_INDICATOR_ENABLED_DEFAULTS,
+  params: ARENA_INDICATOR_PARAM_DEFAULTS,
+  styles: DEFAULT_ARENA_INDICATOR_STYLES,
+  visibility: DEFAULT_ARENA_INDICATOR_VISIBILITY,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -277,6 +475,111 @@ export function sanitizeArenaIndicatorPreferences(
   };
 }
 
+function asColor(v: unknown, fallback: string): string {
+  return typeof v === 'string' && v.length > 0 ? v : fallback;
+}
+
+function asThickness(v: unknown, fallback: 1 | 2 | 3 | 4): 1 | 2 | 3 | 4 {
+  return v === 1 || v === 2 || v === 3 || v === 4 ? v : fallback;
+}
+
+function asLineStyleKind(v: unknown, fallback: ArenaLineStyleKind): ArenaLineStyleKind {
+  return v === 'solid' || v === 'dashed' || v === 'dotted' ? v : fallback;
+}
+
+function sanitizeArenaLineStyle(raw: unknown, fallback: ArenaIndicatorLineStyle): ArenaIndicatorLineStyle {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<ArenaIndicatorLineStyle>;
+  return {
+    visible: asBool(p.visible, fallback.visible),
+    color: asColor(p.color, fallback.color),
+    opacity: asClampedFloat(p.opacity, fallback.opacity, 0, 1),
+    thickness: asThickness(p.thickness, fallback.thickness),
+    lineStyle: asLineStyleKind(p.lineStyle, fallback.lineStyle),
+  };
+}
+
+export function sanitizeArenaIndicatorStyles(
+  raw: unknown,
+  fallback: ArenaIndicatorStyles = DEFAULT_ARENA_INDICATOR_STYLES,
+): ArenaIndicatorStyles {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<{
+    ema: Partial<ArenaSingleLineStyle>;
+    sma: Partial<ArenaSingleLineStyle>;
+    vwap: Partial<ArenaSingleLineStyle>;
+    rsi: Partial<ArenaSingleLineStyle>;
+    atr: Partial<ArenaSingleLineStyle>;
+    macd: Partial<ArenaMacdStyle>;
+    bbands: Partial<ArenaBbandsStyle>;
+  }>;
+
+  const single = (key: 'ema' | 'sma' | 'vwap' | 'rsi' | 'atr'): ArenaSingleLineStyle => ({
+    line: sanitizeArenaLineStyle(p[key]?.line, fallback[key].line),
+  });
+
+  return {
+    ema: single('ema'),
+    sma: single('sma'),
+    vwap: single('vwap'),
+    rsi: single('rsi'),
+    atr: single('atr'),
+    macd: {
+      macdLine: sanitizeArenaLineStyle(p.macd?.macdLine, fallback.macd.macdLine),
+      signalLine: sanitizeArenaLineStyle(p.macd?.signalLine, fallback.macd.signalLine),
+      histogram: sanitizeArenaLineStyle(p.macd?.histogram, fallback.macd.histogram),
+    },
+    bbands: {
+      basis: sanitizeArenaLineStyle(p.bbands?.basis, fallback.bbands.basis),
+      upper: sanitizeArenaLineStyle(p.bbands?.upper, fallback.bbands.upper),
+      lower: sanitizeArenaLineStyle(p.bbands?.lower, fallback.bbands.lower),
+    },
+  };
+}
+
+function sanitizeVisibilityBucket(
+  raw: unknown,
+  fallback: ArenaVisibilityBucket,
+  range: { min: number; max: number },
+): ArenaVisibilityBucket {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<ArenaVisibilityBucket>;
+  const min = asClampedInt(p.min, fallback.min, range.min, range.max);
+  // max can't fall below the (already-clamped) min — clamp then re-floor.
+  const maxRaw = asClampedInt(p.max, fallback.max, range.min, range.max);
+  const max = Math.max(min, maxRaw);
+  return { enabled: asBool(p.enabled, fallback.enabled), min, max };
+}
+
+export function sanitizeArenaIndicatorVisibility(
+  raw: unknown,
+  fallback: ArenaIndicatorVisibility = DEFAULT_ARENA_INDICATOR_VISIBILITY,
+): ArenaIndicatorVisibility {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<Record<ArenaVisibilityBucketKey, unknown>>;
+  const keys: ArenaVisibilityBucketKey[] = ['seconds', 'minutes', 'hours', 'days', 'weeks', 'months'];
+  const out = {} as ArenaIndicatorVisibility;
+  for (const key of keys) {
+    out[key] = sanitizeVisibilityBucket(p[key], fallback[key], ARENA_VISIBILITY_BUCKET_RANGE[key]);
+  }
+  return out;
+}
+
+export function sanitizeArenaIndicatorPreferencesV3(
+  raw: unknown,
+  fallback: ArenaIndicatorPreferencesV3 = DEFAULT_ARENA_INDICATOR_PREFERENCES_V3,
+): ArenaIndicatorPreferencesV3 {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<ArenaIndicatorPreferencesV3>;
+
+  return {
+    enabled: sanitizeArenaIndicatorEnabled(p.enabled, fallback.enabled),
+    params: sanitizeArenaIndicatorParams(p.params, fallback.params),
+    styles: sanitizeArenaIndicatorStyles(p.styles, fallback.styles),
+    visibility: sanitizeArenaIndicatorVisibility(p.visibility, fallback.visibility),
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Pure builder — enabled + params + interval → FinotaurChart's Indicator[]
 // ═══════════════════════════════════════════════════════════════
@@ -287,33 +590,99 @@ export function sanitizeArenaIndicatorPreferences(
  * FinotaurChart's separate `sessionVolumeProfile` prop, not the indicators
  * array (see ChartTab.tsx).
  */
+/** Copies one ArenaIndicatorLineStyle into the optional-fields shape `Indicator.lineStyles` slots use. */
+function toChartLineStyle(style: ArenaIndicatorLineStyle): IndicatorLineStyle {
+  return {
+    visible: style.visible,
+    color: style.color,
+    opacity: style.opacity,
+    thickness: style.thickness,
+    lineStyle: style.lineStyle,
+  };
+}
+
 export function buildIndicatorsFromArenaSettings(
   enabled: ArenaIndicatorEnabled,
   params: ArenaIndicatorParams,
   interval: string,
+  /** Per-indicator visual style (Style tab) — optional, purely additive. When omitted, every Indicator is built exactly as before this field existed. */
+  styles?: ArenaIndicatorStyles,
 ): Indicator[] {
   const list: Indicator[] = [];
 
-  if (enabled.sma) list.push({ type: 'SMA', period: params.sma.period });
-  if (enabled.ema) list.push({ type: 'EMA', period: params.ema.period });
-  if (enabled.rsi) list.push({ type: 'RSI', period: params.rsi.period });
+  if (enabled.sma) {
+    list.push({
+      type: 'SMA',
+      period: params.sma.period,
+      color: styles?.sma.line.color,
+      lineStyles: styles ? { line: toChartLineStyle(styles.sma.line) } : undefined,
+    });
+  }
+  if (enabled.ema) {
+    list.push({
+      type: 'EMA',
+      period: params.ema.period,
+      color: styles?.ema.line.color,
+      lineStyles: styles ? { line: toChartLineStyle(styles.ema.line) } : undefined,
+    });
+  }
+  if (enabled.rsi) {
+    list.push({
+      type: 'RSI',
+      period: params.rsi.period,
+      color: styles?.rsi.line.color,
+      lineStyles: styles ? { line: toChartLineStyle(styles.rsi.line) } : undefined,
+    });
+  }
   // VWAP gate: only meaningful on intraday intervals — same belt-and-
   // suspenders guard TradeChart.tsx applies (the dialog also disables the
   // row on non-intraday intervals).
   if (enabled.vwap && isIntradayInterval(interval)) {
-    list.push({ type: 'VWAP', period: 0 });
+    list.push({
+      type: 'VWAP',
+      period: 0,
+      color: styles?.vwap.line.color,
+      lineStyles: styles ? { line: toChartLineStyle(styles.vwap.line) } : undefined,
+    });
   }
   if (enabled.macd) {
     list.push({
       type: 'MACD',
       period: 0,
       macdParams: { fast: params.macd.fast, slow: params.macd.slow, signal: params.macd.signal },
+      color: styles?.macd.macdLine.color,
+      lineStyles: styles
+        ? {
+            macdLine: toChartLineStyle(styles.macd.macdLine),
+            signalLine: toChartLineStyle(styles.macd.signalLine),
+            histogram: toChartLineStyle(styles.macd.histogram),
+          }
+        : undefined,
     });
   }
   if (enabled.bbands) {
-    list.push({ type: 'BBANDS', period: params.bbands.period, bbandsStdDev: params.bbands.stdDev });
+    list.push({
+      type: 'BBANDS',
+      period: params.bbands.period,
+      bbandsStdDev: params.bbands.stdDev,
+      color: styles?.bbands.basis.color,
+      lineStyles: styles
+        ? {
+            basis: toChartLineStyle(styles.bbands.basis),
+            upper: toChartLineStyle(styles.bbands.upper),
+            lower: toChartLineStyle(styles.bbands.lower),
+          }
+        : undefined,
+    });
   }
-  if (enabled.atr) list.push({ type: 'ATR', period: params.atr.period });
+  if (enabled.atr) {
+    list.push({
+      type: 'ATR',
+      period: params.atr.period,
+      color: styles?.atr.line.color,
+      lineStyles: styles ? { line: toChartLineStyle(styles.atr.line) } : undefined,
+    });
+  }
 
   return list;
 }
