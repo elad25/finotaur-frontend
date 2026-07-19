@@ -297,6 +297,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
     getBook: book.getBook,
     isLive: book.status === 'live',
     notionalMultiplier: pointValue,
+    persistKey: `nt8|${root}`,
   });
 
   const { bid, ask } = useMemo(() => {
@@ -377,7 +378,9 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
 
         {isLive && recordingLabel && (
           <span className="text-[10px] text-[#707070]" aria-live="polite">
-            Recording depth since {recordingLabel} — depth history starts at connection
+            {depth.restoredFromMs
+              ? `Depth history restored · since ${recordingLabel}`
+              : `Recording depth since ${recordingLabel} — depth history starts at connection`}
           </span>
         )}
 
@@ -625,7 +628,10 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
   // the current (symbol, interval) hasn't produced any real (non-synthetic,
   // flags-bit-0-clear — see useDepthSlices.ts) column yet. Reset alongside
   // depthSnapAttemptedRef on interval change; cleared by the coverage-snap
-  // effect below the first time real depth data shows up.
+  // effect below the first time real depth data shows up — which, since
+  // phase 2 (depthHistoryStore.ts), can be a restored-from-IndexedDB column
+  // just as easily as a fresh server one; the chip below distinguishes the
+  // two via depthMatrix.restoredFromMs.
   const [depthHistoryLoading, setDepthHistoryLoading] = useState(true);
   useEffect(() => {
     setTimeFitToken((t) => t + 1);
@@ -815,7 +821,7 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
 
         {depthHistoryLoading && (
           <span className="text-[10px] text-[#707070] ml-auto" aria-live="polite">
-            Loading depth history…
+            {depthMatrix.restoredFromMs != null ? 'Depth history restored locally' : 'Loading depth history…'}
           </span>
         )}
 
