@@ -61,8 +61,6 @@ import { ChartStyleContext } from './components/chartStyleSettings';
 import {
   buildIndicatorsFromArenaSettings,
   isIntervalVisibleForIndicators,
-  type ArenaIndicatorEnabled,
-  type ArenaIndicatorKey,
 } from './components/indicatorsSettings';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import type { Indicator } from '@/components/charting/types';
@@ -129,16 +127,18 @@ export default function TradingArena() {
   // NOT touch Backtest/Journal's saved preferences). Starts empty (no
   // indicators, except Volume Profile which defaults on) until the user
   // edits via ArenaToolbar's Indicators (N) popup (see IndicatorsDialog.tsx).
+  // INSTANCES model — the same indicator can be added multiple times (e.g.
+  // EMA 9 + EMA 21), each tracked by its own id (see indicatorsSettings.ts's
+  // ArenaIndicatorInstance).
   const {
-    enabled: indicatorsEnabled,
-    params: indicatorsParams,
-    styles: indicatorsStyles,
+    instances: indicatorInstances,
     visibility: indicatorsVisibility,
-    updateEnabled: updateIndicatorsEnabled,
-    updateParams: updateIndicatorsParams,
-    updateStyles: updateIndicatorsStyles,
+    addInstance: addIndicatorInstance,
+    removeInstance: removeIndicatorInstance,
+    updateInstanceParams: updateIndicatorInstanceParams,
+    updateInstanceStyles: updateIndicatorInstanceStyles,
     updateVisibility: updateIndicatorsVisibility,
-    resetIndicator: resetIndicatorSettings,
+    resetInstance: resetIndicatorInstance,
     reset: resetIndicators,
   } = useArenaIndicatorPreferences();
 
@@ -153,62 +153,67 @@ export default function TradingArena() {
   const light = chartStyle.theme === 'light';
   const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
   const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
-  const [indicatorSettingsKey, setIndicatorSettingsKey] = useState<ArenaIndicatorKey | null>(null);
+  const [indicatorSettingsInstanceId, setIndicatorSettingsInstanceId] = useState<string | null>(null);
   // Gear/legend "settings" click opens THIS dialog (TradingView-style
   // Inputs/Style/Visibility) — separate from `indicatorsDialogOpen`, which
   // is the "+ Indicators" catalog (IndicatorsDialog.tsx). Both share
-  // `indicatorSettingsKey` for "which indicator" since only one is ever
-  // visible at a time.
+  // `indicatorSettingsInstanceId` for "which instance" since only one is
+  // ever visible at a time.
   const [indicatorSettingsDialogOpen, setIndicatorSettingsDialogOpen] = useState(false);
-  const [hiddenIndicators, setHiddenIndicators] = useState<Partial<Record<ArenaIndicatorKey, boolean>>>({});
+  const [hiddenIndicatorIds, setHiddenIndicatorIds] = useState<Record<string, boolean>>({});
 
-  const visibleIndicatorsEnabled = useMemo(
-    () => ({
-      ...indicatorsEnabled,
-      sma: indicatorsEnabled.sma && hiddenIndicators.sma !== true,
-      ema: indicatorsEnabled.ema && hiddenIndicators.ema !== true,
-      rsi: indicatorsEnabled.rsi && hiddenIndicators.rsi !== true,
-      vwap: indicatorsEnabled.vwap && hiddenIndicators.vwap !== true,
-      macd: indicatorsEnabled.macd && hiddenIndicators.macd !== true,
-      bbands: indicatorsEnabled.bbands && hiddenIndicators.bbands !== true,
-      atr: indicatorsEnabled.atr && hiddenIndicators.atr !== true,
-      volumeProfile: indicatorsEnabled.volumeProfile && hiddenIndicators.volumeProfile !== true,
-    }),
-    [indicatorsEnabled, hiddenIndicators],
+  const visibleIndicatorInstances = useMemo(
+    () => indicatorInstances.filter((instance) => hiddenIndicatorIds[instance.id] !== true),
+    [indicatorInstances, hiddenIndicatorIds],
+  );
+
+  const volumeProfileEnabled = useMemo(
+    () => indicatorInstances.some((instance) => instance.type === 'volumeProfile' && hiddenIndicatorIds[instance.id] !== true),
+    [indicatorInstances, hiddenIndicatorIds],
   );
 
   // Visibility gating: the GLOBAL Visibility tab (see IndicatorSettingsDialog.tsx)
   // can hide ALL indicators on the current timeframe bucket. Plots hide, but
-  // the legend (driven by `indicatorsEnabled`/`hiddenIndicators`, not this
+  // the legend (driven by `indicatorInstances`/`hiddenIndicatorIds`, not this
   // array) intentionally keeps showing what's configured.
   const indicators = useMemo<Indicator[]>(() => {
     if (!isIntervalVisibleForIndicators(interval, indicatorsVisibility)) return [];
-    return buildIndicatorsFromArenaSettings(visibleIndicatorsEnabled, indicatorsParams, interval, indicatorsStyles);
-  }, [visibleIndicatorsEnabled, indicatorsParams, interval, indicatorsStyles, indicatorsVisibility]);
+    return buildIndicatorsFromArenaSettings(visibleIndicatorInstances, interval);
+  }, [visibleIndicatorInstances, interval, indicatorsVisibility]);
 
-  const handleIndicatorHiddenToggle = useCallback((key: ArenaIndicatorKey) => {
-    setHiddenIndicators((current) => ({ ...current, [key]: current[key] !== true }));
+  const handleIndicatorHiddenToggle = useCallback((id: string) => {
+    setHiddenIndicatorIds((current) => ({ ...current, [id]: current[id] !== true }));
   }, []);
 
-  const handleIndicatorRemove = useCallback((key: ArenaIndicatorKey) => {
-    updateIndicatorsEnabled({ [key]: false } as Partial<ArenaIndicatorEnabled>);
-    setHiddenIndicators((current) => ({ ...current, [key]: false }));
-    if (indicatorSettingsKey === key) setIndicatorSettingsKey(null);
-  }, [indicatorSettingsKey, updateIndicatorsEnabled]);
+  const handleIndicatorRemove = useCallback((id: string) => {
+    removeIndicatorInstance(id);
+    setHiddenIndicatorIds((current) => {
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    if (indicatorSettingsInstanceId === id) setIndicatorSettingsInstanceId(null);
+  }, [indicatorSettingsInstanceId, removeIndicatorInstance]);
 
-  // Gear/legend "settings" click opens the NEW per-indicator dialog directly
+  // Gear/legend "settings" click opens the NEW per-instance dialog directly
   // (Inputs/Style/Visibility) — NOT the "+ Indicators" catalog. The catalog
   // is still reachable via ArenaToolbar's "Indicators (N)" trigger.
-  const handleOpenIndicatorSettings = useCallback((key: ArenaIndicatorKey) => {
-    setIndicatorSettingsKey(key);
+  const handleOpenIndicatorSettings = useCallback((id: string) => {
+    setIndicatorSettingsInstanceId(id);
     setIndicatorSettingsDialogOpen(true);
   }, []);
 
   const handleIndicatorsReset = useCallback(() => {
     resetIndicators();
-    setHiddenIndicators({});
-    setIndicatorSettingsKey(null);
+    setHiddenIndicatorIds({});
+    setIndicatorSettingsInstanceId(null);
   }, [resetIndicators]);
+
+  const indicatorSettingsInstance = useMemo(
+    () => indicatorInstances.find((instance) => instance.id === indicatorSettingsInstanceId) ?? null,
+    [indicatorInstances, indicatorSettingsInstanceId],
+  );
 
   const intraday = useMemo(() => isIntradayInterval(interval), [interval]);
 
@@ -388,15 +393,11 @@ export default function TradingArena() {
             onIntervalChange={handleIntervalChange}
             intervalCapability={intervalCapability}
             activeTab={activeTab}
-            indicatorsEnabled={indicatorsEnabled}
-            indicatorsParams={indicatorsParams}
-            onIndicatorsEnabledChange={updateIndicatorsEnabled}
-            onIndicatorsParamsChange={updateIndicatorsParams}
+            indicatorInstances={indicatorInstances}
+            onAddIndicatorInstance={addIndicatorInstance}
             onIndicatorsReset={handleIndicatorsReset}
             indicatorsDialogOpen={indicatorsDialogOpen}
             onIndicatorsDialogOpenChange={setIndicatorsDialogOpen}
-            indicatorSettingsKey={indicatorSettingsKey}
-            onIndicatorSettingsKeyChange={setIndicatorSettingsKey}
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             onChartStyleReset={resetChartStyle}
@@ -405,24 +406,22 @@ export default function TradingArena() {
             assetClass={assetClass}
           />
 
-          {/* Per-indicator TradingView-style settings (Inputs/Style/Visibility) —
+          {/* Per-instance TradingView-style settings (Inputs/Style/Visibility) —
               opened from ActiveIndicatorsLegend.tsx's gear icon, NOT the "+
               Indicators" catalog above. Rendered here (always mounted) so it
               opens from any tab that surfaces the legend. */}
           <IndicatorSettingsDialog
             open={indicatorSettingsDialogOpen}
             onOpenChange={setIndicatorSettingsDialogOpen}
-            indicatorKey={indicatorSettingsKey}
-            params={indicatorsParams}
-            onUpdateParams={updateIndicatorsParams}
-            styles={indicatorsStyles}
-            onUpdateStyles={updateIndicatorsStyles}
+            instance={indicatorSettingsInstance}
+            onUpdateParams={updateIndicatorInstanceParams}
+            onUpdateStyles={updateIndicatorInstanceStyles}
             visibility={indicatorsVisibility}
             onUpdateVisibility={updateIndicatorsVisibility}
             chartStyle={chartStyle}
             onChartStyleChange={updateChartStyle}
             intraday={intraday}
-            onResetIndicator={resetIndicatorSettings}
+            onResetInstance={resetIndicatorInstance}
           />
         </div>
 
@@ -449,13 +448,12 @@ export default function TradingArena() {
               interval={interval}
               assetClass={assetClass}
               indicators={indicators}
-              indicatorsEnabled={indicatorsEnabled}
-              indicatorsHidden={hiddenIndicators}
-              indicatorsParams={indicatorsParams}
+              indicatorInstances={indicatorInstances}
+              indicatorsHiddenIds={hiddenIndicatorIds}
               onIndicatorHiddenToggle={handleIndicatorHiddenToggle}
               onIndicatorSettingsOpen={handleOpenIndicatorSettings}
               onIndicatorRemove={handleIndicatorRemove}
-              volumeProfileEnabled={visibleIndicatorsEnabled.volumeProfile}
+              volumeProfileEnabled={volumeProfileEnabled}
               onOpenSettings={() => setChartSettingsDialogOpen(true)}
             />
           )}

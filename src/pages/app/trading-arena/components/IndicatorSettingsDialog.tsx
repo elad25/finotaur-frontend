@@ -39,12 +39,13 @@ import {
   INDICATOR_COLOR_SWATCHES,
   MACD_HISTOGRAM_AUTO_COLOR,
   getArenaIndicatorDefinition,
+  type ArenaBbandsStyle,
+  type ArenaIndicatorInstance,
   type ArenaIndicatorKey,
   type ArenaIndicatorLineStyle,
-  type ArenaIndicatorParams,
-  type ArenaIndicatorStylePatch,
-  type ArenaIndicatorStyles,
   type ArenaIndicatorVisibility,
+  type ArenaMacdStyle,
+  type ArenaSingleLineStyle,
   type ArenaVisibilityBucket,
   type ArenaVisibilityBucketKey,
   type ArenaLineStyleKind,
@@ -54,17 +55,17 @@ import type { ChartStyleSettings } from './chartStyleSettings';
 export interface IndicatorSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  indicatorKey: ArenaIndicatorKey | null;
-  params: ArenaIndicatorParams;
-  onUpdateParams: <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => void;
-  styles: ArenaIndicatorStyles;
-  onUpdateStyles: <K extends keyof ArenaIndicatorStyles>(key: K, patch: ArenaIndicatorStylePatch<K>) => void;
+  instance: ArenaIndicatorInstance | null;
+  /** Patches THIS instance's params, e.g. `onUpdateParams(instance.id, { period: 12 })`. */
+  onUpdateParams: (id: string, patch: Record<string, unknown>) => void;
+  /** Deep-merges THIS instance's line-style entries, e.g. `onUpdateStyles(instance.id, { histogram: { color: '#fff' } })`. */
+  onUpdateStyles: (id: string, patch: Record<string, unknown>) => void;
   visibility: ArenaIndicatorVisibility;
   onUpdateVisibility: (patch: Partial<ArenaIndicatorVisibility>) => void;
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
   intraday: boolean;
-  onResetIndicator: (key: ArenaIndicatorKey) => void;
+  onResetInstance: (id: string) => void;
 }
 
 type SettingsTab = 'inputs' | 'style' | 'visibility';
@@ -229,48 +230,59 @@ function LineStyleRow({
   );
 }
 
-/** Renders the Style tab's line rows for one indicator. `volumeProfile` is handled by the caller (no style rows — see the dialog body below). */
+/**
+ * Renders the Style tab's line rows for ONE indicator instance. `volumeProfile`
+ * is handled by the caller (no style rows — see the dialog body below).
+ * `onPatch` patches THAT instance's styles (deep-merged by the hook — see
+ * useArenaIndicatorPreferences.ts's updateInstanceStyles).
+ */
 function renderStyleRows(
-  key: Exclude<ArenaIndicatorKey, 'volumeProfile'>,
-  styles: ArenaIndicatorStyles,
-  onUpdateStyles: IndicatorSettingsDialogProps['onUpdateStyles'],
+  type: Exclude<ArenaIndicatorKey, 'volumeProfile'>,
+  styles: ArenaIndicatorInstance['styles'],
+  onPatch: (patch: Record<string, unknown>) => void,
 ) {
-  switch (key) {
-    case 'macd':
+  switch (type) {
+    case 'macd': {
+      const s = styles as ArenaMacdStyle;
       return (
         <>
-          <LineStyleRow label="MACD" style={styles.macd.macdLine} onChange={(patch) => onUpdateStyles('macd', { macdLine: patch })} />
-          <LineStyleRow label="Signal" style={styles.macd.signalLine} onChange={(patch) => onUpdateStyles('macd', { signalLine: patch })} />
+          <LineStyleRow label="MACD" style={s.macdLine} onChange={(patch) => onPatch({ macdLine: patch })} />
+          <LineStyleRow label="Signal" style={s.signalLine} onChange={(patch) => onPatch({ signalLine: patch })} />
           <LineStyleRow
             label="Histogram"
-            style={styles.macd.histogram}
-            onChange={(patch) => onUpdateStyles('macd', { histogram: patch })}
+            style={s.histogram}
+            onChange={(patch) => onPatch({ histogram: patch })}
             showLineControls={false}
             autoColorValue={MACD_HISTOGRAM_AUTO_COLOR}
           />
         </>
       );
-    case 'bbands':
+    }
+    case 'bbands': {
+      const s = styles as ArenaBbandsStyle;
       return (
         <>
-          <LineStyleRow label="Basis" style={styles.bbands.basis} onChange={(patch) => onUpdateStyles('bbands', { basis: patch })} />
-          <LineStyleRow label="Upper" style={styles.bbands.upper} onChange={(patch) => onUpdateStyles('bbands', { upper: patch })} />
-          <LineStyleRow label="Lower" style={styles.bbands.lower} onChange={(patch) => onUpdateStyles('bbands', { lower: patch })} />
+          <LineStyleRow label="Basis" style={s.basis} onChange={(patch) => onPatch({ basis: patch })} />
+          <LineStyleRow label="Upper" style={s.upper} onChange={(patch) => onPatch({ upper: patch })} />
+          <LineStyleRow label="Lower" style={s.lower} onChange={(patch) => onPatch({ lower: patch })} />
         </>
       );
+    }
     case 'ema':
     case 'sma':
     case 'vwap':
     case 'rsi':
     case 'atr':
-    default:
+    default: {
+      const s = styles as ArenaSingleLineStyle;
       return (
         <LineStyleRow
-          label={getArenaIndicatorDefinition(key).shortLabel}
-          style={styles[key].line}
-          onChange={(patch) => onUpdateStyles(key, { line: patch })}
+          label={getArenaIndicatorDefinition(type).shortLabel}
+          style={s.line}
+          onChange={(patch) => onPatch({ line: patch })}
         />
       );
+    }
   }
 }
 
@@ -311,32 +323,55 @@ function VisibilityRow({
   );
 }
 
+/** Short "definition label + param summary" for the dialog title, e.g. "EMA 9" / "MACD 12 26 9". Mirrors ActiveIndicatorsLegend.tsx's local `instanceValueText` (kept separate — same small-dup precedent that legend already set). */
+function instanceTitle(instance: ArenaIndicatorInstance): string {
+  const definition = getArenaIndicatorDefinition(instance.type);
+  switch (instance.type) {
+    case 'ema':
+    case 'sma':
+    case 'rsi':
+    case 'atr': {
+      const p = instance.params as { period: number };
+      return `${definition.label} ${p.period}`;
+    }
+    case 'macd': {
+      const p = instance.params as { fast: number; slow: number; signal: number };
+      return `${definition.label} ${p.fast} ${p.slow} ${p.signal}`;
+    }
+    case 'bbands': {
+      const p = instance.params as { period: number; stdDev: number };
+      return `${definition.label} ${p.period} ${p.stdDev}`;
+    }
+    case 'vwap':
+    case 'volumeProfile':
+    default:
+      return definition.label;
+  }
+}
+
 export function IndicatorSettingsDialog({
   open,
   onOpenChange,
-  indicatorKey,
-  params,
+  instance,
   onUpdateParams,
-  styles,
   onUpdateStyles,
   visibility,
   onUpdateVisibility,
   chartStyle,
   onChartStyleChange,
   intraday,
-  onResetIndicator,
+  onResetInstance,
 }: IndicatorSettingsDialogProps) {
   const [tab, setTab] = useState<SettingsTab>('inputs');
 
   // Reset to the Inputs tab every time the dialog opens for a (possibly
-  // different) indicator — a stale "Style"/"Visibility" tab selection from
-  // the previous indicator would be confusing.
+  // different) instance — a stale "Style"/"Visibility" tab selection from
+  // the previous instance would be confusing.
   useEffect(() => {
     if (open) setTab('inputs');
-  }, [open, indicatorKey]);
+  }, [open, instance?.id]);
 
-  if (!indicatorKey) return null;
-  const definition = getArenaIndicatorDefinition(indicatorKey);
+  if (!instance) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -345,7 +380,7 @@ export function IndicatorSettingsDialog({
         aria-describedby={undefined}
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0 border-b px-5 py-4" style={{ borderColor: 'rgba(201,166,70,0.12)' }}>
-          <DialogTitle className="text-[15px] font-semibold text-[#E8E8E8]">{definition.label}</DialogTitle>
+          <DialogTitle className="text-[15px] font-semibold text-[#E8E8E8]">{instanceTitle(instance)}</DialogTitle>
         </DialogHeader>
 
         <div className="flex items-center gap-1 border-b px-4 py-2" style={{ borderColor: 'rgba(201,166,70,0.12)' }}>
@@ -359,21 +394,27 @@ export function IndicatorSettingsDialog({
         <div className="max-h-[65vh] overflow-y-auto p-4">
           {tab === 'inputs' && (
             <div className="flex flex-col gap-2">
-              {indicatorKey === 'vwap' && !intraday && (
+              {instance.type === 'vwap' && !intraday && (
                 <p className="text-[10px] text-amber-400">VWAP is intraday-only.</p>
               )}
               <div className="flex flex-wrap items-center gap-3">
-                {renderIndicatorInputsFields(indicatorKey, params, onUpdateParams, chartStyle, onChartStyleChange)}
+                {renderIndicatorInputsFields(
+                  instance.type,
+                  instance.params,
+                  (patch) => onUpdateParams(instance.id, patch),
+                  chartStyle,
+                  onChartStyleChange,
+                )}
               </div>
             </div>
           )}
 
           {tab === 'style' && (
             <div className="flex flex-col gap-2.5">
-              {indicatorKey === 'volumeProfile' ? (
+              {instance.type === 'volumeProfile' ? (
                 <p className="text-[10px] text-[#707070]">Styling for Volume Profile is in chart settings.</p>
               ) : (
-                renderStyleRows(indicatorKey, styles, onUpdateStyles)
+                renderStyleRows(instance.type, instance.styles, (patch) => onUpdateStyles(instance.id, patch))
               )}
             </div>
           )}
@@ -397,7 +438,7 @@ export function IndicatorSettingsDialog({
         <DialogFooter className="flex-row items-center justify-between border-t px-5 py-3 sm:justify-between" style={{ borderColor: 'rgba(201,166,70,0.12)' }}>
           <button
             type="button"
-            onClick={() => onResetIndicator(indicatorKey)}
+            onClick={() => onResetInstance(instance.id)}
             className="flex h-7 items-center gap-1.5 rounded px-2 text-[11px] font-semibold text-[#707070] transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)] hover:text-[#C0C0C0]"
           >
             <RotateCcw className="h-3 w-3" aria-hidden="true" />

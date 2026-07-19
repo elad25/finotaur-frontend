@@ -214,6 +214,17 @@ export interface Indicator {
    * `IndicatorLineStyles` above). Absent for every non-Arena caller.
    */
   lineStyles?: IndicatorLineStyles;
+  /**
+   * Stable per-instance id (Trading Arena's INSTANCES model — see
+   * indicatorsSettings.ts's `ArenaIndicatorInstance`/
+   * `buildIndicatorsFromArenaSettings`) that lets the SAME indicator type be
+   * added multiple times (e.g. EMA 9 + EMA 21) as independent series/panes.
+   * FinotaurChart.tsx keys its series/pane bookkeeping by
+   * `instanceId ?? type` — when absent (every non-Arena caller: Journal/
+   * Backtest/ReplayChart), behavior is byte-for-byte identical to before
+   * this field existed (one series per type, as always).
+   */
+  instanceId?: string;
 }
 
 /**
