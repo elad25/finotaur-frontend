@@ -24,9 +24,6 @@ import {
   LineChart,
   Line,
   Legend,
-  BarChart,
-  Bar,
-  Cell,
 } from 'recharts';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
@@ -35,10 +32,12 @@ import { usePortfolios } from '@/hooks/usePortfolios';
 import { resolveHiddenPortfolioIds } from '@/lib/journal/hiddenAccounts';
 import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, recommendRR, riskUsd, resolveMultiplier } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar, WhatIfTrade } from '@/lib/journal/whatIfEngine';
-import { useTradeReconcile, useTradeBars, useAllTradeBars } from '@/hooks/useTradeBars';
+import { useTradeReconcile, useTradeBars, useAllTradeBars, useTrackedTradeIds } from '@/hooks/useTradeBars';
 import { buildAggregate } from '@/lib/journal/plannedScenarios';
 import type { PlannedScenario, PlannedResult } from '@/lib/journal/plannedScenarios';
-import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
+import { resolveMultiplier as resolveAssetMultiplier } from '@/lib/journal/assetMultipliers';
+import { useShadowTrade, useShadowAggregate, useAllTradeModifications } from '@/hooks/useShadow';
+import { runScenarios } from '@/lib/shadow/scenarioEngine';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 import {
@@ -50,7 +49,6 @@ import {
   Shield,
   HelpCircle,
   ListFilter,
-  BarChart2,
   Sparkles,
   EyeOff,
   Check,
@@ -68,7 +66,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import type { ScenarioResult, ScenarioKey } from '@/lib/shadow/types';
+import type { ScenarioResult, ModificationMarker, ShadowTradeInput, OrderModification } from '@/lib/shadow/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -821,6 +819,57 @@ function SmallScenarioCard({
   );
 }
 
+// ─── Stop/target discipline card (real modification data only) ───────────────
+// Same visual language as SmallScenarioCard, but the delta is intentionally
+// ACTUAL minus SCENARIO (not scenario minus actual) — this card answers "did
+// my real stop/target moves help or hurt", so green = your moves ADDED money
+// vs the counterfactual, red = your moves COST money vs the counterfactual.
+
+interface StopTargetDisciplineCardProps {
+  label: string;
+  note: string;
+  scenarioPnlUsd: number;
+  actualPnlUsd: number;
+  baselinePhrase: string;
+}
+
+function StopTargetDisciplineCard({
+  label,
+  note,
+  scenarioPnlUsd,
+  actualPnlUsd,
+  baselinePhrase,
+}: StopTargetDisciplineCardProps) {
+  const totalPositive = scenarioPnlUsd >= 0;
+  const delta = actualPnlUsd - scenarioPnlUsd;
+  const added = delta >= 0;
+
+  return (
+    <div className="rounded-[14px] border-[0.5px] border-white/[0.08] bg-[rgba(22,22,22,0.90)] p-ds-4 flex flex-col gap-ds-2">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[13px] font-semibold text-white leading-snug">{label}</p>
+        <p className="text-[11px] text-white/42 leading-relaxed">{note}</p>
+      </div>
+
+      <p
+        className={`font-data text-xl font-bold tabular-nums ${
+          totalPositive ? 'text-[#4AD295]' : 'text-[#F87171]'
+        }`}
+      >
+        {fmtPnl(Math.round(scenarioPnlUsd))}
+      </p>
+
+      <span
+        className={`self-start rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+          added ? 'bg-[#4AD295]/10 text-[#4AD295]' : 'bg-[#F87171]/10 text-[#F87171]'
+        }`}
+      >
+        {added ? 'ADDED' : 'COST'} ${Math.round(Math.abs(delta)).toLocaleString('en-US')} vs {baselinePhrase}
+      </span>
+    </div>
+  );
+}
+
 // ─── Day tab (Performance) ────────────────────────────────────────────────────
 // Layout (top → bottom):
 //   1. Combined "Cumulative P&L by scenario" chart (3 lines, incl. BE-stop)
@@ -830,7 +879,15 @@ function SmallScenarioCard({
 
 type SeriesKey = 'actual' | 'target' | 'breakevenStop' | 'targetScenario' | 'originalStop';
 
-function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<string, PriceBar[]> }) {
+function DayView({
+  trades,
+  barsByTrade,
+  modsByTrade,
+}: {
+  trades: Trade[];
+  barsByTrade: Map<string, PriceBar[]>;
+  modsByTrade: Map<string, OrderModification[]>;
+}) {
   // Inner Stop / Target switch for the Performance tab.
   const [view, setView] = useState<'stop' | 'target'>('stop');
 
@@ -876,6 +933,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
       close_at: t.close_at ?? t.open_at,
       mfe_r: t.mfe_r ?? null,
       mae_r: t.mae_r ?? null,
+      net_pnl_usd: t.pnl ?? null,
     }));
   }, [sortedClosed]);
 
@@ -1007,6 +1065,53 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
 
   // ── RR recommendation ─────────────────────────────────────────────────────
   const recommendation = useMemo(() => recommendRR(allWhatIfTrades), [allWhatIfTrades]);
+
+  // ── Stop-move discipline ──────────────────────────────────────────────────
+  // For every closed trade that has BOTH real price bars AND at least one
+  // real stop modification, run the full scenario engine and sum
+  // (actual − no_stop_moves) — the real $ impact of the trader's own stop
+  // moves, aggregated across every trade where we can actually tell.
+  const stopMoveDiscipline = useMemo(() => {
+    let sumDelta = 0;
+    let n = 0;
+
+    for (const t of sortedClosed) {
+      if (!t.exit_price || !t.close_at) continue;
+      const bars = barsByTrade.get(t.id);
+      if (!bars || bars.length === 0) continue;
+      const mods = modsByTrade.get(t.id);
+      if (!mods || mods.length === 0) continue;
+      if (!mods.some((m) => m.kind === 'stop')) continue;
+
+      const mult = resolveAssetMultiplier(t.symbol, t.multiplier);
+      const input: ShadowTradeInput = {
+        side: t.side as 'LONG' | 'SHORT',
+        entryPrice: t.entry_price,
+        entryTime: new Date(t.open_at).getTime(),
+        qty: t.quantity,
+        multiplier: mult,
+        actualExits: [{ price: t.exit_price, qty: t.quantity, time: new Date(t.close_at).getTime() }],
+        originalStop: t.stop_price ?? null,
+        originalTarget: t.take_profit_price ?? null,
+        modifications: mods,
+        pricePath: bars,
+        granularity: '1m',
+        strategyRules: t.strategy_id
+          ? { stopPrice: t.stop_price ?? null, targetPrice: t.take_profit_price ?? null }
+          : null,
+        netPnlUsd: t.pnl ?? null,
+      };
+
+      const result = runScenarios(input);
+      const noStop = result.scenarios.find((s) => s.key === 'no_stop_moves');
+      if (!noStop?.available || noStop.pnlUsd == null) continue;
+
+      sumDelta += result.actualPnlUsd - noStop.pnlUsd;
+      n++;
+    }
+
+    return { sumDelta, n };
+  }, [sortedClosed, barsByTrade, modsByTrade]);
 
   // ── Original stop — kept (leave-it baseline) ──────────────────────────────
   // Per trade: if mae_r >= 1, the original stop was hit → outcome = -1R in $.
@@ -1600,126 +1705,41 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           </div>
         </div>
       </div>
+
+      {/* ── 4. Stop-move discipline (real modification data only) ────────── */}
+      {stopMoveDiscipline.n > 0 && (() => {
+        const added = stopMoveDiscipline.sumDelta >= 0;
+        const amount = Math.round(Math.abs(stopMoveDiscipline.sumDelta)).toLocaleString('en-US');
+        return (
+          <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4 flex flex-col gap-ds-2`}>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.8px] text-white/50">
+              Stop-move discipline
+            </span>
+            <div className="flex items-start gap-ds-3">
+              <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C9A646]" />
+              <div className="flex flex-col gap-ds-1">
+                <p className="text-sm font-medium text-white leading-relaxed">
+                  Your stop moves{' '}
+                  <span className={added ? 'text-[#4AD295] font-semibold' : 'text-[#F87171] font-semibold'}>
+                    {added ? 'ADDED' : 'COST'} ${amount}
+                  </span>{' '}
+                  across {stopMoveDiscipline.n} trade{stopMoveDiscipline.n !== 1 ? 's' : ''} where you moved your stop.
+                </p>
+                {stopMoveDiscipline.n < VERDICT_MIN_N && (
+                  <p className="text-[11px] text-white/38 leading-snug">
+                    Anecdotal — {stopMoveDiscipline.n}/{VERDICT_MIN_N} trades.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ─── Distribution tab (v2 — beta only) ───────────────────────────────────────
-
-interface DistributionRuleStatProps {
-  ruleKey: ScenarioKey;
-  label: string;
-  description: string;
-  tracked: number;
-  total: number;
-}
-
-/** Mini histogram bar chart — renders the distribution of R deltas. */
-function RDeltaHistogram({ deltas }: { deltas: number[] }) {
-  if (deltas.length === 0) return null;
-
-  // Build 7 equal-width bins.
-  const min = Math.min(...deltas);
-  const max = Math.max(...deltas);
-  const range = max - min || 1;
-  const BIN_COUNT = 7;
-  const bins: Array<{ label: string; count: number; positive: boolean }> = Array.from(
-    { length: BIN_COUNT },
-    (_, i) => {
-      const lo = min + (range / BIN_COUNT) * i;
-      const hi = min + (range / BIN_COUNT) * (i + 1);
-      const count = deltas.filter((d) => d >= lo && (i === BIN_COUNT - 1 ? d <= hi : d < hi)).length;
-      return {
-        label: `${lo >= 0 ? '+' : ''}${lo.toFixed(1)}R`,
-        count,
-        positive: lo >= 0,
-      };
-    },
-  );
-
-  return (
-    <div style={{ width: '100%', height: 80 }}>
-      <ResponsiveContainer>
-        <BarChart data={bins} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-          <XAxis
-            dataKey="label"
-            tick={{ fill: 'rgba(255,255,255,0.28)', fontSize: 9 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-            {bins.map((entry, i) => (
-              <Cell
-                key={i}
-                fill={entry.positive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)'}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function DistributionRuleStat({
-  label,
-  description,
-  tracked,
-  total,
-}: DistributionRuleStatProps) {
-  const hasEnough = tracked >= DISTRIBUTION_MIN_N;
-
-  return (
-    <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4 flex flex-col gap-ds-3`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_50%,rgba(255,255,255,0.02),transparent_32%)]" />
-      <div className="relative flex flex-col gap-ds-2">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[12px] font-semibold text-white/80">{label}</p>
-            <p className="text-[11px] text-white/42 mt-0.5">{description}</p>
-          </div>
-          {!hasEnough && (
-            <span className="shrink-0 rounded-[4px] bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-white/38">
-              Anecdotal
-            </span>
-          )}
-        </div>
-
-        {hasEnough ? (
-          // Real data — not yet populated (no engine results today)
-          <div className="flex flex-col gap-ds-2">
-            <div className="grid grid-cols-3 gap-ds-2 text-center">
-              <div>
-                <p className="font-data text-[18px] font-semibold text-white/28">—</p>
-                <p className="text-[10px] text-white/38 mt-0.5">Win rate</p>
-              </div>
-              <div>
-                <p className="font-data text-[18px] font-semibold text-white/28">—</p>
-                <p className="text-[10px] text-white/38 mt-0.5">Mean R Δ</p>
-              </div>
-              <div>
-                <p className="font-data text-[18px] font-semibold text-white/28">—</p>
-                <p className="text-[10px] text-white/38 mt-0.5">Median R Δ</p>
-              </div>
-            </div>
-            <RDeltaHistogram deltas={[]} />
-          </div>
-        ) : (
-          <div className="flex flex-col items-center py-ds-3 text-center gap-1">
-            <BarChart2 className="h-8 w-8 text-white/18" />
-            <p className="text-[11px] text-white/38">
-              Distribution unlocks after ~{DISTRIBUTION_MIN_N} tracked trades.
-            </p>
-            <p className="text-[11px] text-white/28">
-              Tracked so far: {tracked}/{DISTRIBUTION_MIN_N}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── Shadow Insight Card ──────────────────────────────────────────────────────
 
@@ -1798,7 +1818,7 @@ function ShadowInsightCard({ trades }: { trades: Trade[] }) {
   );
 }
 
-function DistributionView({ closedTrades }: { tracked: number; total: number; trades: Trade[]; closedTrades: Trade[] }) {
+function DistributionView({ trades, closedTrades }: { tracked: number; total: number; trades: Trade[]; closedTrades: Trade[] }) {
   // ── Combined summary: best fixed-R scenario across all closed trades ────────
   const summary = useMemo(() => {
     const actualTotal = closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0);
@@ -1817,6 +1837,7 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
       close_at: t.close_at ?? t.open_at,
       mfe_r: t.mfe_r ?? null,
       mae_r: t.mae_r ?? null,
+      net_pnl_usd: t.pnl ?? null,
     }));
 
     // For each R in [1,2,3,4] compute the cumulative total
@@ -1957,21 +1978,17 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
           <p className="text-[11px] text-white/38">Based on your last {n} closed trades.</p>
         </div>
       )}
+
+      {/* Shadow Insight — deterministic, rule-based coaching read on the same closed trades. */}
+      <ShadowInsightCard trades={trades} />
     </div>
   );
 }
 
 // ─── Single-trade scenario chart (mirrors Performance's AreaChart) ───────────
 
-const ASSET_MULT: Record<string, number> = {
-  ES: 50, MES: 5, NQ: 20, MNQ: 2, YM: 5,
-  RTY: 50, CL: 1000, GC: 100, SI: 5000, ZB: 1000, ZN: 1000,
-};
-
 function tradeMult(trade: Trade): number {
-  if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
-  const sym = (trade.symbol ?? '').toUpperCase().trim().replace(/\d+$/, '');
-  return ASSET_MULT[sym] ?? 1;
+  return resolveAssetMultiplier(trade.symbol, trade.multiplier);
 }
 
 interface SingleTradeChartProps {
@@ -1983,11 +2000,13 @@ interface SingleTradeChartProps {
   bePnl: number | null;
   targetPnl: number | null;
   mfePnl: number | null;
+  modificationMarkers?: ModificationMarker[];
 }
 
 function SingleTradeScenarioChart({
   trade, bars, view,
   actualPnl, stopPnl, bePnl, targetPnl, mfePnl,
+  modificationMarkers = [],
 }: SingleTradeChartProps) {
   const hasPath = bars.length > 0;
   const mult = tradeMult(trade);
@@ -2019,6 +2038,22 @@ function SingleTradeScenarioChart({
       };
     });
   }, [hasPath, bars, trade, mult, view, actualPnl, stopPnl, bePnl, targetPnl, mfePnl]);
+
+  // ── Stop/target modification markers — map each marker's timestamp to the
+  // nearest bar's x-axis category label so they can be rendered as vertical
+  // ReferenceLines on the (categorical) time axis. Bars-only: with no price
+  // path there is no x-axis to anchor a marker to.
+  const markerPoints = useMemo(() => {
+    if (!hasPath || modificationMarkers.length === 0) return [];
+    const points: Array<{ marker: ModificationMarker; label: string }> = [];
+    for (const marker of modificationMarkers) {
+      let idx = bars.findIndex((b) => b.t >= marker.at);
+      if (idx === -1) idx = bars.length - 1;
+      const label = chartData[idx]?.label;
+      if (typeof label === 'string') points.push({ marker, label });
+    }
+    return points;
+  }, [hasPath, modificationMarkers, bars, chartData]);
 
   const [alt1Color, alt2Color] = view === 'stop'
     ? [COLOR_RED, COLOR_SILVER]
@@ -2091,6 +2126,24 @@ function SingleTradeScenarioChart({
               width={80}
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
+            {/* Stop/target modification markers — one vertical line per real order change. */}
+            {markerPoints.map(({ marker, label }, i) => (
+              <ReferenceLine
+                key={`mod-${i}-${marker.kind}-${marker.at}`}
+                x={label}
+                stroke={marker.kind === 'stop' ? COLOR_RED : COLOR_GREEN}
+                strokeDasharray="2 3"
+                strokeWidth={1}
+                label={{
+                  value: marker.fromPrice != null
+                    ? `${marker.kind === 'stop' ? 'Stop' : 'Target'} ${fmtPrice(marker.fromPrice)} → ${fmtPrice(marker.toPrice)}`
+                    : `${marker.kind === 'stop' ? 'Stop' : 'Target'} moved to ${fmtPrice(marker.toPrice)}`,
+                  fill: marker.kind === 'stop' ? COLOR_RED : COLOR_GREEN,
+                  fontSize: 9,
+                  position: 'top',
+                }}
+              />
+            ))}
             <Tooltip
               contentStyle={{ background: 'rgba(20,20,20,0.95)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 11, padding: '4px 8px' }}
               itemStyle={{ color: 'rgba(255,255,255,0.82)' }}
@@ -2295,6 +2348,11 @@ function TradeEngineView({
 
   const mfePnl: number | null = mfe?.pnl ?? null;
 
+  // ── Real stop/target-discipline scenarios (only produced by the engine
+  // when at least one real modification of that kind was captured) ─────────
+  const noStopScenario = engine?.scenarios.find((s) => s.key === 'no_stop_moves') ?? null;
+  const noTargetScenario = engine?.scenarios.find((s) => s.key === 'no_target_moves') ?? null;
+
   return (
     <div className="flex flex-col gap-ds-3">
       {/* Single-trade scenario chart (same style as Performance) */}
@@ -2307,6 +2365,7 @@ function TradeEngineView({
         bePnl={bePnl}
         targetPnl={targetPnl}
         mfePnl={mfePnl}
+        modificationMarkers={engine?.modificationMarkers ?? []}
       />
 
       {/* ── Gold insight banner (per-trade, mirrors Performance tab) ────── */}
@@ -2395,6 +2454,15 @@ function TradeEngineView({
             curveColor={COLOR_SILVER}
             delta={bePnl != null ? bePnl - actualPnl : undefined}
           />
+          {noStopScenario?.available && noStopScenario.pnlUsd != null && (
+            <StopTargetDisciplineCard
+              label="If you never moved your stop"
+              note={noStopScenario.note}
+              scenarioPnlUsd={noStopScenario.pnlUsd}
+              actualPnlUsd={actualPnl}
+              baselinePhrase="never moving your stop"
+            />
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
@@ -2422,6 +2490,15 @@ function TradeEngineView({
             curveColor={COLOR_SILVER}
             delta={mfePnl != null ? mfePnl - actualPnl : undefined}
           />
+          {noTargetScenario?.available && noTargetScenario.pnlUsd != null && (
+            <StopTargetDisciplineCard
+              label="If you left your target alone"
+              note={noTargetScenario.note}
+              scenarioPnlUsd={noTargetScenario.pnlUsd}
+              actualPnlUsd={actualPnl}
+              baselinePhrase="leaving your target alone"
+            />
+          )}
         </div>
       )}
 
@@ -2790,8 +2867,16 @@ export default function TradeCompare() {
   const closedTradeIds = useMemo(() => closedTrades.map((t) => t.id), [closedTrades]);
   const { barsByTrade } = useAllTradeBars(closedTradeIds);
 
+  // Real "has captured price bars" set — same tradeIds, same query key as
+  // useAllTradeBars above, so React Query dedupes the request (no 2nd fetch).
+  const trackedTradeIds = useTrackedTradeIds(closedTradeIds);
+
+  // Stop/target modification history for ALL closed trades — used by the
+  // Performance tab's "Stop-move discipline" card.
+  const { modsByTrade } = useAllTradeModifications(closedTradeIds);
+
   // Aggregate for beta Day tab + Distribution tab.
-  const aggregate = useShadowAggregate(closedTrades);
+  const aggregate = useShadowAggregate(closedTrades, trackedTradeIds);
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
   const loadingEl = (
@@ -2897,7 +2982,7 @@ export default function TradeCompare() {
 
         {/* ── Day tab ── */}
         <TabsContent value="day" className="mt-1">
-          {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
+          {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} modsByTrade={modsByTrade} />}
         </TabsContent>
 
         {/* ── Distribution tab (now "Summary") ── */}

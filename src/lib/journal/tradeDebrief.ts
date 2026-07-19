@@ -9,6 +9,7 @@
 
 import type { Trade } from '@/hooks/useTradesData';
 import type { PlannedResult } from '@/lib/journal/plannedScenarios';
+import { resolveMultiplier as resolveAssetMultiplier } from '@/lib/journal/assetMultipliers';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -94,17 +95,12 @@ const TONE_RANK: Record<DebriefTone, number> = {
   neutral: 0,
 };
 
-// ─── Multiplier resolution (mirrors plannedScenarios.ts) ─────────────────────
-
-const ASSET_MULTIPLIERS: Record<string, number> = {
-  ES: 50, MES: 5, NQ: 20, MNQ: 2, YM: 5,
-  RTY: 50, CL: 1000, GC: 100, SI: 5000, ZB: 1000, ZN: 1000,
-};
+// ─── Multiplier resolution ────────────────────────────────────────────────────
+// Delegates to the canonical assetMultipliers module (shared with useShadow,
+// plannedScenarios, whatIfEngine, TradeCompare) instead of a local duplicate.
 
 function resolveMultiplier(trade: Trade): number {
-  if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
-  const sym = (trade.symbol ?? '').toUpperCase().trim().replace(/\d+$/, '');
-  return ASSET_MULTIPLIERS[sym] ?? 1;
+  return resolveAssetMultiplier(trade.symbol, trade.multiplier);
 }
 
 // ─── Core function ────────────────────────────────────────────────────────────

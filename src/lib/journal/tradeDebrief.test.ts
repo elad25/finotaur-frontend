@@ -715,3 +715,24 @@ describe('buildTradeDebrief — primaryAction / actionWhy', () => {
     expect(debrief(scratch).actionWhy).toBe('');
   });
 });
+
+// ─── Multiplier resolution (Task D — canonical assetMultipliers.ts) ──────────
+// Regression guard: tradeDebrief.ts used to keep its own duplicate
+// ASSET_MULTIPLIERS map that was missing MCL/MGC/SIL, so micro-contract
+// symbols silently fell back to a multiplier of 1 (understating planned
+// risk by 100x for MCL). It now delegates to lib/journal/assetMultipliers.ts.
+
+describe('buildTradeDebrief — micro-contract multiplier resolution (no explicit trade.multiplier)', () => {
+  it('MCL resolves via the canonical map (100), not the 1 fallback', () => {
+    const trade = makeTrade({
+      symbol: 'MCL',
+      multiplier: undefined,
+      entry_price: 70, exit_price: 71, stop_price: 69, take_profit_price: 73,
+      quantity: 1, pnl: 100, // gross = (71-70)*1*100 = 100, matches net exactly (fee=0)
+    });
+    const result = debrief(trade);
+    const plannedRisk = result.stats.find((s) => s.label === 'Planned risk')!;
+    // abs(70-69) * 1 * 100 = $100.00 — would be $1.00 with the old fallback-to-1 bug.
+    expect(plannedRisk.value).toBe('$100.00');
+  });
+});
