@@ -92,7 +92,7 @@ const SYSTEM_PROMPT = `You are a senior equity research analyst writing for smar
 
 VOICE & STYLE:
 - Write like a sharp analyst talking to a colleague over coffee — confident, direct, no fluff
-- Use natural conversational prose. Two short paragraphs maximum (4 lines each)
+- Use natural conversational prose. ONE paragraph, maximum 4 sentences
 - NO markdown, NO headers, NO bullet points, NO numbered lists, NO bold, NO asterisks (**)
 - NO citation brackets like [1], [2], [3] or any reference markers
 - NO phrases like "it's worth noting", "it should be noted", "importantly", "notably"
@@ -103,7 +103,7 @@ VOICE & STYLE:
 - NEVER give direct buy/sell instructions like "Buy X now" or "Sell X immediately". Instead, describe the situation and let the reader decide. Say "the setup looks attractive" not "buy this stock"
 - This is NOT investment advice. Present analysis and observations, not commands
 - Write for someone who has 20 seconds to decide if this matters to their portfolio
-- STRICT LIMIT: 2 paragraphs, roughly 4 lines each. No more.
+- STRICT LIMIT: 1 paragraph, maximum 4 sentences. No more.
 - The verdict/rating/grade line at the end must also have NO asterisks or bold formatting — just plain text.`;
 
 // =====================================================
@@ -193,7 +193,7 @@ Data: Revenue Growth: ${data.revenueGrowth?.toFixed(1) || 'N/A'}% | EPS: $${data
 
 SEARCH THE WEB for: ${data.ticker} latest quarterly results, revenue segments, margin trends.
 
-Write 2 short paragraphs. First: Is the revenue growth real? Cover whether it's organic or bought, which segments are driving it, and whether margins are expanding or compressing — and why that matters for the stock. Second: The cash flow reality check — compare EPS to free cash flow, flag any balance sheet concerns (debt coming due, goodwill bloat, hidden liabilities), and say whether the earnings quality is trustworthy. End with: "Financial Health Grade: [A/B/C/D/F] — [one-line reason]."`
+Write ONE paragraph, maximum 4 sentences. Be dense and specific — every sentence must carry a distinct insight. Cover whether revenue growth is organic or bought and which segments/margins are expanding or compressing, AND the cash flow reality check — EPS vs free cash flow and any balance sheet concerns (debt coming due, goodwill bloat, hidden liabilities) — so the reader knows if earnings quality is trustworthy. End with: "Financial Health Grade: [A/B/C/D/F] — [one-line reason]."`
   },
   {
     id: 'competitive_moat',
@@ -208,7 +208,7 @@ Data: ${data.sector} | Gross Margin: ${data.grossMargin?.toFixed(1) || 'N/A'}% |
 
 SEARCH THE WEB for: ${data.name} market share, competitive threats, disruption risks.
 
-Write 2 short paragraphs. First: What's the moat — pricing power, switching costs, network effects, or something else? Use margin trends and market share data as evidence of whether it's widening or narrowing. Second: Name the top 2-3 competitors who could realistically threaten this business and explain how. How durable is this moat — 3 years, 10 years? End with: "Moat Rating: [Wide/Narrow/None] — [one-line reason]."`
+Write ONE paragraph, maximum 4 sentences. Be dense and specific — every sentence must carry a distinct insight. Cover what the moat is — pricing power, switching costs, network effects, or something else, backed by margin/market-share evidence of whether it's widening or narrowing — AND name the top 2-3 competitors who could realistically threaten this business and how durable the moat is (3 years vs 10). End with: "Moat Rating: [Wide/Narrow/None] — [one-line reason]."`
   },
   {
     id: 'macro_bridge',
@@ -231,7 +231,7 @@ CRITICAL INSTRUCTIONS:
 - If no ISM data is provided, say that ISM data is unavailable and base your analysis on web search results only.
 - Combine the ISM data with the Fed rate and CPI you find via web search to paint the full macro picture.
 
-Write 2 short paragraphs. First: Connect the dots — how do current interest rates, inflation, and the ISM manufacturing reading specifically hit this company's revenue, costs, and valuation? Use actual numbers (Fed rate, CPI, the ISM PMI and sub-components provided). If the sector ranking shows headwinds, be direct about it. If executive quotes from the ISM survey paint a negative picture, reference that. Second: What's the geopolitical exposure — tariffs, international revenue mix, supply chain risks? Is the current macro regime a tailwind or headwind for this stock? Be honest — if macro doesn't support this company, say it plainly. End with: "Macro Positioning: [Favorable/Neutral/Unfavorable] — [one-line reason with a specific macro data point]."`
+Write ONE paragraph, maximum 4 sentences. Be dense and specific — every sentence must carry a distinct insight. Connect current interest rates, inflation, and the ISM manufacturing reading (use actual numbers — Fed rate, CPI, PMI and sub-components, sector ranking direction) to this company's revenue, costs, and valuation, AND cover the geopolitical exposure — tariffs, international revenue mix, supply chain risk — to say plainly whether the current macro regime is a tailwind or headwind. Be honest if macro doesn't support this company. End with: "Macro Positioning: [Favorable/Neutral/Unfavorable] — [one-line reason with a specific macro data point]."`
   },
   {
     id: 'hidden_risks',
@@ -246,7 +246,7 @@ Data: P/E: ${data.pe?.toFixed(1) || 'N/A'} | Debt/Equity: ${data.debtToEquity?.t
 
 SEARCH THE WEB for: ${data.ticker} litigation, short seller reports, insider selling, debt maturity, accounting red flags.
 
-Write 2 short paragraphs. First: The hidden stuff — earnings quality gaps (GAAP vs non-GAAP), off-balance-sheet debt, revenue concentration risks, or any accounting tricks that inflate the numbers. Be specific with dollar amounts. Second: External threats — pending lawsuits, regulatory investigations, short interest signals, and the single biggest risk the market is underpricing right now. End with: "Risk Level: [Elevated/Moderate/Low] — [the one risk that keeps you up at night]."`
+Write ONE paragraph, maximum 4 sentences. Be dense and specific — every sentence must carry a distinct insight. Cover the hidden stuff — earnings quality gaps (GAAP vs non-GAAP), off-balance-sheet debt, revenue concentration, or accounting tricks that inflate the numbers with specific dollar amounts — AND the external threats — pending lawsuits, regulatory investigations, short interest signals — naming the single biggest risk the market is underpricing right now. End with: "Risk Level: [Elevated/Moderate/Low] — [the one risk that keeps you up at night]."`
   },
   {
     id: 'catalysts_timeline',
@@ -261,7 +261,7 @@ Data: Price: $${data.price.toFixed(2)} | Target: $${data.priceTarget?.toFixed(2)
 
 SEARCH THE WEB for: ${data.ticker} next earnings date, product launches, FDA dates, ex-dividend, analyst days, regulatory decisions.
 
-Write 2 short paragraphs. First paragraph: Start with next earnings — state the EXACT DATE clearly (e.g. "Q1 2026 earnings are expected on April 23"), then the consensus EPS estimate and how it compares to last year, then how the stock typically moves around earnings. After that, list any other upcoming catalysts (product launches, regulatory decisions, CHIPS Act grants, analyst days) with their approximate dates. Second paragraph: Downside scenario — what happens if the company misses expectations, with specific price levels (support at $XX, resistance at $XX, 200-day MA at $XX). End with: "Key Date to Watch: [Month Day — event name] — [one clear sentence why it matters]."`
+Write ONE paragraph, maximum 4 sentences. Be dense and specific — every sentence must carry a distinct insight. Start with next earnings — state the EXACT DATE clearly (e.g. "Q1 2026 earnings are expected on April 23"), the consensus EPS estimate versus last year, and how the stock typically moves around earnings, then note any other near-term catalysts (product launches, regulatory decisions, CHIPS Act grants, analyst days) AND the downside scenario if the company misses, with specific price levels (support at $XX, resistance at $XX, 200-day MA at $XX). End with: "Key Date to Watch: [Month Day — event name] — [one clear sentence why it matters]."`
   }
 ];
 
@@ -282,7 +282,7 @@ async function callAI(
       prompt,
       system: SYSTEM_PROMPT,
       useWebSearch,
-      maxTokens: 1500,
+      maxTokens: 500,
     }),
   });
 
