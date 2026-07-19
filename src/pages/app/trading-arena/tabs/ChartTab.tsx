@@ -81,7 +81,7 @@ import {
 } from '../utils/intervals';
 import { ChartStyleContext, DEFAULT_CHART_STYLE } from '../components/chartStyleSettings';
 import type { SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
-import type { ArenaIndicatorEnabled, ArenaIndicatorKey, ArenaIndicatorParams } from '../components/indicatorsSettings';
+import type { ArenaIndicatorInstance } from '../components/indicatorsSettings';
 
 interface ChartTabProps {
   symbol: string;
@@ -90,12 +90,12 @@ interface ChartTabProps {
   assetClass: string;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
-  indicatorsEnabled: ArenaIndicatorEnabled;
-  indicatorsHidden: Partial<Record<ArenaIndicatorKey, boolean>>;
-  indicatorsParams: ArenaIndicatorParams;
-  onIndicatorHiddenToggle: (key: ArenaIndicatorKey) => void;
-  onIndicatorSettingsOpen: (key: ArenaIndicatorKey) => void;
-  onIndicatorRemove: (key: ArenaIndicatorKey) => void;
+  /** Currently added instances (drives the legend) — single source of truth lives in TradingArena.tsx. */
+  indicatorInstances: ArenaIndicatorInstance[];
+  indicatorsHiddenIds: Record<string, boolean>;
+  onIndicatorHiddenToggle: (id: string) => void;
+  onIndicatorSettingsOpen: (id: string) => void;
+  onIndicatorRemove: (id: string) => void;
   /**
    * Session Volume Profile is now modeled as an "indicator" toggle (see
    * indicatorsSettings.ts's ArenaIndicatorEnabled.volumeProfile), edited
@@ -397,9 +397,8 @@ export function ChartTab({
   interval,
   assetClass,
   indicators,
-  indicatorsEnabled,
-  indicatorsHidden,
-  indicatorsParams,
+  indicatorInstances,
+  indicatorsHiddenIds,
   onIndicatorHiddenToggle,
   onIndicatorSettingsOpen,
   onIndicatorRemove,
@@ -689,9 +688,8 @@ export function ChartTab({
         <div className="relative flex-1 min-h-0">
           {!isCrypto && <DelayedDataBadge />}
           <ActiveIndicatorsLegend
-            enabled={indicatorsEnabled}
-            hidden={indicatorsHidden}
-            params={indicatorsParams}
+            instances={indicatorInstances}
+            hidden={indicatorsHiddenIds}
             chartStyle={chartStyle}
             onToggleHidden={onIndicatorHiddenToggle}
             onOpenSettings={onIndicatorSettingsOpen}

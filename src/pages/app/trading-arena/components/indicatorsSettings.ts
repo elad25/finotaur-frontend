@@ -601,87 +601,426 @@ function toChartLineStyle(style: ArenaIndicatorLineStyle): IndicatorLineStyle {
   };
 }
 
+/**
+ * INSTANCES model (superseded the flat one-per-type `enabled` + `params` +
+ * `styles` shape above) — the same indicator can be added multiple times
+ * (e.g. EMA 9 + EMA 21), each with its own id/params/style. See
+ * ArenaIndicatorPreferencesV4 below. `enabled`/`params`/`styles`/
+ * `ArenaIndicatorPreferences(V3)` and their sanitizers above are UNCHANGED —
+ * kept as the read-only v1→v2→v3 migration source (see
+ * useArenaIndicatorPreferences.ts) and still exercised directly by
+ * useArenaIndicatorPreferences.test.ts.
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+/** Per-type params shape — mirrors `ArenaIndicatorParams` above but also covers the two param-less types (vwap/volumeProfile). */
+export interface ArenaIndicatorParamsByType {
+  ema: PeriodParam;
+  sma: PeriodParam;
+  vwap: Record<string, never>;
+  bbands: BbandsParams;
+  volumeProfile: Record<string, never>;
+  rsi: PeriodParam;
+  macd: MacdParams;
+  atr: PeriodParam;
+}
+
+/** Per-type style shape — mirrors `ArenaIndicatorStyles` above but also covers volumeProfile (no chart-line style of its own). */
+export interface ArenaIndicatorStylesByType {
+  ema: ArenaSingleLineStyle;
+  sma: ArenaSingleLineStyle;
+  vwap: ArenaSingleLineStyle;
+  bbands: ArenaBbandsStyle;
+  volumeProfile: Record<string, never>;
+  rsi: ArenaSingleLineStyle;
+  macd: ArenaMacdStyle;
+  atr: ArenaSingleLineStyle;
+}
+
+/**
+ * One added indicator "chip". `params`/`styles` are typed as the UNION of
+ * every per-type shape (TS can't correlate a single generic instantiation
+ * across an array to each element's own `type` discriminant) — callers
+ * narrow via a `switch (instance.type)` and cast, the same pragmatic pattern
+ * `resetIndicator`/`ArenaIndicatorStylePatch` already used pre-instances.
+ */
+export interface ArenaIndicatorInstance {
+  id: string;
+  type: ArenaIndicatorKey;
+  params: ArenaIndicatorParamsByType[ArenaIndicatorKey];
+  styles: ArenaIndicatorStylesByType[ArenaIndicatorKey];
+}
+
+export function defaultParamsForType(type: ArenaIndicatorKey): ArenaIndicatorParamsByType[ArenaIndicatorKey] {
+  switch (type) {
+    case 'ema':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.ema };
+    case 'sma':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.sma };
+    case 'rsi':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.rsi };
+    case 'macd':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.macd };
+    case 'bbands':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.bbands };
+    case 'atr':
+      return { ...ARENA_INDICATOR_PARAM_DEFAULTS.atr };
+    case 'vwap':
+    case 'volumeProfile':
+    default:
+      return {};
+  }
+}
+
+export function defaultStylesForType(type: ArenaIndicatorKey): ArenaIndicatorStylesByType[ArenaIndicatorKey] {
+  switch (type) {
+    case 'macd':
+      return { ...DEFAULT_ARENA_INDICATOR_STYLES.macd };
+    case 'bbands':
+      return { ...DEFAULT_ARENA_INDICATOR_STYLES.bbands };
+    case 'volumeProfile':
+      return {};
+    case 'ema':
+    case 'sma':
+    case 'vwap':
+    case 'rsi':
+    case 'atr':
+    default:
+      return { line: { ...DEFAULT_ARENA_INDICATOR_STYLES[type as 'ema' | 'sma' | 'vwap' | 'rsi' | 'atr'].line } };
+  }
+}
+
+// Fallback id generator — crypto.randomUUID() is available in every browser
+// this app targets; the counter fallback only matters for exotic/older
+// environments and test harnesses without a `crypto` global.
+let instanceIdCounter = 0;
+export function generateInstanceId(type: ArenaIndicatorKey): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${type}-${crypto.randomUUID()}`;
+  }
+  instanceIdCounter += 1;
+  return `${type}-${instanceIdCounter}`;
+}
+
+/** Builds a fresh instance with type defaults — used by "Add" and by v3→v4 migration. */
+export function createIndicatorInstance(type: ArenaIndicatorKey, id?: string): ArenaIndicatorInstance {
+  return {
+    id: id ?? generateInstanceId(type),
+    type,
+    params: defaultParamsForType(type),
+    styles: defaultStylesForType(type),
+  };
+}
+
+function sanitizeInstanceParams(type: ArenaIndicatorKey, raw: unknown): ArenaIndicatorParamsByType[ArenaIndicatorKey] {
+  const fallback = defaultParamsForType(type);
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Record<string, unknown>;
+  switch (type) {
+    case 'ema':
+      return { period: asClampedInt(p.period, (fallback as PeriodParam).period, EMA_PERIOD_RANGE.min, EMA_PERIOD_RANGE.max) };
+    case 'sma':
+      return { period: asClampedInt(p.period, (fallback as PeriodParam).period, SMA_PERIOD_RANGE.min, SMA_PERIOD_RANGE.max) };
+    case 'rsi':
+      return { period: asClampedInt(p.period, (fallback as PeriodParam).period, RSI_PERIOD_RANGE.min, RSI_PERIOD_RANGE.max) };
+    case 'atr':
+      return { period: asClampedInt(p.period, (fallback as PeriodParam).period, ATR_PERIOD_RANGE.min, ATR_PERIOD_RANGE.max) };
+    case 'macd': {
+      const f = fallback as MacdParams;
+      return {
+        fast: asClampedInt(p.fast, f.fast, MACD_FAST_RANGE.min, MACD_FAST_RANGE.max),
+        slow: asClampedInt(p.slow, f.slow, MACD_SLOW_RANGE.min, MACD_SLOW_RANGE.max),
+        signal: asClampedInt(p.signal, f.signal, MACD_SIGNAL_RANGE.min, MACD_SIGNAL_RANGE.max),
+      };
+    }
+    case 'bbands': {
+      const f = fallback as BbandsParams;
+      return {
+        period: asClampedInt(p.period, f.period, BBANDS_PERIOD_RANGE.min, BBANDS_PERIOD_RANGE.max),
+        stdDev: asClampedFloat(p.stdDev, f.stdDev, BBANDS_STDDEV_RANGE.min, BBANDS_STDDEV_RANGE.max),
+      };
+    }
+    case 'vwap':
+    case 'volumeProfile':
+    default:
+      return {};
+  }
+}
+
+function sanitizeInstanceStyles(type: ArenaIndicatorKey, raw: unknown): ArenaIndicatorStylesByType[ArenaIndicatorKey] {
+  const fallback = defaultStylesForType(type);
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Record<string, unknown>;
+  switch (type) {
+    case 'macd': {
+      const f = fallback as ArenaMacdStyle;
+      const pp = p as Partial<ArenaMacdStyle>;
+      return {
+        macdLine: sanitizeArenaLineStyle(pp.macdLine, f.macdLine),
+        signalLine: sanitizeArenaLineStyle(pp.signalLine, f.signalLine),
+        histogram: sanitizeArenaLineStyle(pp.histogram, f.histogram),
+      };
+    }
+    case 'bbands': {
+      const f = fallback as ArenaBbandsStyle;
+      const pp = p as Partial<ArenaBbandsStyle>;
+      return {
+        basis: sanitizeArenaLineStyle(pp.basis, f.basis),
+        upper: sanitizeArenaLineStyle(pp.upper, f.upper),
+        lower: sanitizeArenaLineStyle(pp.lower, f.lower),
+      };
+    }
+    case 'volumeProfile':
+      return {};
+    case 'ema':
+    case 'sma':
+    case 'vwap':
+    case 'rsi':
+    case 'atr':
+    default: {
+      const f = fallback as ArenaSingleLineStyle;
+      const pp = p as Partial<ArenaSingleLineStyle>;
+      return { line: sanitizeArenaLineStyle(pp.line, f.line) };
+    }
+  }
+}
+
+function sanitizeArenaIndicatorInstance(raw: unknown, seenIds: Set<string>): ArenaIndicatorInstance | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Partial<{ id: unknown; type: unknown; params: unknown; styles: unknown }>;
+  const type = typeof p.type === 'string' && ARENA_INDICATOR_DEFINITIONS.some((d) => d.key === p.type)
+    ? (p.type as ArenaIndicatorKey)
+    : null;
+  if (!type) return null;
+
+  let id = typeof p.id === 'string' && p.id.length > 0 ? p.id : generateInstanceId(type);
+  while (seenIds.has(id)) id = generateInstanceId(type); // de-dupe corrupt/duplicate persisted ids
+  seenIds.add(id);
+
+  return {
+    id,
+    type,
+    params: sanitizeInstanceParams(type, p.params),
+    styles: sanitizeInstanceStyles(type, p.styles),
+  };
+}
+
+/** Sanitizes a persisted instances array — drops unknown types, clamps every param, caps at MAX_ACTIVE_INDICATORS. */
+export function sanitizeArenaIndicatorInstances(raw: unknown, fallback: ArenaIndicatorInstance[]): ArenaIndicatorInstance[] {
+  if (!Array.isArray(raw)) return fallback;
+  const seenIds = new Set<string>();
+  const out: ArenaIndicatorInstance[] = [];
+  for (const item of raw) {
+    if (out.length >= MAX_ACTIVE_INDICATORS) break;
+    const instance = sanitizeArenaIndicatorInstance(item, seenIds);
+    if (instance) out.push(instance);
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v4 persisted shape — `{ instances, visibility }`. Supersedes v3's
+// `{ enabled, params, styles, visibility }` — see
+// useArenaIndicatorPreferences.ts's migrateV3ToV4.
+// ═══════════════════════════════════════════════════════════════
+export interface ArenaIndicatorPreferencesV4 {
+  instances: ArenaIndicatorInstance[];
+  visibility: ArenaIndicatorVisibility;
+}
+
+/** Same default SET as today's `ARENA_INDICATOR_ENABLED_DEFAULTS` (Volume Profile only, on by default). */
+export const DEFAULT_ARENA_INDICATOR_INSTANCES: ArenaIndicatorInstance[] = ARENA_INDICATOR_DEFINITIONS
+  .filter((definition) => ARENA_INDICATOR_ENABLED_DEFAULTS[definition.key])
+  .map((definition) => createIndicatorInstance(definition.key, definition.key));
+
+export const DEFAULT_ARENA_INDICATOR_PREFERENCES_V4: ArenaIndicatorPreferencesV4 = {
+  instances: DEFAULT_ARENA_INDICATOR_INSTANCES,
+  visibility: DEFAULT_ARENA_INDICATOR_VISIBILITY,
+};
+
+export function sanitizeArenaIndicatorPreferencesV4(
+  raw: unknown,
+  fallback: ArenaIndicatorPreferencesV4 = DEFAULT_ARENA_INDICATOR_PREFERENCES_V4,
+): ArenaIndicatorPreferencesV4 {
+  if (!raw || typeof raw !== 'object') return fallback;
+  const p = raw as Partial<ArenaIndicatorPreferencesV4>;
+  return {
+    instances: sanitizeArenaIndicatorInstances(p.instances, fallback.instances),
+    visibility: sanitizeArenaIndicatorVisibility(p.visibility, fallback.visibility),
+  };
+}
+
+function instanceParamsFromV3(type: ArenaIndicatorKey, params: ArenaIndicatorParams): ArenaIndicatorParamsByType[ArenaIndicatorKey] {
+  switch (type) {
+    case 'ema':
+      return { ...params.ema };
+    case 'sma':
+      return { ...params.sma };
+    case 'rsi':
+      return { ...params.rsi };
+    case 'macd':
+      return { ...params.macd };
+    case 'bbands':
+      return { ...params.bbands };
+    case 'atr':
+      return { ...params.atr };
+    case 'vwap':
+    case 'volumeProfile':
+    default:
+      return {};
+  }
+}
+
+function instanceStylesFromV3(type: ArenaIndicatorKey, styles: ArenaIndicatorStyles): ArenaIndicatorStylesByType[ArenaIndicatorKey] {
+  switch (type) {
+    case 'macd':
+      return { ...styles.macd };
+    case 'bbands':
+      return { ...styles.bbands };
+    case 'volumeProfile':
+      return {};
+    case 'ema':
+    case 'sma':
+    case 'vwap':
+    case 'rsi':
+    case 'atr':
+    default:
+      return { line: { ...styles[type as 'ema' | 'sma' | 'vwap' | 'rsi' | 'atr'].line } };
+  }
+}
+
+/**
+ * Migrates a v3 `{ enabled, params, styles, visibility }` record into v4:
+ * every `enabled[key] === true` type becomes ONE instance carrying that
+ * type's v3 params/styles (definition order); `visibility` (global) carries
+ * over unchanged. Pure — not persisted until the next write, same
+ * lazy-migration pattern as the v2→v3 migration.
+ */
+export function migrateV3ToV4(v3: ArenaIndicatorPreferencesV3): ArenaIndicatorPreferencesV4 {
+  const instances: ArenaIndicatorInstance[] = [];
+  for (const definition of ARENA_INDICATOR_DEFINITIONS) {
+    if (!v3.enabled[definition.key]) continue;
+    instances.push({
+      id: generateInstanceId(definition.key),
+      type: definition.key,
+      params: instanceParamsFromV3(definition.key, v3.params),
+      styles: instanceStylesFromV3(definition.key, v3.styles),
+    });
+  }
+  return { instances, visibility: v3.visibility };
+}
+
 export function buildIndicatorsFromArenaSettings(
-  enabled: ArenaIndicatorEnabled,
-  params: ArenaIndicatorParams,
+  instances: ArenaIndicatorInstance[],
   interval: string,
-  /** Per-indicator visual style (Style tab) — optional, purely additive. When omitted, every Indicator is built exactly as before this field existed. */
-  styles?: ArenaIndicatorStyles,
 ): Indicator[] {
   const list: Indicator[] = [];
 
-  if (enabled.sma) {
-    list.push({
-      type: 'SMA',
-      period: params.sma.period,
-      color: styles?.sma.line.color,
-      lineStyles: styles ? { line: toChartLineStyle(styles.sma.line) } : undefined,
-    });
-  }
-  if (enabled.ema) {
-    list.push({
-      type: 'EMA',
-      period: params.ema.period,
-      color: styles?.ema.line.color,
-      lineStyles: styles ? { line: toChartLineStyle(styles.ema.line) } : undefined,
-    });
-  }
-  if (enabled.rsi) {
-    list.push({
-      type: 'RSI',
-      period: params.rsi.period,
-      color: styles?.rsi.line.color,
-      lineStyles: styles ? { line: toChartLineStyle(styles.rsi.line) } : undefined,
-    });
-  }
-  // VWAP gate: only meaningful on intraday intervals — same belt-and-
-  // suspenders guard TradeChart.tsx applies (the dialog also disables the
-  // row on non-intraday intervals).
-  if (enabled.vwap && isIntradayInterval(interval)) {
-    list.push({
-      type: 'VWAP',
-      period: 0,
-      color: styles?.vwap.line.color,
-      lineStyles: styles ? { line: toChartLineStyle(styles.vwap.line) } : undefined,
-    });
-  }
-  if (enabled.macd) {
-    list.push({
-      type: 'MACD',
-      period: 0,
-      macdParams: { fast: params.macd.fast, slow: params.macd.slow, signal: params.macd.signal },
-      color: styles?.macd.macdLine.color,
-      lineStyles: styles
-        ? {
-            macdLine: toChartLineStyle(styles.macd.macdLine),
-            signalLine: toChartLineStyle(styles.macd.signalLine),
-            histogram: toChartLineStyle(styles.macd.histogram),
-          }
-        : undefined,
-    });
-  }
-  if (enabled.bbands) {
-    list.push({
-      type: 'BBANDS',
-      period: params.bbands.period,
-      bbandsStdDev: params.bbands.stdDev,
-      color: styles?.bbands.basis.color,
-      lineStyles: styles
-        ? {
-            basis: toChartLineStyle(styles.bbands.basis),
-            upper: toChartLineStyle(styles.bbands.upper),
-            lower: toChartLineStyle(styles.bbands.lower),
-          }
-        : undefined,
-    });
-  }
-  if (enabled.atr) {
-    list.push({
-      type: 'ATR',
-      period: params.atr.period,
-      color: styles?.atr.line.color,
-      lineStyles: styles ? { line: toChartLineStyle(styles.atr.line) } : undefined,
-    });
+  for (const instance of instances) {
+    switch (instance.type) {
+      case 'sma': {
+        const params = instance.params as PeriodParam;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'SMA',
+          period: params.period,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'ema': {
+        const params = instance.params as PeriodParam;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'EMA',
+          period: params.period,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'rsi': {
+        const params = instance.params as PeriodParam;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'RSI',
+          period: params.period,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'vwap': {
+        // VWAP gate: only meaningful on intraday intervals — same belt-and-
+        // suspenders guard TradeChart.tsx applies (the dialog also disables
+        // the "+" row on non-intraday intervals).
+        if (!isIntradayInterval(interval)) break;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'VWAP',
+          period: 0,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'macd': {
+        const params = instance.params as MacdParams;
+        const styles = instance.styles as ArenaMacdStyle;
+        list.push({
+          type: 'MACD',
+          period: 0,
+          instanceId: instance.id,
+          macdParams: { fast: params.fast, slow: params.slow, signal: params.signal },
+          color: styles.macdLine.color,
+          lineStyles: {
+            macdLine: toChartLineStyle(styles.macdLine),
+            signalLine: toChartLineStyle(styles.signalLine),
+            histogram: toChartLineStyle(styles.histogram),
+          },
+        });
+        break;
+      }
+      case 'bbands': {
+        const params = instance.params as BbandsParams;
+        const styles = instance.styles as ArenaBbandsStyle;
+        list.push({
+          type: 'BBANDS',
+          period: params.period,
+          instanceId: instance.id,
+          bbandsStdDev: params.stdDev,
+          color: styles.basis.color,
+          lineStyles: {
+            basis: toChartLineStyle(styles.basis),
+            upper: toChartLineStyle(styles.upper),
+            lower: toChartLineStyle(styles.lower),
+          },
+        });
+        break;
+      }
+      case 'atr': {
+        const params = instance.params as PeriodParam;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'ATR',
+          period: params.period,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'volumeProfile':
+      default:
+        // Renders via FinotaurChart's separate `sessionVolumeProfile` prop,
+        // not the indicators array — see ChartTab.tsx.
+        break;
+    }
   }
 
   return list;

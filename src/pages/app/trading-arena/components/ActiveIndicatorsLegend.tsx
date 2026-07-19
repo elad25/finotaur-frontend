@@ -1,37 +1,38 @@
 import { Eye, EyeOff, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  ARENA_INDICATOR_DEFINITIONS,
-  type ArenaIndicatorEnabled,
-  type ArenaIndicatorKey,
-  type ArenaIndicatorParams,
+  getArenaIndicatorDefinition,
+  type ArenaIndicatorInstance,
 } from './indicatorsSettings';
 import type { ChartStyleSettings } from './chartStyleSettings';
 
 interface ActiveIndicatorsLegendProps {
-  enabled: ArenaIndicatorEnabled;
-  hidden: Partial<Record<ArenaIndicatorKey, boolean>>;
-  params: ArenaIndicatorParams;
+  /** One row PER INSTANCE — the same indicator type can appear more than once (e.g. EMA 9 + EMA 21). */
+  instances: ArenaIndicatorInstance[];
+  hidden: Record<string, boolean>;
   chartStyle: ChartStyleSettings;
-  onToggleHidden: (key: ArenaIndicatorKey) => void;
-  onOpenSettings: (key: ArenaIndicatorKey) => void;
-  onRemove: (key: ArenaIndicatorKey) => void;
+  onToggleHidden: (id: string) => void;
+  onOpenSettings: (id: string) => void;
+  onRemove: (id: string) => void;
 }
 
-function indicatorValueText(key: ArenaIndicatorKey, params: ArenaIndicatorParams, chartStyle: ChartStyleSettings): string {
-  switch (key) {
+function instanceValueText(instance: ArenaIndicatorInstance, chartStyle: ChartStyleSettings): string {
+  switch (instance.type) {
     case 'ema':
-      return String(params.ema.period);
     case 'sma':
-      return String(params.sma.period);
     case 'rsi':
-      return String(params.rsi.period);
-    case 'atr':
-      return String(params.atr.period);
-    case 'macd':
-      return `${params.macd.fast} ${params.macd.slow} ${params.macd.signal}`;
-    case 'bbands':
-      return `${params.bbands.period} ${params.bbands.stdDev}`;
+    case 'atr': {
+      const p = instance.params as { period: number };
+      return String(p.period);
+    }
+    case 'macd': {
+      const p = instance.params as { fast: number; slow: number; signal: number };
+      return `${p.fast} ${p.slow} ${p.signal}`;
+    }
+    case 'bbands': {
+      const p = instance.params as { period: number; stdDev: number };
+      return `${p.period} ${p.stdDev}`;
+    }
     case 'volumeProfile':
       return `${chartStyle.volumeProfile.period} ${chartStyle.volumeProfile.anchorSide}`;
     case 'vwap':
@@ -41,28 +42,26 @@ function indicatorValueText(key: ArenaIndicatorKey, params: ArenaIndicatorParams
 }
 
 export function ActiveIndicatorsLegend({
-  enabled,
+  instances,
   hidden,
-  params,
   chartStyle,
   onToggleHidden,
   onOpenSettings,
   onRemove,
 }: ActiveIndicatorsLegendProps) {
-  const activeDefinitions = ARENA_INDICATOR_DEFINITIONS.filter((definition) => enabled[definition.key]);
-
-  if (activeDefinitions.length === 0) return null;
+  if (instances.length === 0) return null;
 
   return (
     <div className="pointer-events-none absolute left-2 top-2 z-30 flex max-w-[min(520px,calc(100%-16px))] flex-col gap-1">
-      {activeDefinitions.map((definition) => {
-        const isHidden = hidden[definition.key] === true;
-        const valueText = indicatorValueText(definition.key, params, chartStyle);
+      {instances.map((instance) => {
+        const definition = getArenaIndicatorDefinition(instance.type);
+        const isHidden = hidden[instance.id] === true;
+        const valueText = instanceValueText(instance, chartStyle);
         const EyeIcon = isHidden ? EyeOff : Eye;
 
         return (
           <div
-            key={definition.key}
+            key={instance.id}
             className={cn(
               'pointer-events-auto flex h-6 w-fit max-w-full items-center gap-1 rounded px-1.5 text-[11px] font-medium text-[#D8D8D8]',
               isHidden && 'text-[#707070]',
@@ -76,7 +75,7 @@ export function ActiveIndicatorsLegend({
 
             <button
               type="button"
-              onClick={() => onToggleHidden(definition.key)}
+              onClick={() => onToggleHidden(instance.id)}
               className="flex h-5 w-5 items-center justify-center rounded text-[#C0C0C0] hover:bg-white/10 hover:text-white"
               title={isHidden ? 'Show indicator' : 'Hide indicator'}
               aria-label={isHidden ? `Show ${definition.label}` : `Hide ${definition.label}`}
@@ -85,7 +84,7 @@ export function ActiveIndicatorsLegend({
             </button>
             <button
               type="button"
-              onClick={() => onOpenSettings(definition.key)}
+              onClick={() => onOpenSettings(instance.id)}
               className="flex h-5 w-5 items-center justify-center rounded text-[#C0C0C0] hover:bg-white/10 hover:text-white"
               title="Indicator settings"
               aria-label={`${definition.label} settings`}
@@ -94,7 +93,7 @@ export function ActiveIndicatorsLegend({
             </button>
             <button
               type="button"
-              onClick={() => onRemove(definition.key)}
+              onClick={() => onRemove(instance.id)}
               className="flex h-5 w-5 items-center justify-center rounded text-[#C0C0C0] hover:bg-white/10 hover:text-white"
               title="Remove indicator"
               aria-label={`Remove ${definition.label}`}

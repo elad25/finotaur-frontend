@@ -16,12 +16,18 @@ import {
   ARENA_INDICATOR_ENABLED_DEFAULTS,
   ARENA_INDICATOR_PARAM_DEFAULTS,
   DEFAULT_ARENA_INDICATOR_PREFERENCES,
+  DEFAULT_ARENA_INDICATOR_PREFERENCES_V3,
+  DEFAULT_ARENA_INDICATOR_STYLES,
   MAX_ACTIVE_INDICATORS,
   countActiveIndicators,
+  createIndicatorInstance,
+  migrateV3ToV4,
   sanitizeArenaIndicatorEnabled,
+  sanitizeArenaIndicatorInstances,
   sanitizeArenaIndicatorParams,
   sanitizeArenaIndicatorPreferences,
   buildIndicatorsFromArenaSettings,
+  type ArenaIndicatorPreferencesV3,
 } from '../../components/indicatorsSettings';
 
 function makeMemoryLocalStorage(): Storage {
@@ -138,33 +144,117 @@ describe('countActiveIndicators + MAX_ACTIVE_INDICATORS', () => {
   });
 });
 
-describe('buildIndicatorsFromArenaSettings', () => {
+describe('buildIndicatorsFromArenaSettings (INSTANCES model)', () => {
   it('omits volumeProfile from the returned Indicator[] (it renders via sessionVolumeProfile, not the indicators array)', () => {
-    const enabled = { ...ARENA_INDICATOR_ENABLED_DEFAULTS, volumeProfile: true, sma: true };
-    const list = buildIndicatorsFromArenaSettings(enabled, ARENA_INDICATOR_PARAM_DEFAULTS, '15m');
+    const instances = [createIndicatorInstance('volumeProfile'), createIndicatorInstance('sma')];
+    const list = buildIndicatorsFromArenaSettings(instances, '15m');
     expect(list.some((i) => (i.type as string) === 'volumeProfile')).toBe(false);
-    expect(list).toEqual([{ type: 'SMA', period: ARENA_INDICATOR_PARAM_DEFAULTS.sma.period }]);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ type: 'SMA', period: ARENA_INDICATOR_PARAM_DEFAULTS.sma.period });
   });
 
   it('gates VWAP on intraday intervals', () => {
-    const enabled = { ...ARENA_INDICATOR_ENABLED_DEFAULTS, vwap: true, volumeProfile: false };
-    expect(buildIndicatorsFromArenaSettings(enabled, ARENA_INDICATOR_PARAM_DEFAULTS, '15m')).toHaveLength(1);
-    expect(buildIndicatorsFromArenaSettings(enabled, ARENA_INDICATOR_PARAM_DEFAULTS, '1d')).toHaveLength(0);
+    const instances = [createIndicatorInstance('vwap')];
+    expect(buildIndicatorsFromArenaSettings(instances, '15m')).toHaveLength(1);
+    expect(buildIndicatorsFromArenaSettings(instances, '1d')).toHaveLength(0);
   });
 
   it('threads macdParams / bbandsStdDev onto the Indicator objects', () => {
-    const enabled = { ...ARENA_INDICATOR_ENABLED_DEFAULTS, macd: true, bbands: true, volumeProfile: false };
-    const params = {
-      ...ARENA_INDICATOR_PARAM_DEFAULTS,
-      macd: { fast: 5, slow: 35, signal: 5 },
-      bbands: { period: 25, stdDev: 3 },
-    };
-    const list = buildIndicatorsFromArenaSettings(enabled, params, '15m');
+    const macdInstance = createIndicatorInstance('macd');
+    macdInstance.params = { fast: 5, slow: 35, signal: 5 };
+    const bbandsInstance = createIndicatorInstance('bbands');
+    bbandsInstance.params = { period: 25, stdDev: 3 };
+
+    const list = buildIndicatorsFromArenaSettings([macdInstance, bbandsInstance], '15m');
     const macd = list.find((i) => i.type === 'MACD');
     const bbands = list.find((i) => i.type === 'BBANDS');
     expect(macd?.macdParams).toEqual({ fast: 5, slow: 35, signal: 5 });
     expect(bbands?.period).toBe(25);
     expect(bbands?.bbandsStdDev).toBe(3);
+  });
+
+  it('supports the SAME type added multiple times, each with its own instanceId and params (e.g. EMA 9 + EMA 21)', () => {
+    const ema9 = createIndicatorInstance('ema');
+    const ema21 = createIndicatorInstance('ema');
+    ema21.params = { period: 21 };
+
+    const list = buildIndicatorsFromArenaSettings([ema9, ema21], '15m');
+    expect(list).toHaveLength(2);
+    expect(list[0].instanceId).toBe(ema9.id);
+    expect(list[1].instanceId).toBe(ema21.id);
+    expect(list[0].instanceId).not.toBe(list[1].instanceId);
+    expect(list[0].period).toBe(9); // ARENA_INDICATOR_PARAM_DEFAULTS.ema.period
+    expect(list[1].period).toBe(21);
+  });
+});
+
+describe('sanitizeArenaIndicatorInstances', () => {
+  it('drops unknown types and caps at MAX_ACTIVE_INDICATORS', () => {
+    const raw = [
+      { id: 'a', type: 'ema', params: { period: 12 }, styles: {} },
+      { id: 'b', type: 'not-a-real-type', params: {}, styles: {} },
+      { id: 'c', type: 'sma' },
+      { id: 'd', type: 'rsi' },
+      { id: 'e', type: 'atr' },
+      { id: 'f', type: 'macd' },
+      { id: 'g', type: 'bbands' }, // 6th valid entry — dropped by the MAX_ACTIVE_INDICATORS(5) cap
+    ];
+    const result = sanitizeArenaIndicatorInstances(raw, []);
+    expect(result).toHaveLength(MAX_ACTIVE_INDICATORS);
+    expect(result.some((i) => (i.type as string) === 'not-a-real-type')).toBe(false);
+    expect(result[0].params).toEqual({ period: 12 });
+  });
+
+  it('de-dupes colliding persisted ids', () => {
+    const raw = [
+      { id: 'dup', type: 'ema' },
+      { id: 'dup', type: 'sma' },
+    ];
+    const result = sanitizeArenaIndicatorInstances(raw, []);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).not.toBe(result[1].id);
+  });
+
+  it('falls back to the provided default when raw is not an array', () => {
+    const fallback = [createIndicatorInstance('vwap', 'vwap')];
+    expect(sanitizeArenaIndicatorInstances(null, fallback)).toBe(fallback);
+    expect(sanitizeArenaIndicatorInstances('garbage', fallback)).toBe(fallback);
+  });
+});
+
+describe('migrateV3ToV4', () => {
+  it('converts each enabled type into one instance carrying that type\'s v3 params/styles', () => {
+    const v3: ArenaIndicatorPreferencesV3 = {
+      ...DEFAULT_ARENA_INDICATOR_PREFERENCES_V3,
+      enabled: { ...ARENA_INDICATOR_ENABLED_DEFAULTS, ema: true, macd: true },
+      params: { ...ARENA_INDICATOR_PARAM_DEFAULTS, ema: { period: 21 } },
+    };
+    const v4 = migrateV3ToV4(v3);
+
+    // volumeProfile (default true) + ema + macd = 3 instances
+    expect(v4.instances).toHaveLength(3);
+    const ema = v4.instances.find((i) => i.type === 'ema');
+    expect(ema?.params).toEqual({ period: 21 });
+    const macd = v4.instances.find((i) => i.type === 'macd');
+    expect(macd?.params).toEqual(ARENA_INDICATOR_PARAM_DEFAULTS.macd);
+    expect(macd?.styles).toEqual(DEFAULT_ARENA_INDICATOR_STYLES.macd);
+    expect(v4.visibility).toBe(v3.visibility);
+  });
+
+  it('produces only the Volume Profile instance for an untouched v3 default record', () => {
+    const v4 = migrateV3ToV4(DEFAULT_ARENA_INDICATOR_PREFERENCES_V3);
+    expect(v4.instances).toHaveLength(1);
+    expect(v4.instances[0].type).toBe('volumeProfile');
+  });
+
+  it('every instance gets a unique id', () => {
+    const v3: ArenaIndicatorPreferencesV3 = {
+      ...DEFAULT_ARENA_INDICATOR_PREFERENCES_V3,
+      enabled: { ...ARENA_INDICATOR_ENABLED_DEFAULTS, ema: true, sma: true, rsi: true },
+    };
+    const v4 = migrateV3ToV4(v3);
+    const ids = new Set(v4.instances.map((i) => i.id));
+    expect(ids.size).toBe(v4.instances.length);
   });
 });
 

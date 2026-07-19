@@ -311,12 +311,25 @@ function applyIndicatorLineStyles(
 
 // Subpane price-scale IDs. Each unknown id creates a new overlay scale in
 // lightweight-charts. The candle pane uses the built-in `right` scale.
-const RSI_PRICE_SCALE_ID = 'rsi';
-const MACD_PRICE_SCALE_ID = 'macd';
-const ATR_PRICE_SCALE_ID = 'atr';
+// RSI/MACD/ATR get a UNIQUE id PER INSTANCE (`pane-<key>`, where `key` is
+// `indicator.instanceId ?? indicator.type`) so the Trading Arena can add the
+// same type more than once (e.g. RSI 14 + RSI 21) with independent panes;
+// every non-Arena caller has no `instanceId`, so `key === type` and the id
+// is stable/identical across renders — same effective behavior as the old
+// fixed 'rsi'/'macd'/'atr' constants.
+function resolvePaneScaleId(type: IndicatorType, key: string): string {
+  switch (type) {
+    case 'RSI':
+    case 'MACD':
+    case 'ATR':
+      return `pane-${key}`;
+    default:
+      return 'right';
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
-// Pane allocation — dynamic scaleMargins for 0-3 active subpanes
+// Pane allocation — dynamic scaleMargins for N active subpanes
 // ═══════════════════════════════════════════════════════════════
 // `lightweight-charts` v4 has no native multi-pane API (added in v5). We
 // approximate panes by giving each subpane its own overlay price scale and
@@ -326,65 +339,68 @@ const ATR_PRICE_SCALE_ID = 'atr';
 // scaleMargins semantics:
 //   { top: a, bottom: b }  →  scale occupies y ∈ [a, 1 − b]  (a + b ≤ 1)
 //
-// Subpane order top→bottom when more than one is active: RSI, MACD, ATR.
-// Order is fixed (not user-configurable in Phase 2.5) so the layout is
-// predictable across reload.
+// Subpane order top→bottom follows `indicators` array order (the Trading
+// Arena's INSTANCES model has no fixed RSI/MACD/ATR ordering once multiple
+// instances of paned types can coexist) — still deterministic/predictable
+// across reload since instance order is stable persisted state.
 type ScaleMargins = { top: number; bottom: number };
-interface PaneMargins {
-  candle: ScaleMargins;
-  rsi?: ScaleMargins;
-  macd?: ScaleMargins;
-  atr?: ScaleMargins;
-}
 
-function computePaneMargins(subpanes: {
-  rsi: boolean;
-  macd: boolean;
-  atr: boolean;
-}): PaneMargins {
-  const count =
-    (subpanes.rsi ? 1 : 0) + (subpanes.macd ? 1 : 0) + (subpanes.atr ? 1 : 0);
+// Hand-tuned layouts for 1-3 subpanes — UNCHANGED from the pre-instances
+// fixed-type version (byte-for-byte same visual result for the common case
+// of ≤1 RSI + ≤1 MACD + ≤1 ATR active at once).
+const FIXED_PANE_LAYOUTS: Record<1 | 2 | 3, { candle: ScaleMargins; slots: ScaleMargins[] }> = {
+  1: {
+    candle: { top: 0.05, bottom: 0.3 },
+    slots: [{ top: 0.75, bottom: 0.05 }],
+  },
+  2: {
+    candle: { top: 0.05, bottom: 0.5 },
+    slots: [
+      { top: 0.55, bottom: 0.27 }, // height ≈ 18%
+      { top: 0.78, bottom: 0.04 }, // height ≈ 18%
+    ],
+  },
+  3: {
+    candle: { top: 0.05, bottom: 0.55 },
+    slots: [
+      { top: 0.45, bottom: 0.37 }, // y∈[0.45, 0.63]
+      { top: 0.63, bottom: 0.19 }, // y∈[0.63, 0.81]
+      { top: 0.81, bottom: 0.02 }, // y∈[0.81, 0.98]
+    ],
+  },
+};
+
+/**
+ * `paneKeys` — ordered, unique keys (one per active RSI/MACD/ATR instance).
+ * Returns candle margins + a per-key margins map. 4-5 keys are only
+ * reachable via the Arena's multi-instance model (MAX_ACTIVE_INDICATORS=5)
+ * — shrinks slot height uniformly so all panes fit contiguously below the
+ * candle (no hand-tuned layout existed pre-instances since the old model
+ * capped at 3 possible subpanes, one per type).
+ */
+function computeDynamicPaneMargins(paneKeys: string[]): { candle: ScaleMargins; panes: Map<string, ScaleMargins> } {
+  const count = paneKeys.length;
+  const panes = new Map<string, ScaleMargins>();
 
   if (count === 0) {
-    return { candle: { top: 0.1, bottom: 0.1 } };
+    return { candle: { top: 0.1, bottom: 0.1 }, panes };
   }
-  if (count === 1) {
-    // Phase 2 behavior preserved: candle compresses, single subpane at bottom
-    const candle: ScaleMargins = { top: 0.05, bottom: 0.3 };
-    const sub: ScaleMargins = { top: 0.75, bottom: 0.05 };
-    return {
-      candle,
-      rsi: subpanes.rsi ? sub : undefined,
-      macd: subpanes.macd ? sub : undefined,
-      atr: subpanes.atr ? sub : undefined,
-    };
+  const fixed = count <= 3 ? FIXED_PANE_LAYOUTS[count as 1 | 2 | 3] : undefined;
+  if (fixed) {
+    paneKeys.forEach((key, i) => panes.set(key, fixed.slots[i]));
+    return { candle: fixed.candle, panes };
   }
-  if (count === 2) {
-    const candle: ScaleMargins = { top: 0.05, bottom: 0.5 };
-    const slotTop: ScaleMargins = { top: 0.55, bottom: 0.27 }; // height ≈ 18%
-    const slotBot: ScaleMargins = { top: 0.78, bottom: 0.04 }; // height ≈ 18%
-    return assignSlots(subpanes, candle, [slotTop, slotBot]);
-  }
-  // count === 3
-  const candle: ScaleMargins = { top: 0.05, bottom: 0.55 };
-  const slot1: ScaleMargins = { top: 0.45, bottom: 0.37 }; // y∈[0.45, 0.63]
-  const slot2: ScaleMargins = { top: 0.63, bottom: 0.19 }; // y∈[0.63, 0.81]
-  const slot3: ScaleMargins = { top: 0.81, bottom: 0.02 }; // y∈[0.81, 0.98]
-  return assignSlots(subpanes, candle, [slot1, slot2, slot3]);
-}
 
-// Helper: drop subpanes into available slots in RSI→MACD→ATR order.
-function assignSlots(
-  subpanes: { rsi: boolean; macd: boolean; atr: boolean },
-  candle: ScaleMargins,
-  slots: ScaleMargins[],
-): PaneMargins {
-  const out: PaneMargins = { candle };
-  let idx = 0;
-  if (subpanes.rsi) out.rsi = slots[idx++];
-  if (subpanes.macd) out.macd = slots[idx++];
-  if (subpanes.atr) out.atr = slots[idx++];
-  return out;
+  const candle: ScaleMargins = { top: 0.05, bottom: 0.6 };
+  const regionStart = 1 - candle.bottom; // 0.40
+  const regionEnd = 0.98;
+  const slotHeight = (regionEnd - regionStart) / count;
+  paneKeys.forEach((key, i) => {
+    const top = regionStart + i * slotHeight;
+    const bottom = 1 - (top + slotHeight);
+    panes.set(key, { top, bottom });
+  });
+  return { candle, panes };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -402,13 +418,15 @@ function createSeriesForType(
   type: IndicatorType,
   primaryColor: string,
   themeTokens: typeof FINOTAUR_DARK_THEME | typeof FINOTAUR_LIGHT_THEME,
+  /** Resolved via `resolvePaneScaleId` — unique per RSI/MACD/ATR instance, 'right' for every overlay type. */
+  paneScaleId: string,
 ): ISeriesApi<'Line' | 'Histogram'>[] {
   switch (type) {
     case 'RSI': {
       const line = chart.addLineSeries({
         color: primaryColor,
         lineWidth: 2,
-        priceScaleId: RSI_PRICE_SCALE_ID,
+        priceScaleId: paneScaleId,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: true,
@@ -436,7 +454,7 @@ function createSeriesForType(
       const macdLine = chart.addLineSeries({
         color: primaryColor,
         lineWidth: 2,
-        priceScaleId: MACD_PRICE_SCALE_ID,
+        priceScaleId: paneScaleId,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: true,
@@ -444,13 +462,13 @@ function createSeriesForType(
       const signalLine = chart.addLineSeries({
         color: MACD_SIGNAL_COLOR,
         lineWidth: 2,
-        priceScaleId: MACD_PRICE_SCALE_ID,
+        priceScaleId: paneScaleId,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: true,
       });
       const histogram = chart.addHistogramSeries({
-        priceScaleId: MACD_PRICE_SCALE_ID,
+        priceScaleId: paneScaleId,
         priceLineVisible: false,
         lastValueVisible: false,
         base: 0,
@@ -499,7 +517,7 @@ function createSeriesForType(
       const line = chart.addLineSeries({
         color: primaryColor,
         lineWidth: 2,
-        priceScaleId: ATR_PRICE_SCALE_ID,
+        priceScaleId: paneScaleId,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: true,
@@ -1124,11 +1142,16 @@ export function FinotaurChart({
   const backfillInFlightRef = useRef(false);
   const backfillDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
-   * Active series per indicator type — survives bar refetch.
+   * Active series per indicator INSTANCE — survives bar refetch. Keyed by
+   * `indicator.instanceId ?? indicator.type` (see types.ts's `Indicator`
+   * doc comment) so the Trading Arena can add the SAME type multiple times
+   * (e.g. EMA 9 + EMA 21) as independent series; every non-Arena caller
+   * never sets `instanceId`, so the key degrades to the type string and
+   * behavior is identical to the old one-series-per-type map.
    * Multi-series indicators (MACD = line+signal+histogram, BBANDS = middle+upper+lower)
    * keep their series in a fixed order; single-series indicators store a length-1 array.
    */
-  const indicatorSeriesRef = useRef<Map<IndicatorType, ISeriesApi<'Line' | 'Histogram'>[]>>(
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line' | 'Histogram'>[]>>(
     new Map(),
   );
   /** Which subpane price scales have been styled (borderColor etc.) at least once. */
@@ -1943,9 +1966,10 @@ export function FinotaurChart({
 
   // ─── Apply indicators ───────────────────────────────────────
   // Lifecycle:
-  //   - Add series for newly-requested types (multi-series indicators get
-  //     several series stored under the same map key, in fixed order).
-  //   - Remove every series for types no longer requested.
+  //   - Add series for newly-requested INSTANCES (keyed by
+  //     `instanceId ?? type` — multi-series indicators get several series
+  //     stored under the same map key, in fixed order).
+  //   - Remove every series for instances no longer requested.
   //   - Recompute + setData on every effect run (cheap; runs on bars in memory).
   //   - Re-apply scaleMargins for ALL active scales each run, because pane
   //     allocation depends on how many subpanes are simultaneously active.
@@ -1954,19 +1978,19 @@ export function FinotaurChart({
     const candleSeries = seriesRef.current;
     if (!chart || !candleSeries) return;
 
-    const desired = new Map<IndicatorType, Indicator>();
+    const desired = new Map<string, Indicator>();
     for (const ind of indicators ?? []) {
-      // Last-write-wins if caller passes the same type twice — harmless,
-      // protects against accidental duplicates.
-      desired.set(ind.type, ind);
+      // Last-write-wins on key collision (shouldn't happen — keys are
+      // unique per instance/type) — harmless, protects against accidents.
+      desired.set(ind.instanceId ?? ind.type, ind);
     }
 
     const current = indicatorSeriesRef.current;
     const bars = barsRef.current;
 
     // ─── Remove series no longer requested ──────────────────
-    for (const [type, seriesList] of Array.from(current.entries())) {
-      if (!desired.has(type)) {
+    for (const [key, seriesList] of Array.from(current.entries())) {
+      if (!desired.has(key)) {
         for (const s of seriesList) {
           try {
             chart.removeSeries(s);
@@ -1974,19 +1998,21 @@ export function FinotaurChart({
             // Series may already be gone if chart was torn down mid-flight.
           }
         }
-        current.delete(type);
+        current.delete(key);
       }
     }
 
     // ─── Add / update series for each desired indicator ─────
-    for (const [type, ind] of desired.entries()) {
+    for (const [key, ind] of desired.entries()) {
+      const type = ind.type;
       const color = ind.color ?? INDICATOR_COLORS[type];
 
       // ── Create on first sight, or fetch existing ──────────
-      let seriesList = current.get(type);
+      let seriesList = current.get(key);
       if (!seriesList) {
-        seriesList = createSeriesForType(chart, type, color, pickTheme(theme));
-        current.set(type, seriesList);
+        const paneScaleId = resolvePaneScaleId(type, key);
+        seriesList = createSeriesForType(chart, type, color, pickTheme(theme), paneScaleId);
+        current.set(key, seriesList);
       }
       // Re-applies color/thickness/line-style/visibility from `ind.lineStyles`
       // every run (idempotent right after creation too) — this is what makes
@@ -2067,39 +2093,29 @@ export function FinotaurChart({
       }
     }
 
+    // ─── Paned instances (RSI/MACD/ATR), in `indicators` array order ───
+    const paneKeys: string[] = [];
+    for (const [key, ind] of desired.entries()) {
+      if (ind.type === 'RSI' || ind.type === 'MACD' || ind.type === 'ATR') paneKeys.push(key);
+    }
+
     // ─── Subpane scale styling (one-time per scale) ─────────
-    const styleScaleOnce = (scaleId: string) => {
-      if (scalesConfiguredRef.current.has(scaleId)) return;
+    for (const key of paneKeys) {
+      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key);
+      if (scalesConfiguredRef.current.has(scaleId)) continue;
       chart.priceScale(scaleId).applyOptions({
         borderColor: pickTheme(theme).border,
       });
       scalesConfiguredRef.current.add(scaleId);
-    };
-    if (desired.has('RSI')) styleScaleOnce(RSI_PRICE_SCALE_ID);
-    if (desired.has('MACD')) styleScaleOnce(MACD_PRICE_SCALE_ID);
-    if (desired.has('ATR')) styleScaleOnce(ATR_PRICE_SCALE_ID);
+    }
 
     // ─── Pane allocation — scaleMargins for active scales ───
-    const margins = computePaneMargins({
-      rsi: desired.has('RSI'),
-      macd: desired.has('MACD'),
-      atr: desired.has('ATR'),
-    });
-    candleSeries.priceScale().applyOptions({ scaleMargins: margins.candle });
-    if (margins.rsi) {
-      chart.priceScale(RSI_PRICE_SCALE_ID).applyOptions({
-        scaleMargins: margins.rsi,
-      });
-    }
-    if (margins.macd) {
-      chart.priceScale(MACD_PRICE_SCALE_ID).applyOptions({
-        scaleMargins: margins.macd,
-      });
-    }
-    if (margins.atr) {
-      chart.priceScale(ATR_PRICE_SCALE_ID).applyOptions({
-        scaleMargins: margins.atr,
-      });
+    const { candle, panes } = computeDynamicPaneMargins(paneKeys);
+    candleSeries.priceScale().applyOptions({ scaleMargins: candle });
+    for (const key of paneKeys) {
+      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key);
+      const margins = panes.get(key);
+      if (margins) chart.priceScale(scaleId).applyOptions({ scaleMargins: margins });
     }
   }, [indicators, barCount, theme]); // barCount → recompute after fresh data load; theme → re-style scales on switch
 

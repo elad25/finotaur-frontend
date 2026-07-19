@@ -15,8 +15,17 @@
  * own read/sanitize/migrate functions are UNCHANGED (still exercised directly
  * by useArenaIndicatorPreferences.test.ts) — v3 reads through them via
  * `readArenaIndicatorPreferencesV3` and layers styles/visibility defaults on
- * top when no v3 record exists yet. The hook itself now holds v3 state; v2 is
- * kept only as the read-only migration source + its own pure-function tests.
+ * top when no v3 record exists yet.
+ *
+ * v4 (INSTANCES model — same indicator addable multiple times, e.g.
+ * EMA 9 + EMA 21): replaces v3's one-per-type `{ enabled, params, styles }`
+ * with `{ instances }` (see indicatorsSettings.ts's `ArenaIndicatorInstance`/
+ * `ArenaIndicatorPreferencesV4`). v3's own read/sanitize/migrate functions
+ * are UNCHANGED (still exercised directly by
+ * useArenaIndicatorPreferences.test.ts) — v4 reads through them via
+ * `readArenaIndicatorPreferencesV3` and migrates via `migrateV3ToV4` when no
+ * v4 record exists yet. The hook itself now holds v4 state; v3/v2/v1 are
+ * kept only as the read-only migration chain + their own pure-function tests.
  *
  * Deliberately a SEPARATE hook from `useIndicatorPreferences`
  * (src/components/charting/useIndicatorPreferences.ts), which backs
@@ -39,17 +48,22 @@ import {
   ARENA_INDICATOR_PARAM_DEFAULTS,
   DEFAULT_ARENA_INDICATOR_PREFERENCES,
   DEFAULT_ARENA_INDICATOR_PREFERENCES_V3,
-  DEFAULT_ARENA_INDICATOR_STYLES,
+  DEFAULT_ARENA_INDICATOR_PREFERENCES_V4,
+  MAX_ACTIVE_INDICATORS,
+  createIndicatorInstance,
+  defaultParamsForType,
+  defaultStylesForType,
+  migrateV3ToV4,
   sanitizeArenaIndicatorPreferences,
   sanitizeArenaIndicatorPreferencesV3,
+  sanitizeArenaIndicatorPreferencesV4,
   type ArenaIndicatorEnabled,
+  type ArenaIndicatorInstance,
   type ArenaIndicatorKey,
   type ArenaIndicatorLineStyle,
-  type ArenaIndicatorParams,
   type ArenaIndicatorPreferences,
   type ArenaIndicatorPreferencesV3,
-  type ArenaIndicatorStylePatch,
-  type ArenaIndicatorStyles,
+  type ArenaIndicatorPreferencesV4,
   type ArenaIndicatorVisibility,
 } from '../components/indicatorsSettings';
 
@@ -57,8 +71,10 @@ import {
 export const ARENA_INDICATORS_STORAGE_KEY_V1 = 'finotaur:arena:indicators:v1';
 /** `{ enabled, params }` key (pre-per-indicator-settings-dialog). Read-only — migrated into v3, never written to again. */
 export const ARENA_INDICATORS_STORAGE_KEY_V2 = 'finotaur:arena:indicators:v2';
-/** Current `{ enabled, params, styles, visibility }` key — see indicatorsSettings.ts's ArenaIndicatorPreferencesV3. */
+/** `{ enabled, params, styles, visibility }` key (pre-instances-model). Read-only — migrated into v4, never written to again. */
 export const ARENA_INDICATORS_STORAGE_KEY_V3 = 'finotaur:arena:indicators:v3';
+/** Current `{ instances, visibility }` key — see indicatorsSettings.ts's ArenaIndicatorPreferencesV4. */
+export const ARENA_INDICATORS_STORAGE_KEY_V4 = 'finotaur:arena:indicators:v4';
 
 function readRawKey(key: string): unknown {
   if (typeof window === 'undefined') return null;
@@ -148,32 +164,54 @@ export function readArenaIndicatorPreferencesV3(): ArenaIndicatorPreferencesV3 {
   };
 }
 
-function writeArenaIndicatorPreferencesV3(prefs: ArenaIndicatorPreferencesV3): void {
-  writeRawKey(ARENA_INDICATORS_STORAGE_KEY_V3, prefs);
+/**
+ * Reads + sanitizes the current v4 `{ instances, visibility }` shape. v4
+ * wins if present. Otherwise falls back through the existing v3/v2/v1 chain
+ * (`readArenaIndicatorPreferencesV3`, unchanged — still the single source of
+ * truth for the enabled/params/styles migration) via `migrateV3ToV4`. Pure —
+ * not persisted until the next write, same lazy-migration pattern as the
+ * v2→v3 reader.
+ */
+export function readArenaIndicatorPreferencesV4(): ArenaIndicatorPreferencesV4 {
+  const v4Raw = readRawKey(ARENA_INDICATORS_STORAGE_KEY_V4);
+  if (v4Raw) return sanitizeArenaIndicatorPreferencesV4(v4Raw);
+
+  const v3Chain = readArenaIndicatorPreferencesV3(); // handles v3-wins / v2/v1-migrate / defaults internally
+  return migrateV3ToV4(v3Chain);
+}
+
+function writeArenaIndicatorPreferencesV4(prefs: ArenaIndicatorPreferencesV4): void {
+  writeRawKey(ARENA_INDICATORS_STORAGE_KEY_V4, prefs);
 }
 
 export interface UseArenaIndicatorPreferencesResult {
-  enabled: ArenaIndicatorEnabled;
-  params: ArenaIndicatorParams;
-  styles: ArenaIndicatorStyles;
+  instances: ArenaIndicatorInstance[];
   visibility: ArenaIndicatorVisibility;
-  /** Shallow-patches one or more on/off booleans. Max-5 enforcement lives in the dialog, not here. */
-  updateEnabled: (patch: Partial<ArenaIndicatorEnabled>) => void;
-  /** Patches ONE indicator's param object, e.g. `updateParams('ema', { period: 12 })`. */
-  updateParams: <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => void;
-  /** Deep-merges ONE indicator's line-style entries, e.g. `updateStyles('macd', { histogram: { color: '#fff' } })`. */
-  updateStyles: <K extends keyof ArenaIndicatorStyles>(key: K, patch: ArenaIndicatorStylePatch<K>) => void;
+  /**
+   * Adds a fresh instance of `type` (type defaults for params/style).
+   * Returns the new instance's id, or `null` if refused: at the 5-active
+   * cap, or `type === 'volumeProfile'` and one already exists (Volume
+   * Profile stays single-instance — its detail params live in chartStyle,
+   * not per-instance, so a 2nd one would be indistinguishable from the 1st).
+   */
+  addInstance: (type: ArenaIndicatorKey) => string | null;
+  /** Removes one instance by id. No-op if the id doesn't exist. */
+  removeInstance: (id: string) => void;
+  /** Shallow-patches ONE instance's params, e.g. `updateInstanceParams(id, { period: 12 })`. */
+  updateInstanceParams: (id: string, patch: Record<string, unknown>) => void;
+  /** Deep-merges ONE instance's line-style entries, e.g. `updateInstanceStyles(id, { histogram: { color: '#fff' } })`. */
+  updateInstanceStyles: (id: string, patch: Record<string, unknown>) => void;
   /** Shallow-patches the GLOBAL visibility config (applies to every indicator), e.g. `updateVisibility({ seconds: { ...visibility.seconds, enabled: false } })`. */
   updateVisibility: (patch: Partial<ArenaIndicatorVisibility>) => void;
-  /** Resets ONE indicator's params + style to defaults. Visibility (global) is untouched. No-op params reset for vwap/volumeProfile (no params); no-op style reset for volumeProfile (no style). */
-  resetIndicator: (key: ArenaIndicatorKey) => void;
-  /** Restores every default (enabled/params/styles/visibility) and persists it (the dialog's "Reset to defaults" row). */
+  /** Resets ONE instance's params + style to its type's defaults. Visibility (global) is untouched. */
+  resetInstance: (id: string) => void;
+  /** Restores every default (instances/visibility) and persists it (the dialog's "Reset to defaults" row). */
   reset: () => void;
 }
 
 export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResult {
   // Lazy initializer — only touches localStorage on first render.
-  const [prefs, setPrefs] = useState<ArenaIndicatorPreferencesV3>(readArenaIndicatorPreferencesV3);
+  const [prefs, setPrefs] = useState<ArenaIndicatorPreferencesV4>(readArenaIndicatorPreferencesV4);
 
   // Track the most recent prefs so updaters don't depend on a stale closure.
   const prefsRef = useRef(prefs);
@@ -181,100 +219,108 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
     prefsRef.current = prefs;
   }, [prefs]);
 
-  const updateEnabled = useCallback((patch: Partial<ArenaIndicatorEnabled>) => {
-    const next: ArenaIndicatorPreferencesV3 = {
-      ...prefsRef.current,
-      enabled: { ...prefsRef.current.enabled, ...patch },
-    };
+  const addInstance = useCallback((type: ArenaIndicatorKey): string | null => {
+    const current = prefsRef.current;
+    if (type === 'volumeProfile' && current.instances.some((instance) => instance.type === 'volumeProfile')) {
+      return null;
+    }
+    if (current.instances.length >= MAX_ACTIVE_INDICATORS) return null;
+
+    const instance = createIndicatorInstance(type);
+    const next: ArenaIndicatorPreferencesV4 = { ...current, instances: [...current.instances, instance] };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV3(next);
+    writeArenaIndicatorPreferencesV4(next);
+    return instance.id;
   }, []);
 
-  const updateParams = useCallback(
-    <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => {
-      const next: ArenaIndicatorPreferencesV3 = {
-        ...prefsRef.current,
-        params: {
-          ...prefsRef.current.params,
-          [key]: { ...prefsRef.current.params[key], ...patch },
-        },
-      };
-      setPrefs(next);
-      writeArenaIndicatorPreferencesV3(next);
-    },
-    [],
-  );
+  const removeInstance = useCallback((id: string) => {
+    const current = prefsRef.current;
+    const next: ArenaIndicatorPreferencesV4 = {
+      ...current,
+      instances: current.instances.filter((instance) => instance.id !== id),
+    };
+    setPrefs(next);
+    writeArenaIndicatorPreferencesV4(next);
+  }, []);
 
-  const updateStyles = useCallback(
-    <K extends keyof ArenaIndicatorStyles>(key: K, patch: ArenaIndicatorStylePatch<K>) => {
-      const currentStyles = prefsRef.current.styles;
-      const currentEntry = currentStyles[key];
-      // `currentEntry`/`patch` are both maps of line-slot-name -> ArenaIndicatorLineStyle
-      // for every ArenaIndicatorStyles[K] shape (ArenaSingleLineStyle /
-      // ArenaMacdStyle / ArenaBbandsStyle) — the generic K makes this
-      // impossible for TS to verify statically, hence the narrow casts here.
-      const currentEntryRecord = currentEntry as unknown as Record<string, ArenaIndicatorLineStyle>;
-      const patchRecord = patch as unknown as Record<string, Partial<ArenaIndicatorLineStyle> | undefined>;
-      const mergedEntry: Record<string, ArenaIndicatorLineStyle> = { ...currentEntryRecord };
-      for (const lineKey of Object.keys(patchRecord)) {
-        const linePatch = patchRecord[lineKey];
-        if (!linePatch) continue;
-        mergedEntry[lineKey] = { ...currentEntryRecord[lineKey], ...linePatch };
-      }
-      const next: ArenaIndicatorPreferencesV3 = {
-        ...prefsRef.current,
-        styles: { ...currentStyles, [key]: mergedEntry } as ArenaIndicatorStyles,
-      };
-      setPrefs(next);
-      writeArenaIndicatorPreferencesV3(next);
-    },
-    [],
-  );
+  const updateInstanceParams = useCallback((id: string, patch: Record<string, unknown>) => {
+    const current = prefsRef.current;
+    const next: ArenaIndicatorPreferencesV4 = {
+      ...current,
+      instances: current.instances.map((instance) =>
+        instance.id === id
+          ? { ...instance, params: { ...(instance.params as Record<string, unknown>), ...patch } as typeof instance.params }
+          : instance,
+      ),
+    };
+    setPrefs(next);
+    writeArenaIndicatorPreferencesV4(next);
+  }, []);
+
+  const updateInstanceStyles = useCallback((id: string, patch: Record<string, unknown>) => {
+    const current = prefsRef.current;
+    const next: ArenaIndicatorPreferencesV4 = {
+      ...current,
+      instances: current.instances.map((instance) => {
+        if (instance.id !== id) return instance;
+        // `instance.styles`/`patch` are both maps of line-slot-name ->
+        // ArenaIndicatorLineStyle for every per-type styles shape
+        // (ArenaSingleLineStyle / ArenaMacdStyle / ArenaBbandsStyle /
+        // volumeProfile's empty object) — the instance's own `type` makes
+        // this impossible for TS to verify statically here, hence the
+        // narrow casts (same pattern the pre-instances `updateStyles` used).
+        const currentStylesRecord = instance.styles as unknown as Record<string, ArenaIndicatorLineStyle>;
+        const patchRecord = patch as Record<string, Partial<ArenaIndicatorLineStyle> | undefined>;
+        const mergedStyles: Record<string, ArenaIndicatorLineStyle> = { ...currentStylesRecord };
+        for (const lineKey of Object.keys(patchRecord)) {
+          const linePatch = patchRecord[lineKey];
+          if (!linePatch) continue;
+          mergedStyles[lineKey] = { ...currentStylesRecord[lineKey], ...linePatch };
+        }
+        return { ...instance, styles: mergedStyles as unknown as typeof instance.styles };
+      }),
+    };
+    setPrefs(next);
+    writeArenaIndicatorPreferencesV4(next);
+  }, []);
 
   const updateVisibility = useCallback((patch: Partial<ArenaIndicatorVisibility>) => {
-    const next: ArenaIndicatorPreferencesV3 = {
+    const next: ArenaIndicatorPreferencesV4 = {
       ...prefsRef.current,
       visibility: { ...prefsRef.current.visibility, ...patch },
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV3(next);
+    writeArenaIndicatorPreferencesV4(next);
   }, []);
 
-  const resetIndicator = useCallback((key: ArenaIndicatorKey) => {
+  const resetInstance = useCallback((id: string) => {
     const current = prefsRef.current;
-    // ArenaIndicatorKey (8 keys) is a superset of both keyof ArenaIndicatorParams
-    // (6 keys — no vwap/volumeProfile) and keyof ArenaIndicatorStyles (7 keys —
-    // no volumeProfile); these casts are narrowed safely by the runtime `in`
-    // checks below before either key is used to index.
-    const paramKey = key as keyof ArenaIndicatorParams;
-    const hasParams = paramKey in ARENA_INDICATOR_PARAM_DEFAULTS;
-    const styleKey = key as keyof ArenaIndicatorStyles;
-    const hasStyle = styleKey in DEFAULT_ARENA_INDICATOR_STYLES;
-
-    const next: ArenaIndicatorPreferencesV3 = {
+    const next: ArenaIndicatorPreferencesV4 = {
       ...current,
-      params: hasParams ? { ...current.params, [paramKey]: ARENA_INDICATOR_PARAM_DEFAULTS[paramKey] } : current.params,
-      styles: hasStyle ? { ...current.styles, [styleKey]: DEFAULT_ARENA_INDICATOR_STYLES[styleKey] } : current.styles,
+      instances: current.instances.map((instance) =>
+        instance.id === id
+          ? { ...instance, params: defaultParamsForType(instance.type), styles: defaultStylesForType(instance.type) }
+          : instance,
+      ),
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV3(next);
+    writeArenaIndicatorPreferencesV4(next);
   }, []);
 
   const reset = useCallback(() => {
-    setPrefs(DEFAULT_ARENA_INDICATOR_PREFERENCES_V3);
-    writeArenaIndicatorPreferencesV3(DEFAULT_ARENA_INDICATOR_PREFERENCES_V3);
+    setPrefs(DEFAULT_ARENA_INDICATOR_PREFERENCES_V4);
+    writeArenaIndicatorPreferencesV4(DEFAULT_ARENA_INDICATOR_PREFERENCES_V4);
   }, []);
 
   return {
-    enabled: prefs.enabled,
-    params: prefs.params,
-    styles: prefs.styles,
+    instances: prefs.instances,
     visibility: prefs.visibility,
-    updateEnabled,
-    updateParams,
-    updateStyles,
+    addInstance,
+    removeInstance,
+    updateInstanceParams,
+    updateInstanceStyles,
     updateVisibility,
-    resetIndicator,
+    resetInstance,
     reset,
   };
 }

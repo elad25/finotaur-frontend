@@ -51,7 +51,7 @@ import { TimeframeMenu } from './TimeframeMenu';
 import { ChartSettingsDialog } from './ChartSettingsDialog';
 import { IndicatorsDialog } from './IndicatorsDialog';
 import { isIntradayInterval } from '@/components/charting/indicators';
-import { countActiveIndicators, type ArenaIndicatorEnabled, type ArenaIndicatorKey, type ArenaIndicatorParams } from './indicatorsSettings';
+import type { ArenaIndicatorInstance, ArenaIndicatorKey } from './indicatorsSettings';
 import type { ChartStyleSettings } from './chartStyleSettings';
 
 interface ArenaToolbarProps {
@@ -60,17 +60,12 @@ interface ArenaToolbarProps {
   /** Which timeframe sections are usable for the active symbol/asset class. */
   intervalCapability: IntervalCapability;
   activeTab: TabId;
-  /** Current indicator on/off state — single source of truth lives in TradingArena.tsx. */
-  indicatorsEnabled: ArenaIndicatorEnabled;
-  /** Current indicator editable params — single source of truth lives in TradingArena.tsx. */
-  indicatorsParams: ArenaIndicatorParams;
-  onIndicatorsEnabledChange: (patch: Partial<ArenaIndicatorEnabled>) => void;
-  onIndicatorsParamsChange: <K extends keyof ArenaIndicatorParams>(key: K, patch: Partial<ArenaIndicatorParams[K]>) => void;
+  /** Currently added instances — single source of truth lives in TradingArena.tsx. */
+  indicatorInstances: ArenaIndicatorInstance[];
+  onAddIndicatorInstance: (type: ArenaIndicatorKey) => string | null;
   onIndicatorsReset: () => void;
   indicatorsDialogOpen: boolean;
   onIndicatorsDialogOpenChange: (open: boolean) => void;
-  indicatorSettingsKey: ArenaIndicatorKey | null;
-  onIndicatorSettingsKeyChange: (key: ArenaIndicatorKey | null) => void;
   /** Current chart style settings (Chart ▾ menu) — single source of truth lives in TradingArena.tsx. */
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
@@ -86,15 +81,11 @@ export function ArenaToolbar({
   onIntervalChange,
   intervalCapability,
   activeTab,
-  indicatorsEnabled,
-  indicatorsParams,
-  onIndicatorsEnabledChange,
-  onIndicatorsParamsChange,
+  indicatorInstances,
+  onAddIndicatorInstance,
   onIndicatorsReset,
   indicatorsDialogOpen,
   onIndicatorsDialogOpenChange,
-  indicatorSettingsKey,
-  onIndicatorSettingsKeyChange,
   chartStyle,
   onChartStyleChange,
   onChartStyleReset,
@@ -112,7 +103,7 @@ export function ArenaToolbar({
   // VWAP is only meaningful on intraday intervals — same gate IndicatorToolbar
   // applies for Backtest/Journal.
   const intraday = isIntradayInterval(interval);
-  const activeIndicatorCount = countActiveIndicators(indicatorsEnabled);
+  const activeIndicatorCount = indicatorInstances.length;
   const indicatorsTriggerValue = activeIndicatorCount > 0
     ? `Indicators (${activeIndicatorCount})`
     : 'Indicators';
@@ -171,13 +162,10 @@ export function ArenaToolbar({
             aria-hidden="true"
           />
 
-          {/* Indicators (N) — opens the Indicators POPUP (full settings dialog). */}
+          {/* Indicators (N) — opens the Indicators POPUP (catalog: search + "+" add). */}
           <button
             type="button"
-            onClick={() => {
-              onIndicatorSettingsKeyChange(null);
-              onIndicatorsDialogOpenChange(true);
-            }}
+            onClick={() => onIndicatorsDialogOpenChange(true)}
             aria-haspopup="dialog"
             aria-expanded={indicatorsDialogOpen}
             className={cn(
@@ -194,16 +182,10 @@ export function ArenaToolbar({
           <IndicatorsDialog
             open={indicatorsDialogOpen}
             onOpenChange={onIndicatorsDialogOpenChange}
-            enabled={indicatorsEnabled}
-            params={indicatorsParams}
-            onUpdateEnabled={onIndicatorsEnabledChange}
-            onUpdateParams={onIndicatorsParamsChange}
+            instances={indicatorInstances}
+            onAddInstance={onAddIndicatorInstance}
             onReset={onIndicatorsReset}
-            settingsKey={indicatorSettingsKey}
-            onSettingsKeyChange={onIndicatorSettingsKeyChange}
             intraday={intraday}
-            chartStyle={chartStyle}
-            onChartStyleChange={onChartStyleChange}
           />
         </>
       )}
