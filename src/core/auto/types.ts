@@ -151,6 +151,19 @@ export interface SessionFilter {
   windows: Array<{ start: string; end: string }>;
   /** Allowed weekdays (0=Sun..6=Sat). Omit/empty = all days. */
   days?: number[];
+  /**
+   * v2-only (`StrategyEngine.ts`'s phase state machine): when `true`, phase
+   * evaluation/advancement is ALSO restricted to bars inside `windows` (in
+   * addition to the pre-existing FILL gating via `MarketContext.
+   * sessionAllowed`, which this flag never changes). Default `false`/absent
+   * preserves the legacy behavior — a setup may arm/advance at any hour,
+   * and only the eventual FILL is window-gated — which silently produces 0
+   * trades for "only trade the 10-11am window" style strategies whose phase
+   * chain (arm -> confirm -> fill leash) takes longer to complete than the
+   * window is wide. v1 (`AutoBacktestEngine.ts`) has no phase-advancement
+   * concept and never reads this field.
+   */
+  gatePhases?: boolean;
 }
 
 export interface BiasFilter {

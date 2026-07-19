@@ -647,8 +647,19 @@ async function runStrategyV2Single(
     }
 
     // (c) Advance the phase state machine — paused while a position is open
-    // or a signal is pending (see module doc).
-    if (!open && !pending) {
+    // or a signal is pending (see module doc). ALSO paused on this bar when
+    // `filters.session.gatePhases` is set and the bar falls outside the
+    // configured session windows (`mctx.sessionAllowed`, the SAME array
+    // step (b) uses to gate fills) — without this, a phase chain can arm and
+    // complete entirely OUTSIDE the intended window and then expire before
+    // its `entry.validForBars` fill leash ever overlaps the window, silently
+    // producing 0 trades for window-scoped strategies (e.g. "only 10-11am
+    // NY"). `within.bars` budgets already bound how long a partially-
+    // completed chain may straddle a gated-out stretch — this flag does not
+    // reset in-progress attempts on window close, it only withholds new
+    // `when`/`invalidateIf` evaluation while gated.
+    const phasesGated = def.filters.session?.enabled && def.filters.session.gatePhases && !mctx.sessionAllowed[i];
+    if (!open && !pending && !phasesGated) {
       advancePhase(i);
     }
 

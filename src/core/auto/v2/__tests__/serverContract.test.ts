@@ -162,7 +162,35 @@ describe('server contract — engine TF/indicator/smt detection', () => {
 });
 
 // ----------------------------------------------------------------------------
-// 5. Negative control — a plausible OLD (pre-realignment) server shape is
+// 5. `filters.session.gatePhases` (gatePhases fix) — part of the accepted
+// FE/server contract. This exemplar doesn't pin a silverBullet shape (that
+// fixture lives in `silverBullet.golden.test.ts`); this just proves a server
+// payload carrying the new boolean merges onto a full default into a
+// structurally valid definition, so the server is free to start emitting it.
+// ----------------------------------------------------------------------------
+describe('server contract — filters.session.gatePhases is part of the accepted contract', () => {
+  it('accepts a session filter with gatePhases:true and validates cleanly', () => {
+    const withGatePhases: Partial<StrategyDefinitionV2> = {
+      ...SERVER_FIXTURE,
+      filters: {
+        session: {
+          enabled: true,
+          timezone: 'America/New_York',
+          windows: [{ start: '10:00', end: '11:00' }],
+          gatePhases: true,
+        },
+      },
+    };
+    const merged = mergeStrategyV2(makeDefaultStrategyV2('MNQ', '5m'), withGatePhases);
+    expect(merged.filters.session?.gatePhases).toBe(true);
+    expect(() => JSON.parse(JSON.stringify(merged))).not.toThrow();
+    const errors = validateStrategyStructure(merged);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// 6. Negative control — a plausible OLD (pre-realignment) server shape is
 // REJECTED by validateStrategyStructure, proving this test would have
 // caught the drift the 2026-07 FE/server realignment fixed.
 // ----------------------------------------------------------------------------
