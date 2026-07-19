@@ -7,19 +7,8 @@
 // =====================================================
 
 import type { Trade } from '@/hooks/useTradesData';
-
-// ─── Multiplier resolution ────────────────────────────────────────────────────
-
-const ASSET_MULTIPLIERS: Record<string, number> = {
-  ES: 50, MES: 5, NQ: 20, MNQ: 2, YM: 5,
-  RTY: 50, CL: 1000, GC: 100, SI: 5000, ZB: 1000, ZN: 1000,
-};
-
-function resolveMultiplier(trade: Trade): number {
-  if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
-  const sym = (trade.symbol ?? '').toUpperCase().trim().replace(/\d+$/, '');
-  return ASSET_MULTIPLIERS[sym] ?? 1;
-}
+import { resolveMultiplier } from '@/lib/journal/assetMultipliers';
+import { estimateFeeUsd } from '@/lib/journal/fees';
 
 function pnlAt(price: number, trade: Trade, mult: number): number {
   const diff =
@@ -51,9 +40,17 @@ export interface PlannedResult {
 // ─── Core computation ─────────────────────────────────────────────────────────
 
 export function computePlannedScenarios(trade: Trade): PlannedResult {
-  const mult = resolveMultiplier(trade);
+  const mult = resolveMultiplier(trade.symbol, trade.multiplier);
   const exitPrice = trade.exit_price ?? trade.entry_price;
-  const actualPnl = trade.pnl != null ? trade.pnl : pnlAt(exitPrice, trade, mult);
+
+  // grossActualUsd is the price-only baseline (no fees) — used both as the
+  // fee-estimation baseline and as the actual fallback when trade.pnl is
+  // absent. actualPnl prefers the real net trade.pnl when present.
+  const grossActualUsd = pnlAt(exitPrice, trade, mult);
+  const actualPnl = trade.pnl != null ? trade.pnl : grossActualUsd;
+  // Per-trade fee estimate, subtracted from every HYPOTHETICAL scenario below
+  // so they're compared on the same net-of-fees basis as actualPnl.
+  const feeUsd = estimateFeeUsd(grossActualUsd, trade.pnl, trade.quantity);
 
   // ── actual ──────────────────────────────────────────────────────────────────
   const actual: PlannedScenario = {
@@ -68,7 +65,7 @@ export function computePlannedScenarios(trade: Trade): PlannedResult {
 
   // ── stop ─────────────────────────────────────────────────────────────────────
   const hasStop = trade.stop_price != null && trade.stop_price > 0;
-  const stopPnl = hasStop ? pnlAt(trade.stop_price!, trade, mult) : null;
+  const stopPnl = hasStop ? pnlAt(trade.stop_price!, trade, mult) - feeUsd : null;
   const stop: PlannedScenario = {
     key: 'stop',
     label: 'Exited at original stop',
@@ -85,7 +82,7 @@ export function computePlannedScenarios(trade: Trade): PlannedResult {
   const hasTarget =
     trade.take_profit_price != null && trade.take_profit_price > 0;
   const targetPnl = hasTarget
-    ? pnlAt(trade.take_profit_price!, trade, mult)
+    ? pnlAt(trade.take_profit_price!, trade, mult) - feeUsd
     : null;
   const target: PlannedScenario = {
     key: 'target',
@@ -100,7 +97,7 @@ export function computePlannedScenarios(trade: Trade): PlannedResult {
   };
 
   // ── breakeven ────────────────────────────────────────────────────────────────
-  const breakevenPnl = pnlAt(trade.entry_price, trade, mult); // ≈ 0 (ignores fees)
+  const breakevenPnl = pnlAt(trade.entry_price, trade, mult) - feeUsd; // ≈ -feeUsd
   const breakeven: PlannedScenario = {
     key: 'breakeven',
     label: 'Closed at break-even',

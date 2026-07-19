@@ -1,7 +1,9 @@
 // whatIfEngine.ts — pure, side-effect-free what-if analysis for a single trade.
 // No React, no Supabase, no network I/O.
-// getAssetMultiplier is not exported from useTradesData, so we inline an
-// equivalent lookup keyed on the same ASSET_MULTIPLIERS map.
+// Multiplier lookup delegates to the canonical assetMultipliers module.
+
+import { resolveMultiplier as resolveAssetMultiplier } from './assetMultipliers';
+import { estimateFeeUsd } from './fees';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +39,15 @@ export interface WhatIfTrade {
   close_at: string;
   mfe_r?: number | null;            // max favorable excursion in R units (R = |entry-stop| pts)
   mae_r?: number | null;            // max adverse excursion in R units
+  /**
+   * Net P&L as recorded on the trade (fees deducted), when known — typically
+   * trade.pnl from the journal. Used only to derive a per-trade fee estimate
+   * (see estimateFeeUsd in ./fees.ts) that normalizes every hypothetical
+   * scenario's USD onto the same net-of-fees basis as the actual trade.
+   * Optional — when absent, the fee estimate is 0 and behavior is unchanged
+   * (gross throughout, as before this field existed).
+   */
+  net_pnl_usd?: number | null;
 }
 
 export interface PriceBar { t: number; o: number; h: number; l: number; c: number; }
@@ -67,16 +78,8 @@ export interface WhatIfResult {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const ASSET_MULTIPLIERS: Record<string, number> = {
-  ES: 50, MES: 5, NQ: 20, MNQ: 2, YM: 5,
-  RTY: 50, CL: 1000, GC: 100, SI: 5000,
-  ZB: 1000, ZN: 1000,
-};
-
 export function resolveMultiplier(trade: WhatIfTrade): number {
-  if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
-  const sym = trade.symbol?.toUpperCase().trim().replace(/\d+$/, '') ?? '';
-  return ASSET_MULTIPLIERS[sym] ?? 1;
+  return resolveAssetMultiplier(trade.symbol, trade.multiplier);
 }
 
 /** Core P&L at any hypothetical exit price. */
@@ -89,6 +92,17 @@ function pnlAt(price: number, trade: WhatIfTrade, mult: number): number {
 
 function isPositiveNumber(v: number | null | undefined): v is number {
   return typeof v === 'number' && isFinite(v) && v > 0;
+}
+
+/**
+ * Per-trade fee estimate derived from the gap between the trade's gross
+ * (price-only) actual P&L and its recorded net P&L. Used to normalize every
+ * HYPOTHETICAL scenario's USD onto the same net-of-fees basis as the actual
+ * trade (see estimateFeeUsd in ./fees.ts for the reasoning + clamp).
+ */
+function feeForTrade(trade: WhatIfTrade, mult: number): number {
+  const grossActualUsd = pnlAt(trade.exit_price, trade, mult);
+  return estimateFeeUsd(grossActualUsd, trade.net_pnl_usd, trade.quantity);
 }
 
 function fmtDelta(n: number): string {
@@ -111,7 +125,13 @@ function fmtDelta(n: number): string {
  */
 export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): WhatIfResult {
   const mult = resolveMultiplier(trade);
+  // actualPnl is the GROSS (price-only) baseline: used to derive the fee
+  // estimate below, and as the delta anchor for every hypothetical (deltas
+  // are fee-invariant by construction — see fees.ts and Task B design notes).
   const actualPnl = pnlAt(trade.exit_price, trade, mult);
+  const feeUsd = estimateFeeUsd(actualPnl, trade.net_pnl_usd, trade.quantity);
+  // netActualPnl is what we DISPLAY for 'actual' — prefers the real net P&L.
+  const netActualPnl = trade.net_pnl_usd ?? actualPnl;
   const hasBars = Array.isArray(bars) && bars.length > 0;
   const tp = trade.take_profit_price;
   const stop = trade.stop_price;
@@ -121,7 +141,7 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
   const actualScenario: WhatIfScenario = {
     key: 'actual',
     label: 'Your actual',
-    pnl: actualPnl,
+    pnl: netActualPnl,
     deltaVsActual: 0,
     exitPrice: trade.exit_price,
     detail: 'What actually happened.',
@@ -131,8 +151,8 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
   // --- Scenario: plan (held to target) ---
   let planScenario: WhatIfScenario;
   if (isPositiveNumber(tp)) {
-    const planPnl = pnlAt(tp, trade, mult);
-    const delta = planPnl - actualPnl;
+    const planPnl = pnlAt(tp, trade, mult) - feeUsd;
+    const delta = planPnl - netActualPnl;
     let detail = 'If you had held to your original target';
     if (hasBars) {
       // Did price reach TP before stop?
@@ -179,12 +199,12 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
     const bestPrice = isLong
       ? Math.max(...bars!.map(b => b.h))
       : Math.min(...bars!.map(b => b.l));
-    const bestPnl = pnlAt(bestPrice, trade, mult);
+    const bestPnl = pnlAt(bestPrice, trade, mult) - feeUsd;
     bestScenario = {
       key: 'best_possible',
       label: 'Best possible exit',
       pnl: bestPnl,
-      deltaVsActual: bestPnl - actualPnl,
+      deltaVsActual: bestPnl - netActualPnl,
       exitPrice: bestPrice,
       detail: 'The most favourable price reached during the trade.',
       available: true,
@@ -244,12 +264,12 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
         break;
       }
     }
-    const hsPnl = pnlAt(outcomePrice, trade, mult);
+    const hsPnl = pnlAt(outcomePrice, trade, mult) - feeUsd;
     heldStopScenario = {
       key: 'held_stop',
       label: 'If you never moved your stop',
       pnl: hsPnl,
-      deltaVsActual: hsPnl - actualPnl,
+      deltaVsActual: hsPnl - netActualPnl,
       exitPrice: outcomePrice,
       detail: outcomeDetail,
       available: true,
@@ -293,7 +313,7 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
   }
 
   return {
-    actualPnl,
+    actualPnl: netActualPnl,
     scenarios: [actualScenario, planScenario, bestScenario, heldStopScenario],
     mfe,
     mae,
@@ -384,6 +404,7 @@ export function estimateBreakEvenAtR(
   const actR = actualOutcomeR(trade); // realized R from entry/exit/stop
   const mult = resolveMultiplier(trade);
   const rUsd = riskUsd(trade, mult);  // $ per 1R; null when stop is missing
+  const feeUsd = feeForTrade(trade, mult); // per-trade fee, applied at the USD conversion below
 
   const armed = mfe_r >= rMultiple;
 
@@ -427,9 +448,9 @@ export function estimateBreakEvenAtR(
   let highUsd: number;
 
   if (rUsd != null) {
-    pnlUsd  = outcomeR !== null ? outcomeR * rUsd : null;
-    lowUsd  = lowR  * rUsd;
-    highUsd = highR * rUsd;
+    pnlUsd  = outcomeR !== null ? outcomeR * rUsd - feeUsd : null;
+    lowUsd  = lowR  * rUsd - feeUsd;
+    highUsd = highR * rUsd - feeUsd;
   } else {
     // No stop price available — cannot convert R to USD.
     pnlUsd  = null;
@@ -457,6 +478,7 @@ export function fixedTargetAtR(
 ): { pnlUsd: number; outcomeR: number; resolved: 'target' | 'stop' | 'actual' | 'estimated'; confidence: Confidence } | null {
   const mult = resolveMultiplier(trade);
   const rUsd = riskUsd(trade, mult);
+  const feeUsd = feeForTrade(trade, mult); // per-trade fee, applied at every USD conversion below
 
   const hasMfeR = typeof trade.mfe_r === 'number' && isFinite(trade.mfe_r);
   const hasMaeR = typeof trade.mae_r === 'number' && isFinite(trade.mae_r);
@@ -538,17 +560,17 @@ export function fixedTargetAtR(
   // or fall back to price-based P&L for the 'actual' path.
   let pnlUsd: number;
   if (resolved === 'actual') {
-    pnlUsd = pnlAt(trade.exit_price, trade, mult);
+    pnlUsd = pnlAt(trade.exit_price, trade, mult) - feeUsd;
   } else {
     if (rUsd != null) {
-      pnlUsd = outcomeR * rUsd;
+      pnlUsd = outcomeR * rUsd - feeUsd;
     } else {
       // No stop available — approximate from actual P&L scaled by outcomeR.
       const actualPnl = pnlAt(trade.exit_price, trade, mult);
       // outcomeR already carries the sign (e.g. -1 for a stop-out), so scale by
       // the magnitude of actual P&L only — multiplying by sign(outcomeR) again
       // would cancel the sign and flip a loss into a gain.
-      pnlUsd = actualPnl !== 0 ? outcomeR * Math.abs(actualPnl) : 0;
+      pnlUsd = (actualPnl !== 0 ? outcomeR * Math.abs(actualPnl) : 0) - feeUsd;
     }
   }
 
@@ -640,7 +662,8 @@ export function breakEvenAtR(
   // No level was hit during the bars window — use actual exit.
   if (exitPrice === null) exitPrice = trade.exit_price;
 
-  const pnlUsd = pnlAt(exitPrice, trade, mult);
+  const feeUsd = feeForTrade(trade, mult);
+  const pnlUsd = pnlAt(exitPrice, trade, mult) - feeUsd;
   const exitPts = isLong
     ? exitPrice - trade.entry_price
     : trade.entry_price - exitPrice;

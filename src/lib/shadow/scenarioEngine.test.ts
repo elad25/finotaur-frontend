@@ -3,7 +3,7 @@
 // All expected values are hand-computed from the engine rules defined in the spec.
 
 import { describe, it, expect } from 'vitest';
-import { runScenarios } from './scenarioEngine';
+import { runScenarios, extractModificationMarkers } from './scenarioEngine';
 import type { ShadowTradeInput, ScenarioResult, ScenarioKey } from './types';
 
 // ---------------------------------------------------------------------------
@@ -561,5 +561,385 @@ describe('Fixture 11 — all 6 scenarios always present', () => {
     for (const k of expectedKeys) {
       expect(keys).toContain(k);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 12: no_stop_moves — (a) absent without real stop modifications
+// ---------------------------------------------------------------------------
+
+describe('Fixture 12 — no_stop_moves absent when no stop modifications exist', () => {
+  const input: ShadowTradeInput = {
+    side: 'LONG',
+    entryPrice: 100,
+    entryTime: 0,
+    qty: 1,
+    multiplier: 1,
+    actualExits: [{ price: 102, qty: 1, time: 1 }],
+    originalStop: 97,
+    originalTarget: 106,
+    pricePath: [{ t: 1, o: 100, h: 103, l: 99, c: 102 }],
+    granularity: '1m',
+    // no `modifications` field at all
+  };
+
+  const { scenarios } = runScenarios(input);
+
+  it('no_stop_moves is NOT in the scenarios array', () => {
+    expect(scenarios.find((s) => s.key === 'no_stop_moves')).toBeUndefined();
+  });
+
+  it('no_target_moves is NOT in the scenarios array', () => {
+    expect(scenarios.find((s) => s.key === 'no_target_moves')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 13: no_stop_moves — (b) BE move saved the trader; counterfactual
+// shows the loss that would have happened had the stop never moved.
+// ---------------------------------------------------------------------------
+// entry=100, LONG, qty=1, mult=1
+// trade.stop_price (input.originalStop) = 98 — the CURRENT (post-move) stop.
+// One real stop modification: moved from 90 -> 98 at t=500 (fromPrice: 90).
+// derivedOriginalStop = 90 (the true original, from the mod's fromPrice).
+// actualExits: exited at 98 (their moved BE-ish stop) — small loss of -2.
+// pricePath continues past the actual exit and later tags the TRUE original
+// stop at 90 -> no_stop_moves shows a bigger loss (-10), proving the BE move
+// saved the trader $8.
+// ---------------------------------------------------------------------------
+
+describe('Fixture 13 — no_stop_moves shows the counterfactual loss the BE move avoided', () => {
+  const input: ShadowTradeInput = {
+    side: 'LONG',
+    entryPrice: 100,
+    entryTime: 0,
+    qty: 1,
+    multiplier: 1,
+    actualExits: [{ price: 98, qty: 1, time: 600 }],
+    originalStop: 98, // current (post-move) stop on the trade record
+    originalTarget: null,
+    modifications: [{ kind: 'stop', price: 98, time: 500, fromPrice: 90 }],
+    pricePath: [
+      { t: 100, o: 100, h: 101, l: 99, c: 100 },
+      { t: 600, o: 100, h: 100, l: 97, c: 98 },
+      { t: 900, o: 98, h: 99, l: 89, c: 90 }, // l=89 <= 90 -> true original stop tagged here
+    ],
+    granularity: '1m',
+  };
+
+  const { scenarios } = runScenarios(input);
+
+  it('actual: small loss of -2 (exited at the moved BE stop)', () => {
+    const s = scenarios.find((sc) => sc.key === 'actual')!;
+    expect(s.pnlUsd).toBeCloseTo(-2);
+  });
+
+  it('no_stop_moves: available, walks to the TRUE original stop (90) at t=900, pnl=-10', () => {
+    const s = scenarios.find((sc) => sc.key === 'no_stop_moves')!;
+    expect(s).toBeDefined();
+    expect(s.available).toBe(true);
+    expect(s.exitPrice).toBeCloseTo(90);
+    expect(s.exitTime).toBe(900);
+    expect(s.pnlUsd).toBeCloseTo(-10);
+    expect(s.confidence).toBe('high');
+    expect(s.simulated).toBe(true);
+  });
+
+  it('no_stop_moves loss is worse than actual — the BE move saved the trader money', () => {
+    const actual = scenarios.find((sc) => sc.key === 'actual')!;
+    const noStopMoves = scenarios.find((sc) => sc.key === 'no_stop_moves')!;
+    expect(noStopMoves.pnlUsd!).toBeLessThan(actual.pnlUsd!);
+  });
+
+  it('no_stop_moves note references the true original stop price (90), not the current stop (98)', () => {
+    const s = scenarios.find((sc) => sc.key === 'no_stop_moves')!;
+    expect(s.note).toContain('90');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 14: no_stop_moves — (c) same-bar stop+target collision -> stop-first,
+// confidence 'ambiguous'. Also covers (d): derivedOriginalStop comes from the
+// first modification's fromPrice (95), NOT from originalStop/trade.stop_price
+// (99), which differs.
+// ---------------------------------------------------------------------------
+
+describe('Fixture 14 — no_stop_moves in-bar collision + originalStop derived from fromPrice', () => {
+  const input: ShadowTradeInput = {
+    side: 'LONG',
+    entryPrice: 100,
+    entryTime: 0,
+    qty: 1,
+    multiplier: 1,
+    actualExits: [{ price: 103, qty: 1, time: 1 }],
+    originalStop: 99, // current (post-move) stop — deliberately DIFFERS from the true original (95)
+    originalTarget: 105,
+    modifications: [{ kind: 'stop', price: 99, time: 10, fromPrice: 95 }],
+    pricePath: [
+      { t: 1, o: 100, h: 107, l: 93, c: 100 }, // both true-original-stop (95) and target (105) touched
+    ],
+    granularity: '1m',
+  };
+
+  const { scenarios } = runScenarios(input);
+  const s = scenarios.find((sc) => sc.key === 'no_stop_moves')!;
+
+  it('collided same-bar -> conservative stop-first, confidence ambiguous', () => {
+    expect(s).toBeDefined();
+    expect(s.available).toBe(true);
+    expect(s.confidence).toBe('ambiguous');
+  });
+
+  it('exits at the DERIVED true original stop (95), not the current stop (99)', () => {
+    expect(s.exitPrice).toBeCloseTo(95);
+    expect(s.pnlUsd).toBeCloseTo(-5); // (95-100)*1*1
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 15: no_target_moves — smoke test (produced only with target mods)
+// ---------------------------------------------------------------------------
+
+describe('Fixture 15 — no_target_moves gated on real target modifications', () => {
+  it('absent when no target modifications exist', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [{ price: 102, qty: 1, time: 1 }],
+      originalStop: 95,
+      originalTarget: 110,
+      pricePath: [{ t: 1, o: 100, h: 103, l: 99, c: 102 }],
+      granularity: '1m',
+    };
+    const { scenarios } = runScenarios(input);
+    expect(scenarios.find((s) => s.key === 'no_target_moves')).toBeUndefined();
+  });
+
+  it('present and walks with the derived original target when a target modification exists', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [{ price: 103, qty: 1, time: 1 }],
+      originalStop: 95,
+      originalTarget: 115, // current (moved) target — differs from the true original (110)
+      modifications: [{ kind: 'target', price: 115, time: 10, fromPrice: 110 }],
+      pricePath: [
+        { t: 1, o: 100, h: 112, l: 99, c: 108 }, // h=112 touches derived original target 110, not stop
+      ],
+      granularity: '1m',
+    };
+    const { scenarios } = runScenarios(input);
+    const s = scenarios.find((sc) => sc.key === 'no_target_moves')!;
+    expect(s).toBeDefined();
+    expect(s.available).toBe(true);
+    expect(s.exitPrice).toBeCloseTo(110);
+    expect(s.pnlUsd).toBeCloseTo(10); // (110-100)*1*1
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 16: extractModificationMarkers — sorting + fromPrice resolution
+// ---------------------------------------------------------------------------
+
+describe('Fixture 16 — extractModificationMarkers', () => {
+  it('returns [] when there are no modifications', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      pricePath: [],
+      granularity: '1m',
+    };
+    expect(extractModificationMarkers(input)).toEqual([]);
+  });
+
+  it('sorts out-of-order modifications ascending by time', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      originalStop: 90,
+      originalTarget: 110,
+      modifications: [
+        { kind: 'stop', price: 95, time: 500 },
+        { kind: 'stop', price: 92, time: 100 },
+      ],
+      pricePath: [],
+      granularity: '1m',
+    };
+    const markers = extractModificationMarkers(input);
+    expect(markers.map((m) => m.at)).toEqual([100, 500]);
+  });
+
+  it('first modification of a kind: fromPrice falls back to the input original seed when not explicitly captured', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      originalStop: 90,
+      modifications: [{ kind: 'stop', price: 95, time: 100 }],
+      pricePath: [],
+      granularity: '1m',
+    };
+    const markers = extractModificationMarkers(input);
+    expect(markers).toEqual([{ kind: 'stop', at: 100, fromPrice: 90, toPrice: 95 }]);
+  });
+
+  it('subsequent modification of the same kind: fromPrice chains from the previous toPrice', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      originalStop: 90,
+      modifications: [
+        { kind: 'stop', price: 95, time: 100 },
+        { kind: 'stop', price: 99, time: 200 },
+      ],
+      pricePath: [],
+      granularity: '1m',
+    };
+    const markers = extractModificationMarkers(input);
+    expect(markers).toEqual([
+      { kind: 'stop', at: 100, fromPrice: 90, toPrice: 95 },
+      { kind: 'stop', at: 200, fromPrice: 95, toPrice: 99 },
+    ]);
+  });
+
+  it('an explicitly-captured fromPrice on the row is preferred over the chain-derived value', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      originalStop: 90,
+      modifications: [{ kind: 'stop', price: 95, time: 100, fromPrice: 80 }],
+      pricePath: [],
+      granularity: '1m',
+    };
+    const markers = extractModificationMarkers(input);
+    expect(markers[0].fromPrice).toBe(80);
+  });
+
+  it('stop and target chains are independent of each other', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [],
+      originalStop: 90,
+      originalTarget: 110,
+      modifications: [
+        { kind: 'target', price: 115, time: 50 },
+        { kind: 'stop', price: 95, time: 100 },
+      ],
+      pricePath: [],
+      granularity: '1m',
+    };
+    const markers = extractModificationMarkers(input);
+    expect(markers).toEqual([
+      { kind: 'target', at: 50, fromPrice: 110, toPrice: 115 },
+      { kind: 'stop', at: 100, fromPrice: 90, toPrice: 95 },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 17: fee normalization — hypothetical USD = gross - fee; actual
+// uses net; no_trade stays 0.
+// ---------------------------------------------------------------------------
+// entry=100, LONG, qty=1, mult=1, actual exit=110 (gross=10), netPnlUsd=8
+// (fee=2, within the $50/contract clamp).
+// originalStop=95, originalTarget=105. Single bar touches the target (105)
+// before the stop (95 never touched) -> original_target_hit / held_original_stop
+// both resolve to exit=105, gross=5, net-of-fee=3.
+// ---------------------------------------------------------------------------
+
+describe('Fixture 17 — fee normalization across scenarios', () => {
+  const input: ShadowTradeInput = {
+    side: 'LONG',
+    entryPrice: 100,
+    entryTime: 0,
+    qty: 1,
+    multiplier: 1,
+    actualExits: [{ price: 110, qty: 1, time: 1000 }],
+    originalStop: 95,
+    originalTarget: 105,
+    pricePath: [{ t: 1000, o: 101, h: 112, l: 101, c: 110 }],
+    granularity: '1m',
+    netPnlUsd: 8,
+  };
+
+  const { scenarios, actualPnlUsd } = runScenarios(input);
+
+  it('actual scenario uses the real net P&L (8), not the gross (10)', () => {
+    const s = scenarios.find((sc) => sc.key === 'actual')!;
+    expect(s.pnlUsd).toBeCloseTo(8);
+    expect(actualPnlUsd).toBeCloseTo(8);
+  });
+
+  it('original_target_hit: gross(5) - fee(2) = 3', () => {
+    const s = scenarios.find((sc) => sc.key === 'original_target_hit')!;
+    expect(s.available).toBe(true);
+    expect(s.exitPrice).toBeCloseTo(105);
+    expect(s.pnlUsd).toBeCloseTo(3);
+  });
+
+  it('held_original_stop: gross(5) - fee(2) = 3 (same walk resolves to target here)', () => {
+    const s = scenarios.find((sc) => sc.key === 'held_original_stop')!;
+    expect(s.pnlUsd).toBeCloseTo(3);
+  });
+
+  it('no_trade stays 0 regardless of fees', () => {
+    const s = scenarios.find((sc) => sc.key === 'no_trade')!;
+    expect(s.pnlUsd).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture 18: fee normalization — no netPnlUsd supplied => feeUsd is 0,
+// scenarios behave exactly as before fee-normalization existed.
+// ---------------------------------------------------------------------------
+
+describe('Fixture 18 — no netPnlUsd => zero fee, unchanged behavior', () => {
+  it('held_original_stop equals the pure gross computation', () => {
+    const input: ShadowTradeInput = {
+      side: 'LONG',
+      entryPrice: 100,
+      entryTime: 0,
+      qty: 1,
+      multiplier: 1,
+      actualExits: [{ price: 103, qty: 1, time: 1 }],
+      originalStop: 95,
+      originalTarget: null,
+      pricePath: [{ t: 1, o: 100, h: 104, l: 99, c: 103 }],
+      granularity: '1m',
+      // netPnlUsd intentionally omitted
+    };
+    const { scenarios } = runScenarios(input);
+    const s = scenarios.find((sc) => sc.key === 'held_original_stop')!;
+    // Neither stop nor target touched -> exit at lastClose=103, gross=(103-100)*1*1=3
+    expect(s.pnlUsd).toBeCloseTo(3);
   });
 });

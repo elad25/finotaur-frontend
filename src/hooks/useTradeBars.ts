@@ -10,7 +10,7 @@
 //   PriceBar[] compatible with analyzeWhatIf() in whatIfEngine.ts.
 // =====================================================
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { PriceBar } from '@/lib/journal/whatIfEngine';
@@ -148,4 +148,22 @@ export function useAllTradeBars(tradeIds: string[]): {
     barsByTrade: data ?? new Map(),
     isLoading,
   };
+}
+
+// ─── useTrackedTradeIds ───────────────────────────────────────────────────────
+// Cheap derived Set<string> of trade ids that have at least one row in
+// trade_price_bars. Reuses useAllTradeBars' data — does NOT issue a second
+// query. Replaces the locked_profit_usd proxy previously used as a
+// best-effort "has excursion bars" estimate (see useShadow.ts).
+
+export function useTrackedTradeIds(tradeIds: string[]): Set<string> {
+  const { barsByTrade } = useAllTradeBars(tradeIds);
+
+  return useMemo(() => {
+    const set = new Set<string>();
+    for (const [tradeId, bars] of barsByTrade) {
+      if (bars.length > 0) set.add(tradeId);
+    }
+    return set;
+  }, [barsByTrade]);
 }
