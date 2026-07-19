@@ -34,6 +34,7 @@ import type { Bar } from '@/components/charting/types';
 import {
   computeDetailLevel,
   computeFootprintBandHeightPx,
+  computeFootprintBandWidthPx,
   computeRowMergeFactor,
   drawCandleFootprint,
   drawTotalsRowAt,
@@ -42,6 +43,7 @@ import {
   getEnabledStatsRowDefs,
   prepareCandleDraw,
   resolveAutoTransformDetail,
+  resolveColumnSpacingFraction,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
   type ClusterStatsRow,
   type ClusterStatsRowMaxima,
@@ -634,6 +636,13 @@ export function FootprintLayer({
         const actualTimeDelta = ref2.tSec - ref1.tSec;
         const pxPerSec = actualTimeDelta !== 0 ? actualPxPerBar / actualTimeDelta : 1;
         const candleWidthPx = Math.abs(pxPerSec) * ivSec;
+        // Inter-bar gutter (adjacent-cells-touching fix) — the stats/totals
+        // band columns must reserve the SAME gap as the per-row footprint
+        // cells (drawCandleFootprint derives its own leftX/rightX from this
+        // exact function), otherwise the bottom bands would still span the
+        // full bar slot while the cells above them shrink, misaligning the
+        // two and reintroducing overlap at the band's own edges.
+        const bandWidthPx = computeFootprintBandWidthPx(candleWidthPx, resolveColumnSpacingFraction(config.columnSpacing));
 
         const timeToX = (tSec: number): number => ref1.x + (tSec - ref1.tSec) * pxPerSec;
 
@@ -808,8 +817,8 @@ export function FootprintLayer({
           );
 
           if (detail === 'full') {
-            const barLeftX = Math.max(0, x - candleWidthPx / 2);
-            const barRightX = Math.min(paneW, x + candleWidthPx / 2);
+            const barLeftX = Math.max(0, x - bandWidthPx / 2);
+            const barRightX = Math.min(paneW, x + bandWidthPx / 2);
             if (config.showStats && enabledStatsRowCount > 0) {
               let cached = statsCacheRef.current.get(candle.time);
               if (!cached) {
@@ -852,8 +861,8 @@ export function FootprintLayer({
             if (presentTimes.has(t)) continue; // has real footprint data — drawn above
             const x = timeToX(t);
             if (x + candleWidthPx / 2 < 0 || x - candleWidthPx / 2 > paneW) continue; // cull
-            const barLeftX = Math.max(0, x - candleWidthPx / 2);
-            const barRightX = Math.min(paneW, x + candleWidthPx / 2);
+            const barLeftX = Math.max(0, x - bandWidthPx / 2);
+            const barRightX = Math.min(paneW, x + bandWidthPx / 2);
             if (barRightX <= barLeftX) continue;
             emptyStatsBars.push({ leftX: barLeftX, rightX: barRightX });
           }

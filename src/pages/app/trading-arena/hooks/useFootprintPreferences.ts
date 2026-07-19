@@ -47,6 +47,7 @@ const SYMBOL_SCOPED_FIELDS: ReadonlySet<keyof FootprintSettings> = new Set([
 const CONTENT_VALUES: FootprintSettings['content'][] = ['bidAsk', 'delta', 'volume', 'trades', 'volumeDelta'];
 const LAYOUT_VALUES: FootprintSettings['layout'][] = ['numbers', 'histogram'];
 const COLOR_SCHEME_VALUES: FootprintSettings['colorScheme'][] = ['delta', 'volumeHeat', 'solid'];
+const COLUMN_SPACING_VALUES: FootprintSettings['columnSpacing'][] = ['compact', 'normal', 'wide'];
 const ROW_SIZE_MODE_VALUES: FootprintSettings['rowSizeMode'][] = ['auto', 'price', 'ticks'];
 const VALUES_DIVIDER_VALUES: FootprintSettings['valuesDivider'][] = [1, 1000];
 
@@ -84,6 +85,7 @@ export function sanitizeFootprintSettings(raw: unknown, fallback: FootprintSetti
     content: asOneOf(p.content, CONTENT_VALUES, fallback.content),
     layout: asOneOf(p.layout, LAYOUT_VALUES, fallback.layout),
     colorScheme: asOneOf(p.colorScheme, COLOR_SCHEME_VALUES, fallback.colorScheme),
+    columnSpacing: asOneOf(p.columnSpacing, COLUMN_SPACING_VALUES, fallback.columnSpacing),
     imbalanceRatioPct: asNumber(p.imbalanceRatioPct, fallback.imbalanceRatioPct),
     imbalanceStackedCount: asNumber(p.imbalanceStackedCount, fallback.imbalanceStackedCount),
     imbalanceStackedOnly: asBool(p.imbalanceStackedOnly, fallback.imbalanceStackedOnly),

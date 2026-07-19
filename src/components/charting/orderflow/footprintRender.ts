@@ -11,6 +11,7 @@ import type {
   FlowCandleView,
   FootprintCellMode,
   FootprintColorScheme,
+  FootprintColumnSpacing,
   FootprintConfig,
   FootprintLayout,
   ImbalancePreset,
@@ -37,6 +38,8 @@ import {
   FOOTPRINT_CELL_FONT_MIN,
   FOOTPRINT_CELL_GUTTER_PX,
   FOOTPRINT_CELL_PADDING_X,
+  FOOTPRINT_COLUMN_GAP_MAX_PX,
+  FOOTPRINT_COLUMN_GAP_MIN_PX,
   FOOTPRINT_DELTA_NEUTRAL_DARK,
   FOOTPRINT_FONT_FAMILY,
   FOOTPRINT_HISTO_BUY_FILL,
@@ -687,6 +690,89 @@ export interface FootprintDrawExtras {
   touchedRangeSince?: (formationTimeSec: number) => { low: number; high: number } | null;
 }
 
+// ─── Inter-bar column spacing (adjacent-cells-touching fix) ─────────────────
+
+/**
+ * "Column spacing" preset → gap fraction of the bar's full pixel slot
+ * (candleWidthPx). Compact keeps almost the old full-bleed look; Normal
+ * (default) is the new baseline that guarantees a visible seam between
+ * adjacent bars' footprint bands; Wide maximizes breathing room for dense
+ * bid×ask text at the cost of narrower cells.
+ */
+export const FOOTPRINT_COLUMN_SPACING_FRACTIONS: Record<FootprintColumnSpacing, number> = {
+  compact: 0.04,
+  normal: 0.12,
+  wide: 0.22,
+};
+
+/** Resolve a FootprintColumnSpacing preset to its concrete gap fraction. Pure — unit-testable in isolation. */
+export function resolveColumnSpacingFraction(spacing: FootprintColumnSpacing): number {
+  return FOOTPRINT_COLUMN_SPACING_FRACTIONS[spacing] ?? FOOTPRINT_COLUMN_SPACING_FRACTIONS.normal;
+}
+
+/**
+ * Single source of truth for a bar's actual on-screen footprint "band" width
+ * — the ONLY geometry every caller that derives a bar's left/right draw
+ * bounds (per-row cell backgrounds/text, histogram bars, the stats band, the
+ * totals band) must go through, so the reserved inter-bar gutter is applied
+ * consistently everywhere instead of being re-derived (and potentially
+ * forgotten) per call site.
+ *
+ * `candleWidthPx` is the full pixel distance to the next bar (today's
+ * pre-existing projection value — unchanged upstream). The returned band
+ * width is smaller by a GAP in px, itself `candleWidthPx * gapFraction`
+ * clamped to [FOOTPRINT_COLUMN_GAP_MIN_PX, FOOTPRINT_COLUMN_GAP_MAX_PX] —
+ * proportional at typical zoom, but never vanishing at very narrow zoom nor
+ * ballooning at very wide zoom. Centering the (smaller) band on the same
+ * `centerX` as before means the gap is split evenly between this bar and
+ * each neighbor, so the visible empty gutter between two adjacent bars'
+ * bands equals exactly one full `gapPx`.
+ */
+export function computeFootprintBandWidthPx(candleWidthPx: number, gapFraction: number): number {
+  if (candleWidthPx <= 0) return 0;
+  const gapPx = Math.min(
+    FOOTPRINT_COLUMN_GAP_MAX_PX,
+    Math.max(FOOTPRINT_COLUMN_GAP_MIN_PX, candleWidthPx * gapFraction),
+  );
+  return Math.max(1, candleWidthPx - gapPx);
+}
+
+// ─── Cell text-fit guard (adjacent-cells-touching fix, part 2) ──────────────
+
+/**
+ * Whether `text`, rendered at the ctx's CURRENT font (caller must set
+ * `ctx.font` before calling), fits within `availWidthPx`. Uses
+ * `ctx.measureText` when available; degrades to "always fits" (returns true)
+ * when the ctx doesn't implement it (defensive — every real
+ * CanvasRenderingContext2D has it; this only matters for minimal test
+ * doubles that only stub fillRect/fillText).
+ */
+function textFitsWidth(ctx: CanvasRenderingContext2D, text: string, availWidthPx: number): boolean {
+  if (availWidthPx <= 0) return false;
+  if (typeof ctx.measureText !== 'function') return true;
+  return ctx.measureText(text).width <= availWidthPx;
+}
+
+/**
+ * Draw one line of cell text at the guarded fit-or-skip contract: numbers
+ * must NEVER paint outside their own cell's horizontal bounds (task: adjacent
+ * candles' cell numbers were mashing together, e.g. "0.12" into "9.59").
+ * When `text` doesn't fit `availWidthPx` at the ctx's current font, it is
+ * skipped entirely (an empty cell reads better than overlapping garbage) —
+ * there is no secondary abbreviation to fall back to beyond what the caller
+ * already applied via formatCellValue/valuesDivider.
+ */
+function fillTextIfFits(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  availWidthPx: number,
+): void {
+  if (!textFitsWidth(ctx, text, availWidthPx)) return;
+  ctx.fillText(text, x, y);
+}
+
 /**
  * Draw one candle's footprint. Caller is responsible for ctx.save/restore and
  * the try/finally transform-reset discipline (see FootprintLayer.tsx) — this
@@ -704,7 +790,13 @@ export function drawCandleFootprint(
   if (prepared.merged.length === 0) return;
 
   const { centerX, candleWidthPx, priceToY, rowHeightPx, rowSize } = projection;
-  const halfWidth = candleWidthPx / 2;
+  // Inter-bar gutter (adjacent-cells-touching fix) — the footprint BAND is
+  // narrower than the full bar slot so neighboring bars' cells never touch.
+  // Single source of truth: every leftX/rightX derived below (backgrounds,
+  // text, histogram bars, value-area hairlines) comes from THIS band width,
+  // not the raw candleWidthPx.
+  const bandWidthPx = computeFootprintBandWidthPx(candleWidthPx, resolveColumnSpacingFraction(config.columnSpacing));
+  const halfWidth = bandWidthPx / 2;
   const leftX = Math.max(0, centerX - halfWidth);
   const rightX = Math.min(extras.clipRightX, centerX + halfWidth);
   if (rightX <= leftX) return;
@@ -1018,6 +1110,17 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
   const textY = top + height / 2;
   const boldSuffix = imbalanceSide && imbalanceBold ? 'bold ' : '';
 
+  // Text-fit guard (adjacent-cells-touching fix): the available width for
+  // EACH number is measured against its own half/full cell, minus padding —
+  // never the raw candle width. A number that doesn't fit is skipped
+  // entirely (fillTextIfFits) rather than painted past its cell's bounds,
+  // which is what produced the reported "0.12" mashing into "9.59" overlap
+  // between adjacent bars. Two-value modes (bidAsk, volumeDelta) each get
+  // HALF the band; single-value modes get the FULL band.
+  const halfCellAvailWidth = Math.max(0, width / 2 - halfGutter - FOOTPRINT_CELL_PADDING_X);
+  const halfCellAvailWidthNoGutter = Math.max(0, width / 2 - FOOTPRINT_CELL_PADDING_X);
+  const fullCellAvailWidth = Math.max(0, width - FOOTPRINT_CELL_PADDING_X * 2);
+
   if (cellMode === 'bidAsk') {
     // Professional convention (ATAS/Exocharts/NinjaTrader): regular numbers
     // render in NEUTRAL text; color+bold is reserved strictly for the
@@ -1028,35 +1131,35 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
     ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCellValue(row.sellVol, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY);
+    fillTextIfFits(ctx, formatCellValue(row.sellVol, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
 
     ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'left';
-    ctx.fillText(formatCellValue(row.buyVol, valuesDivider), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY);
+    fillTextIfFits(ctx, formatCellValue(row.buyVol, valuesDivider), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
   } else if (cellMode === 'delta') {
     ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(delta, valuesDivider), midX, textY);
+    fillTextIfFits(ctx, formatCellValue(delta, valuesDivider), midX, textY, fullCellAvailWidth);
   } else if (cellMode === 'trades') {
     // ATAS-style "number of trades" mode — count of prints per level, neutral
     // shading + neutral text (no directional color; a print count has no sign).
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(row.trades, valuesDivider), midX, textY);
+    fillTextIfFits(ctx, formatCellValue(row.trades, valuesDivider), midX, textY, fullCellAvailWidth);
   } else if (cellMode === 'volumeDelta') {
     // Two values per cell: total volume (neutral) on the left half, signed
     // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCellValue(rowVol, valuesDivider), midX - FOOTPRINT_CELL_PADDING_X, textY);
+    fillTextIfFits(ctx, formatCellValue(rowVol, valuesDivider), midX - FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidthNoGutter);
 
     const deltaSign = delta > 0 ? '+' : '';
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'left';
-    ctx.fillText(`${deltaSign}${formatCellValue(delta, valuesDivider)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
+    fillTextIfFits(ctx, `${deltaSign}${formatCellValue(delta, valuesDivider)}`, midX + FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidthNoGutter);
   } else {
     // 'volume' — neutral shading AND neutral text (pro convention: a plain
     // volume footprint carries no directional signal; delta belongs to the
@@ -1064,7 +1167,7 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCellValue(rowVol, valuesDivider), midX, textY);
+    fillTextIfFits(ctx, formatCellValue(rowVol, valuesDivider), midX, textY, fullCellAvailWidth);
   }
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }

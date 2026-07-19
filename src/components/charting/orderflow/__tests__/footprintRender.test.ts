@@ -26,12 +26,14 @@ import {
   computeRowMergeFactor,
   computeCellFontSize,
   computeFootprintBandHeightPx,
+  computeFootprintBandWidthPx,
   getEnabledStatsRowDefs,
   histogramBarWidth,
   prepareCandleDraw,
   drawCandleFootprint,
   formatCellValue,
   resolveAutoTransformDetail,
+  resolveColumnSpacingFraction,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
   type CandleProjection,
   type FootprintDrawExtras,
@@ -52,6 +54,9 @@ import {
   FOOTPRINT_CELL_GUTTER_PX,
   FOOTPRINT_CELL_FONT_MIN,
   FOOTPRINT_CELL_FONT_MAX,
+  FOOTPRINT_CELL_PADDING_X,
+  FOOTPRINT_COLUMN_GAP_MAX_PX,
+  FOOTPRINT_COLUMN_GAP_MIN_PX,
   FOOTPRINT_BUY_BG_STRONG,
   FOOTPRINT_HISTO_BUY_FILL,
   FOOTPRINT_HISTO_NEUTRAL_FILL,
@@ -115,6 +120,55 @@ describe('computeDetailLevel', () => {
 
   it('promotes shaded → full once both dimensions clear the enter thresholds', () => {
     expect(computeDetailLevel(51, 12, 'shaded')).toBe('full');
+  });
+});
+
+// ─── computeFootprintBandWidthPx / resolveColumnSpacingFraction ────────────
+// Adjacent-candles'-cells-touching fix (Elad screenshot report, 2026-07-19):
+// the footprint band must be narrower than the full bar slot so neighboring
+// bars' cells never touch. These are the pure, unit-testable building blocks
+// drawCandleFootprint and FootprintLayer's stats/totals columns both funnel
+// through (single source of truth).
+
+describe('resolveColumnSpacingFraction', () => {
+  it('maps each preset to its documented gap fraction', () => {
+    expect(resolveColumnSpacingFraction('compact')).toBeCloseTo(0.04, 5);
+    expect(resolveColumnSpacingFraction('normal')).toBeCloseTo(0.12, 5);
+    expect(resolveColumnSpacingFraction('wide')).toBeCloseTo(0.22, 5);
+  });
+});
+
+describe('computeFootprintBandWidthPx', () => {
+  it('shrinks the band by a proportional gap at typical zoom (mid-range candle width)', () => {
+    // 100px bar, 12% gap fraction (normal) -> gap=12px (within [2,20]) -> band=88px.
+    expect(computeFootprintBandWidthPx(100, 0.12)).toBeCloseTo(88, 5);
+  });
+
+  it('clamps the gap at FOOTPRINT_COLUMN_GAP_MIN_PX when the proportional gap would be smaller (narrow zoom)', () => {
+    // 10px bar * 0.04 (compact) = 0.4px -> clamped up to the 2px floor -> band=8px.
+    const band = computeFootprintBandWidthPx(10, 0.04);
+    expect(band).toBeCloseTo(10 - FOOTPRINT_COLUMN_GAP_MIN_PX, 5);
+  });
+
+  it('clamps the gap at FOOTPRINT_COLUMN_GAP_MAX_PX when the proportional gap would be larger (wide zoom)', () => {
+    // 200px bar * 0.22 (wide) = 44px -> clamped down to the 20px ceiling -> band=180px.
+    const band = computeFootprintBandWidthPx(200, 0.22);
+    expect(band).toBeCloseTo(200 - FOOTPRINT_COLUMN_GAP_MAX_PX, 5);
+  });
+
+  it('never returns a negative or zero band for a positive candle width, and returns 0 for a non-positive one', () => {
+    expect(computeFootprintBandWidthPx(0, 0.12)).toBe(0);
+    expect(computeFootprintBandWidthPx(-5, 0.12)).toBe(0);
+    expect(computeFootprintBandWidthPx(1, 0.22)).toBeGreaterThan(0);
+  });
+
+  it('the band is always strictly smaller than the full candle width (a real gap is always reserved)', () => {
+    for (const width of [5, 14, 20, 50, 60, 100, 200, 500]) {
+      for (const spacing of ['compact', 'normal', 'wide'] as const) {
+        const band = computeFootprintBandWidthPx(width, resolveColumnSpacingFraction(spacing));
+        expect(band).toBeLessThan(width);
+      }
+    }
   });
 });
 
@@ -955,6 +1009,95 @@ describe('drawCandleFootprint — bidAsk center gutter', () => {
   });
 });
 
+// ─── Text-fit guard (adjacent-cells-touching fix, part 2) ──────────────────
+// A cell number must NEVER paint past its own cell's horizontal bounds — when
+// it doesn't fit, it's skipped rather than overlapping the neighboring cell
+// or bar. These tests use a controllable `measureText` mock so the fit/skip
+// decision is deterministic, independent of any real font-metrics engine.
+
+/** Canvas mock with a controllable measureText (width = text.length * widthPerChar) — records fillText calls. */
+function createMeasuringMockCtx(widthPerChar: number) {
+  const fillTextCalls: { text: string; x: number; y: number }[] = [];
+  const ctx = {
+    fillTextCalls,
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: 'left' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    fillRect: vi.fn(),
+    fillText: vi.fn((text: string, x: number, y: number) => {
+      fillTextCalls.push({ text, x, y });
+    }),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    measureText: vi.fn((text: string) => ({ width: text.length * widthPerChar }) as TextMetrics),
+  } as unknown as CanvasRenderingContext2D & { fillTextCalls: typeof fillTextCalls };
+  return ctx;
+}
+
+describe('drawCandleFootprint — text-fit guard skips numbers that do not fit their cell', () => {
+  const rowSize = 10;
+
+  it('skips every cell number when an absurdly wide per-character metric guarantees none can fit', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 3, buyerAggressor: true },
+      { time: 100, price: 100, qty: 2, buyerAggressor: false },
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+
+    const ctx = createMeasuringMockCtx(1000); // no realistic cell width can fit any text at this metric
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.fillTextCalls.length).toBe(0);
+  });
+
+  it('draws cell numbers normally when a tiny per-character metric means everything comfortably fits', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 3, buyerAggressor: true },
+      { time: 100, price: 100, qty: 2, buyerAggressor: false },
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+
+    const ctx = createMeasuringMockCtx(0.01); // trivially small — everything fits
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.fillTextCalls.length).toBeGreaterThan(0);
+  });
+
+  it('never issues a fillText call whose measured width exceeds its own half-cell bidAsk width, across a range of candle widths', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 12345, buyerAggressor: true },
+      { time: 100, price: 100, qty: 9876, buyerAggressor: false },
+    ];
+    const { prepared, config, extras } = buildBidAskFixture(18, trades);
+    const widthPerChar = 6; // roughly matches a legible 10-13px monospace-ish digit
+
+    for (const candleWidthPx of [20, 30, 45, 60, 100]) {
+      const projection: CandleProjection = {
+        centerX: 400,
+        candleWidthPx,
+        priceToY: (p) => 400 - ((p - 100) / rowSize) * 18,
+        rowHeightPx: 18,
+        rowSize,
+      };
+      const ctx = createMeasuringMockCtx(widthPerChar);
+      drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+      const bandWidthPx = computeFootprintBandWidthPx(candleWidthPx, resolveColumnSpacingFraction(config.columnSpacing));
+      const halfAvailWidth = Math.max(0, bandWidthPx / 2 - FOOTPRINT_CELL_GUTTER_PX / 2 - FOOTPRINT_CELL_PADDING_X);
+
+      for (const call of ctx.fillTextCalls) {
+        expect(call.text.length * widthPerChar).toBeLessThanOrEqual(halfAvailWidth + 1e-6);
+      }
+    }
+  });
+});
+
 describe('computeCellFontSize — auto font size by row height', () => {
   it('scales roughly linearly with rowHeightPx inside the clamp range', () => {
     // ratio=0.55: 20px row -> round(11) = 11px (within [9,13]).
@@ -1307,7 +1450,10 @@ describe('histogram-in-cell layout (F1)', () => {
     expect(sellBars.length).toBe(2);
     expect(buyBars.length).toBe(2);
 
-    const halfCellWidth = 100 / 2 - FOOTPRINT_CELL_GUTTER_PX / 2; // 48
+    // Band width is narrower than the raw 100px candle slot (inter-bar gutter
+    // — adjacent-cells-touching fix, default 'normal' column spacing).
+    const bandWidthPx = computeFootprintBandWidthPx(100, resolveColumnSpacingFraction(config.columnSpacing));
+    const halfCellWidth = bandWidthPx / 2 - FOOTPRINT_CELL_GUTTER_PX / 2;
     const allWidths = [...sellBars, ...buyBars].map((b) => (b as { w: number }).w);
     // The row at maxRowSideVol (110's sellVol=20) must hit exactly the capped half-cell width.
     expect(Math.max(...allWidths)).toBeCloseTo(halfCellWidth, 5);
@@ -1347,12 +1493,15 @@ describe('histogram-in-cell layout (F1)', () => {
     expect(buyBar).toBeDefined();
     expect(sellBar).toBeDefined();
 
-    const leftX = 200 - 100 / 2; // 150 — single-value bars start at the cell's LEFT edge, not the bidAsk gutter.
+    // Band width is narrower than the raw 100px candle slot (inter-bar gutter
+    // — adjacent-cells-touching fix, default 'normal' column spacing).
+    const bandWidthPx = computeFootprintBandWidthPx(100, resolveColumnSpacingFraction(config.columnSpacing));
+    const leftX = 200 - bandWidthPx / 2; // single-value bars start at the cell's LEFT edge, not the bidAsk gutter.
     expect(buyBar!.x).toBeCloseTo(leftX, 5);
     expect(sellBar!.x).toBeCloseTo(leftX, 5);
     // Positive row (+10 = maxAbsDelta) fills the entire cell width; negative row (-4) is 40%.
-    expect(buyBar!.w).toBeCloseTo(100, 5);
-    expect(sellBar!.w).toBeCloseTo(40, 5);
+    expect(buyBar!.w).toBeCloseTo(bandWidthPx, 5);
+    expect(sellBar!.w).toBeCloseTo(bandWidthPx * 0.4, 5);
   });
 
   it('histogram layout skips the flat background wash — only histogram-family fills paint (no FOOTPRINT_NEUTRAL_BG etc.)', () => {
@@ -1432,7 +1581,10 @@ describe('color-scheme dispatcher (F2)', () => {
     // single full-cell ramp is exactly 2 (one per non-empty row).
     const fills = buildFixture('volumeHeat', 'bidAsk');
     expect(fills.length).toBe(2);
-    expect(fills.every((f) => f.w === 100)).toBe(true); // full cell width, not a half-cell split
+    // Full BAND width (narrower than the raw 100px candle slot — inter-bar
+    // gutter, adjacent-cells-touching fix), not a half-cell split.
+    const bandWidthPx = computeFootprintBandWidthPx(100, resolveColumnSpacingFraction(DEFAULT_FOOTPRINT_CONFIG.columnSpacing));
+    expect(fills.every((f) => f.w === bandWidthPx)).toBe(true);
   });
 
   it('POC gold band is unaffected by colorScheme (still renders under volumeHeat)', () => {

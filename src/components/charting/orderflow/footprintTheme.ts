@@ -171,6 +171,21 @@ export const FOOTPRINT_STACKED_SELL_BAND_BORDER = 'rgba(220, 38, 38, 0.45)';
  */
 export const FOOTPRINT_CELL_GUTTER_PX = 4;
 
+/**
+ * Inter-bar column gutter (px) — the ABSOLUTE floor/ceiling the "Column
+ * spacing" setting's gap fraction is clamped into (see
+ * computeFootprintBandWidthPx / resolveColumnSpacingFraction in
+ * footprintRender.ts). Fixes the bug where adjacent candles' footprint cells
+ * touched and neighboring cell numbers visually mashed together (e.g. "0.12"
+ * running into "9.59") — Elad screenshot report, 2026-07-19.
+ * MIN keeps a visible seam even at the tightest zoom (a few px/bar, where
+ * `gapFraction * candleWidthPx` would otherwise round to ~0); MAX stops a
+ * very wide bar from reserving an excessive gutter that eats into legible
+ * cell width for no benefit.
+ */
+export const FOOTPRINT_COLUMN_GAP_MIN_PX = 2;
+export const FOOTPRINT_COLUMN_GAP_MAX_PX = 20;
+
 // ─── Histogram-in-cell layout (PR 3, F1) ────────────────────────────────────
 // `config.layout === 'histogram'` draws per-row horizontal volume bars BEHIND
 // the numbers instead of the flat delta/volumeHeat/solid background tint —
