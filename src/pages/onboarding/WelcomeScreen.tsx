@@ -20,10 +20,11 @@
 // Returning accounts (onboarding already completed) go straight to app home.
 // =====================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { authFetch } from '@/utils/authFetch';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import {
   ONBOARDING_SEEN_KEY,
@@ -35,6 +36,9 @@ type Decision = 'pending' | 'welcome' | 'skip';
 export default function WelcomeScreen() {
   const { user } = useAuth();
   const [decision, setDecision] = useState<Decision>('pending');
+  // Guards the instant day-0 welcome-email POST below so it fires at most
+  // once per mount even if this effect re-runs (e.g. StrictMode/user change).
+  const welcomeEmailFiredRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -51,7 +55,16 @@ export default function WelcomeScreen() {
         if (error) throw error;
         if (cancelled) return;
 
-        setDecision(data?.onboarding_completed === true ? 'skip' : 'welcome');
+        const isFreshSignup = data?.onboarding_completed !== true;
+        setDecision(isFreshSignup ? 'welcome' : 'skip');
+
+        // Fresh signup: fire the instant day-0 welcome email. Fire-and-forget
+        // — the daily cron is the backstop, so this must never block or delay
+        // navigation, and any failure here is silently swallowed.
+        if (isFreshSignup && !welcomeEmailFiredRef.current) {
+          welcomeEmailFiredRef.current = true;
+          authFetch('/api/users/me/welcome', { method: 'POST' }).catch(() => {});
+        }
       } catch {
         if (cancelled) return;
         // Query failed (offline/flaky) — fall back to the legacy browser
