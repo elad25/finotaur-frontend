@@ -399,6 +399,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
           {isLive ? (
             <FinotaurChart
               hideCursor
+              freeVerticalCrosshair
               symbol={nt8Symbol}
               interval={NT8_INTERVAL_PLACEHOLDER}
               from={from}
@@ -844,6 +845,7 @@ function LiquidityBody({ symbol, interval }: LiquidityBodyProps) {
           <div className="relative flex-1 min-h-0">
             <FinotaurChart
               hideCursor
+              freeVerticalCrosshair
               symbol={symbol}
               interval={candleInterval}
               from={from}

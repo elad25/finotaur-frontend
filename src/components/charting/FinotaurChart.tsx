@@ -1056,6 +1056,22 @@ export interface FinotaurChartProps {
    * is ever in flight at a time.
    */
   enableBackfill?: boolean;
+  /**
+   * When true, hides lightweight-charts' NATIVE vertical crosshair line and
+   * renders a custom DOM line that follows the mouse pixel-by-pixel instead.
+   *
+   * Why: lightweight-charts' vertical crosshair line always snaps to the
+   * nearest bar's time index even under `CrosshairMode.Normal` — only the
+   * horizontal/price line is genuinely pixel-free. That bar-to-bar jump reads
+   * as a "magnet" on the Liquidity tab's depth heatmap. The horizontal-line
+   * behavior/style (chartStyleMapping.ts, driven by Chart Settings) is
+   * completely untouched by this prop either way.
+   *
+   * 🔴 Default `false` — a COMPLETE no-op for every existing caller. Opted
+   * into ONLY by Trading Arena's Liquidity tab (LiquidityTab.tsx). Chart /
+   * Order Flow / CVD tabs keep today's native snapping behavior.
+   */
+  freeVerticalCrosshair?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1102,6 +1118,7 @@ export function FinotaurChart({
   depthProfile,
   chartStyle,
   enableBackfill = false,
+  freeVerticalCrosshair = false,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1119,6 +1136,12 @@ export function FinotaurChart({
   const theme = effectiveChartStyle?.theme ?? themeProp;
   // Active theme tokens — derived once, used by both JSX and effects.
   const themeTokens = pickTheme(theme);
+  // Resolved crosshair LINE style (solid/dashed/hidden) — drives both the
+  // native horzLine (chartStyleMapping.ts) and, when freeVerticalCrosshair is
+  // on, the custom vertical-line overlay's own dash pattern below, so the two
+  // lines always look consistent. Same fallback ('dashed') chartStyleMapping
+  // itself falls back to via DEFAULT_CHART_STYLE.
+  const crosshairLineStyle = effectiveChartStyle?.crosshairStyle ?? 'dashed';
   /**
    * Mirrors the footprint's zoom-driven detail stage (see FootprintLayer's
    * onStageChange) purely so WallHeatLayer can be told how tall the
@@ -1224,6 +1247,14 @@ export function FinotaurChart({
   const wallTooltipDivRef = useRef<HTMLDivElement | null>(null);
 
   /**
+   * Direct ref to the custom free-moving vertical crosshair line (see
+   * `freeVerticalCrosshair` prop). Position/visibility are mutated directly
+   * via style in the crosshairMove handler below (no per-frame setState) —
+   * same perf pattern as `wallTooltipDivRef` above.
+   */
+  const freeCrosshairLineRef = useRef<HTMLDivElement | null>(null);
+
+  /**
    * Latest liquidity band — held in a ref so the autoscaleInfoProvider closure
    * always reads the current band without needing to be recreated on every 3s update.
    * Updated synchronously in a useEffect when the `liquidityBand` prop changes.
@@ -1248,6 +1279,16 @@ export function FinotaurChart({
       height: containerRef.current.clientHeight,
     });
     chart.applyOptions({ crosshair: { mode: FREE_CROSSHAIR_MODE } });
+    if (freeVerticalCrosshair) {
+      // Hide the NATIVE vertical line (it snaps to bar centers even in
+      // Normal mode — see the `freeVerticalCrosshair` prop doc comment). The
+      // custom DOM line (freeCrosshairLineRef, driven by the crosshairMove
+      // subscription below) replaces it. horzLine is untouched — lw-charts
+      // deep-merges applyOptions calls, so this never disturbs the
+      // horizontal line's color/style/mode set above or by
+      // chartStyleToChartOptions (chartStyleMapping.ts) later.
+      chart.applyOptions({ crosshair: { vertLine: { visible: false, labelVisible: false } } });
+    }
 
     const t = pickTheme(theme);
     const series = chart.addCandlestickSeries({
@@ -1313,6 +1354,11 @@ export function FinotaurChart({
     };
     // Re-create when theme changes — full remount swaps the candle palette,
     // background, grid, crosshair, and all subpane scale colors atomically.
+    // freeVerticalCrosshair is intentionally omitted: every caller passes it
+    // as a fixed literal (true/false) for the component's whole lifetime —
+    // it never toggles on an already-mounted chart — so re-running this
+    // effect on its change would be a no-op in practice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
   // ─── Apply Chart Settings (Trading Arena's Chart ▾ menu) ────
@@ -1546,6 +1592,43 @@ export function FinotaurChart({
   // barCount ensures the candle series is ready before we subscribe.
   // wallRenderMode: changes the hit-test branch in the handler.
   }, [barCount, wallSegments, wallRenderMode]);
+
+  // ─── Custom free-moving vertical crosshair line (freeVerticalCrosshair) ──
+  // `param.point` from lightweight-charts' own crosshairMove event is the
+  // raw, UNSNAPPED pixel coordinate under the cursor (the wall-hover tooltip
+  // effect above already relies on this for its continuous
+  // `coordinateToPrice(param.point.y)` price lookup) — only the library's own
+  // rendered crosshair LINE snaps visually, not this event field. So reusing
+  // this same subscription gives a genuinely pixel-free vertical line with no
+  // extra pointermove wiring. Position is mutated directly on the DOM node
+  // (no setState) to avoid a re-render on every mouse move.
+  useEffect(() => {
+    if (!freeVerticalCrosshair) return;
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const handler = (param: { point?: { x: number; y: number } }) => {
+      const line = freeCrosshairLineRef.current;
+      if (!line) return;
+      if (!param.point) {
+        line.style.opacity = '0';
+        return;
+      }
+      line.style.opacity = '1';
+      line.style.transform = `translateX(${param.point.x}px)`;
+      // Stop the line right above the time-axis strip (its height is
+      // dynamic — font-size dependent — so read it live rather than
+      // hardcoding a px guess).
+      line.style.bottom = `${chart.timeScale().height()}px`;
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => {
+      try { chart.unsubscribeCrosshairMove(handler); } catch { /* chart may be gone */ }
+    };
+  // Re-subscribe when the chart (re)mounts — barCount confirms the series is
+  // ready, same convention the wall-tooltip effect above uses.
+  }, [freeVerticalCrosshair, barCount]);
 
   // ─── Liquidity band → autoscale sync ───────────────────────
   // When the caller updates `liquidityBand`, write it to the ref so the
@@ -2671,6 +2754,29 @@ export function FinotaurChart({
         >
           {wallTooltip.text}
         </div>
+      )}
+
+      {/* Custom free-moving vertical crosshair line (freeVerticalCrosshair prop
+          — Liquidity tab only). pointer-events:none so chart pan/zoom/click
+          and the wall-hover tooltip's own crosshairMove subscription above
+          keep working unaffected. Not rendered at all when the user's
+          crosshair style is 'hidden' — matches the native crosshair's own
+          Hidden-mode behavior instead of showing a line the settings say
+          shouldn't exist. */}
+      {freeVerticalCrosshair && crosshairLineStyle !== 'hidden' && (
+        <div
+          ref={freeCrosshairLineRef}
+          className="pointer-events-none absolute left-0 top-0 z-20"
+          style={{
+            width: 0,
+            bottom: 0,
+            opacity: 0,
+            borderLeftWidth: 1,
+            borderLeftStyle: crosshairLineStyle === 'solid' ? 'solid' : 'dashed',
+            borderLeftColor: themeTokens.crosshair,
+            willChange: 'transform, opacity',
+          }}
+        />
       )}
 
       {/* Watermark — subtle Finotaur signature, bottom-right above the timescale */}
