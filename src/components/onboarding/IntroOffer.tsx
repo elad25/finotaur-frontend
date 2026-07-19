@@ -10,7 +10,7 @@
 // No coupon codes — the discount lives on a hidden Whop plan.
 // ================================================
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Gift, Clock, ArrowRight, Crown, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
@@ -18,6 +18,7 @@ import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 import { supabase } from '@/lib/supabase';
 import { INTRO_OFFER, REFERRAL_OFFER } from '@/lib/whop-config';
 import { track } from '@/lib/analytics';
+import { getFirstTouch, getTouches } from '@/lib/analytics/attribution';
 import { toast } from 'sonner';
 
 // =====================================================
@@ -26,6 +27,29 @@ import { toast } from 'sonner';
 const OFFER_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 const CACHE_KEY = 'finotaur_intro_offer_state';
 const INTRO_OFFER_STARTED_EVENT = 'finotaur:intro-offer-started';
+
+// Campaigns whose ads carry their own offer (e.g. f3_beta → BETA100 chip).
+// Users arriving from these ads must NOT see the INTRO25 popup — competing
+// offers within one session confused real users (observed 2026-07-19).
+const SUPPRESSED_CAMPAIGNS = ['f3_beta'];
+
+/**
+ * Best-effort check: does any stored attribution touch (first touch or the
+ * multi-touch chain) carry a suppressed utm_campaign? Fail-open on any
+ * localStorage/parse error — behave as if nothing is suppressed.
+ */
+function isFromSuppressedCampaign(): boolean {
+  try {
+    const firstTouch = getFirstTouch();
+    if (firstTouch.utm_campaign && SUPPRESSED_CAMPAIGNS.includes(firstTouch.utm_campaign)) {
+      return true;
+    }
+    const touches = getTouches();
+    return touches.some((touch) => !!touch.utm_campaign && SUPPRESSED_CAMPAIGNS.includes(touch.utm_campaign));
+  } catch {
+    return false;
+  }
+}
 
 // Legacy WelcomeOffer keys — read once to shim existing users into a
 // terminal intro_offer_state row so they never see the new popup twice.
@@ -109,6 +133,10 @@ function getStoredReferralCode(): string | null {
  */
 export const startIntroOffer = async (): Promise<void> => {
   try {
+    // Ad-competing campaigns (e.g. f3_beta → BETA100) never get INTRO25 —
+    // don't even create the server row for them.
+    if (isFromSuppressedCampaign()) return;
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -171,6 +199,10 @@ export default function IntroOffer() {
   const expiredHandledRef = useRef(false);
   const shownTrackedRef = useRef(false);
 
+  // Computed once per mount — ad-competing campaigns (e.g. f3_beta) suppress
+  // the popup entirely for this browser. Fail-open on any storage error.
+  const suppressed = useMemo(() => isFromSuppressedCampaign(), []);
+
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
       // Optimistic — the webhook marks the server row 'used' once payment
@@ -228,6 +260,12 @@ export default function IntroOffer() {
     let cancelled = false;
 
     async function init() {
+      // Suppressed campaign — never fires a network call, never shows.
+      if (suppressed) {
+        setVisibility('none');
+        return;
+      }
+
       // A terminal cache entry means we already know the answer — never
       // fires a network call for it again.
       const cached = readCache();
@@ -335,7 +373,7 @@ export default function IntroOffer() {
     return () => {
       cancelled = true;
     };
-  }, [user, offerStartSignal]);
+  }, [user, offerStartSignal, suppressed]);
 
   // ─── Track "shown" once, when the offer first becomes active ─────────
   useEffect(() => {
@@ -422,7 +460,7 @@ export default function IntroOffer() {
     });
   };
 
-  if (visibility !== 'active') return null;
+  if (suppressed || visibility !== 'active') return null;
 
   const { minutes, seconds } = formatTime(timeLeft);
   const isUrgent = timeLeft < 5 * 60 * 1000;
