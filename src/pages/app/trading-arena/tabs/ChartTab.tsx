@@ -80,6 +80,7 @@ import {
   type ArenaInterval,
   type CandleSourceKind,
 } from '../utils/intervals';
+import { useKlineDelta, isKlineDeltaInterval } from '../hooks/useKlineDelta';
 import { ChartStyleContext, DEFAULT_CHART_STYLE } from '../components/chartStyleSettings';
 import type { SessionVolumeProfileRenderSettings } from '@/components/charting/orderflow/SessionVolumeProfileLayer';
 import type { ArenaIndicatorInstance } from '../components/indicatorsSettings';
@@ -517,7 +518,7 @@ export function ChartTab({
   // e.g. "MNQ=F", "EURUSD=X") — the per-branch mapper calls below are
   // idempotent passthroughs in that case and only do real work for symbols
   // that arrive in a raw/contract-code form.
-  const { chartDataSource, chartSymbol, chartInterval } = useMemo(() => {
+  const { chartDataSource, chartSymbol, chartInterval, klineDeltaInterval } = useMemo(() => {
     let resolvedSymbol: string;
     let kind: CandleSourceKind;
     let source: ChartDataSource;
@@ -555,12 +556,50 @@ export function ChartTab({
       : new AggregatingSource(source, plan.targetSeconds, plan.baseInterval);
     const resolvedInterval = plan.kind === 'native' ? plan.interval : plan.baseInterval;
 
+    // CVD/DELTA indicators (C5) — useKlineDelta only understands Binance's
+    // fixed native intervals (see useKlineDelta.ts's INTERVAL_MAP /
+    // isKlineDeltaInterval) and only makes sense for a NATIVE (non-aggregated)
+    // resolution — an aggregated custom timeframe has no matching Binance
+    // kline endpoint to request. null means "CVD/DELTA can't be computed for
+    // this symbol/interval combo" — same gating FootprintTab.tsx's crypto
+    // body already applies via its own `klineDeltaInterval`/KLINE_DELTA_NATIVE.
+    const klineDeltaIv = kind === 'binance' && plan.kind === 'native' && isKlineDeltaInterval(plan.interval)
+      ? plan.interval
+      : null;
+
     return {
       chartDataSource: resolvedDataSource,
       chartSymbol: resolvedSymbol,
       chartInterval: resolvedInterval,
+      klineDeltaInterval: klineDeltaIv,
     };
   }, [symbol, assetClass, interval]);
+
+  // CVD/DELTA order-flow indicators (C5) — fed into FinotaurChart via its
+  // `orderFlowData` prop. useKlineDelta is ALWAYS called (rules of hooks);
+  // its own `enabled` param (see that hook's doc comment) is what actually
+  // gates the Binance fetch — only crypto symbols on a native
+  // Binance-kline-supported interval, and only while the user has an active
+  // CVD or DELTA indicator instance (`indicators`, single source of truth
+  // lives in TradingArena.tsx).
+  const wantsOrderFlow = useMemo(
+    () => indicators.some((ind) => ind.type === 'CVD' || ind.type === 'DELTA'),
+    [indicators],
+  );
+  const klineDeltaEnabled = wantsOrderFlow && klineDeltaInterval !== null;
+  const klineDelta = useKlineDelta(chartSymbol, klineDeltaInterval ?? '1m', klineDeltaEnabled);
+
+  // Merge the hook's separate cvd[]/delta[] arrays (keyed by matching bar
+  // time — both are derived from the SAME klines fetch, see useKlineDelta.ts)
+  // into the single {time,cvd,delta}[] shape FinotaurChart's `orderFlowData`
+  // prop expects. undefined (not an empty array) when gated off, so
+  // FinotaurChart never reserves a CVD/DELTA pane for a symbol/interval that
+  // can't supply the data.
+  const orderFlowData = useMemo(() => {
+    if (!klineDeltaEnabled || klineDelta.loadState !== 'loaded' || klineDelta.cvd.length === 0) return undefined;
+    const deltaByTime = new Map(klineDelta.delta.map((d) => [d.time, d.value] as const));
+    return klineDelta.cvd.map((c) => ({ time: c.time, cvd: c.value, delta: deltaByTime.get(c.time) ?? 0 }));
+  }, [klineDeltaEnabled, klineDelta.loadState, klineDelta.cvd, klineDelta.delta]);
 
   // Always called unconditionally (hooks rule). For non-crypto, the symbol
   // won't match a Binance pair — lastPrice will stay null, disabling the rail.
@@ -735,6 +774,7 @@ export function ChartTab({
             orderLines={orderLines}
             onLastBarClose={isFutures ? handleLastBarClose : undefined}
             viewSyncKey={viewSyncKey}
+            orderFlowData={orderFlowData}
           />
         </div>
       </div>

@@ -43,6 +43,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import type { UTCTimestamp } from 'lightweight-charts';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
@@ -239,6 +240,66 @@ function statusLabel(status: TradeSourceStatus): string {
 // One module-level singleton per file — BinanceSource is stateless (same
 // pattern ChartTab.tsx and LiquidityTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
+
+// ─── CVD/DELTA order-flow data (C6) ─────────────────────────────────────────
+//
+// Feeds FinotaurChart's `orderFlowData` prop straight from the SAME
+// FlowBinStore instance each body already uses for its footprint/volume-
+// profile overlays — source-agnostic (crypto AND futures, unlike
+// useKlineDelta which is Binance-klines-only), no extra network call.
+// Mirrors CvdDeltaSubPanes.tsx's useStoreDelta store-subscription pattern
+// (onChange + a steady poll heartbeat), just returns ONE combined
+// {time,cvd,delta}[] array (FinotaurChart's `orderFlowData` shape) instead
+// of two separate cvd/delta arrays.
+const ORDER_FLOW_WINDOW_SEC = 60 * 60 * 24; // 24h — generous, cheap (getRange scans a sorted array by key).
+const ORDER_FLOW_POLL_MS = 1_000; // ~1s recompute cadence.
+
+/**
+ * Active only when `enabled` AND `store` is provided — otherwise no
+ * subscription is created and the hook returns `undefined` (not an empty
+ * array), so FinotaurChart never reserves a CVD/DELTA pane when the data
+ * isn't wanted or isn't available. Always called unconditionally (rules of
+ * hooks) — callers pass `undefined`/`false` to no-op.
+ */
+function useFootprintOrderFlowData(
+  store: FlowBinStore | undefined,
+  enabled: boolean,
+): { time: UTCTimestamp; cvd: number; delta: number }[] | undefined {
+  const dataRef = useRef<{ time: UTCTimestamp; cvd: number; delta: number }[]>([]);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!enabled || !store) return;
+
+    function recompute() {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const range = store!.getRange(nowSec - ORDER_FLOW_WINDOW_SEC, nowSec + 3600);
+      let running = 0;
+      dataRef.current = range.map((c) => {
+        running += c.delta;
+        return { time: c.time as UTCTimestamp, cvd: running, delta: c.delta };
+      });
+      setTick((n) => n + 1);
+    }
+
+    recompute();
+    const unsubscribe = store.onChange(recompute);
+    const poll = setInterval(recompute, ORDER_FLOW_POLL_MS);
+    return () => {
+      unsubscribe();
+      clearInterval(poll);
+    };
+  }, [store, enabled]);
+
+  // `tick` only keeps the memo dependency honest (data itself lives in the
+  // ref, mutated by `recompute` above) — same idiom as useStoreDelta in
+  // CvdDeltaSubPanes.tsx.
+  return useMemo(
+    () => (enabled && store ? dataRef.current : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [enabled, store, tick],
+  );
+}
 
 export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, onSelectSymbol }: FootprintTabProps) {
   const [futuresRoot, setFuturesRoot] = useState<FuturesRoot>('NQ');
@@ -580,6 +641,15 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
     backfillBars: 40,
   });
 
+  // CVD/DELTA order-flow indicators (C6) — see useFootprintOrderFlowData's
+  // header comment above. Fires only when the user has an active CVD/DELTA
+  // indicator instance.
+  const wantsOrderFlow = useMemo(
+    () => indicators.some((ind) => ind.type === 'CVD' || ind.type === 'DELTA'),
+    [indicators],
+  );
+  const orderFlowData = useFootprintOrderFlowData(store, wantsOrderFlow);
+
   // Row-size clamp signal — cheapest correct hook point: useOrderFlow's own
   // effect (declared earlier in this component, via the `useOrderFlow` call
   // above) synchronously calls store.setConfig({ rowSize, ... }) whenever
@@ -682,6 +752,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
               mutedCandles={mutedCandles}
               viewSyncKey={viewSyncKey}
               viewSyncRestoreMaxBars={VIEW_SYNC_RESTORE_MAX_BARS}
+              orderFlowData={orderFlowData}
             />
           </div>
 
@@ -820,6 +891,14 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
     source: tradeSource,
     backfillBars: 40,
   });
+
+  // CVD/DELTA order-flow indicators (C6) — see useFootprintOrderFlowData's
+  // header comment above CryptoFootprintBody's usage.
+  const wantsOrderFlow = useMemo(
+    () => indicators.some((ind) => ind.type === 'CVD' || ind.type === 'DELTA'),
+    [indicators],
+  );
+  const orderFlowData = useFootprintOrderFlowData(store, wantsOrderFlow);
 
   // Row-size clamp signal — same hook-ordering rationale as CryptoFootprintBody above.
   const [rowSizeClamped, setRowSizeClamped] = useState(false);
@@ -1022,6 +1101,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
                 onStageChange: setFootprintStage,
               }}
               mutedCandles={mutedCandles}
+              orderFlowData={orderFlowData}
             />
           )}
         </div>
@@ -1197,6 +1277,14 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
     source: tradeSource,
     backfillBars: 40,
   });
+
+  // CVD/DELTA order-flow indicators (C6) — see useFootprintOrderFlowData's
+  // header comment above CryptoFootprintBody's usage.
+  const wantsOrderFlow = useMemo(
+    () => indicators.some((ind) => ind.type === 'CVD' || ind.type === 'DELTA'),
+    [indicators],
+  );
+  const orderFlowData = useFootprintOrderFlowData(store, wantsOrderFlow);
 
   const [rowSizeClamped, setRowSizeClamped] = useState(false);
   useEffect(() => {
@@ -1419,6 +1507,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
                 onStageChange: setFootprintStage,
               }}
               mutedCandles={mutedCandles}
+              orderFlowData={orderFlowData}
             />
           ) : (
             <Nt8ConnectPanel variant="footprint" />
