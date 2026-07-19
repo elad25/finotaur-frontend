@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolbarTrigger } from './ToolbarTrigger';
 import type { FootprintCellMode } from '@/components/charting/orderflow/types';
-import type { FootprintColorScheme, FootprintLayout, FootprintSettings } from './footprintSettings';
+import type { FootprintColorScheme, FootprintColumnSpacing, FootprintLayout, FootprintSettings } from './footprintSettings';
 import { snapRowSizePriceToTick, snapRowSizeTicksToInt, FOOTPRINT_AUTO_TRANSFORM_MIN_PX_RANGE } from './footprintSettings';
 
 export interface FootprintSettingsMenuProps {
@@ -49,6 +49,12 @@ const COLOR_SCHEME_OPTIONS: { value: FootprintColorScheme; label: string }[] = [
   { value: 'delta', label: 'Delta' },
   { value: 'volumeHeat', label: 'Volume heat' },
   { value: 'solid', label: 'Solid' },
+];
+
+const COLUMN_SPACING_OPTIONS: { value: FootprintColumnSpacing; label: string }[] = [
+  { value: 'compact', label: 'Compact' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'wide', label: 'Wide' },
 ];
 
 function pillClass(active: boolean): string {
@@ -136,6 +142,23 @@ export function FootprintSettingsMenu({ settings, onChange, tickSize, rowSizeCla
                     {opt.label}
                   </button>
                 ))}
+              </div>
+
+              {/* Column spacing — gap reserved between adjacent bars' footprint bands, so numbers never overlap. */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#C0C0C0]">Column spacing</span>
+                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Footprint column spacing">
+                  {COLUMN_SPACING_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onChange({ columnSpacing: opt.value })}
+                      className={pillClass(settings.columnSpacing === opt.value)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* ATAS "Auto transform candles to footprint" (S1 "Arena WOW week") */}

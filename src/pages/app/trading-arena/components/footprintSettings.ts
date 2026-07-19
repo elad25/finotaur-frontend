@@ -20,14 +20,16 @@ import {
   DEFAULT_STACKED_MIN,
   type FootprintCellMode,
   type FootprintColorScheme,
+  type FootprintColumnSpacing,
   type FootprintConfig,
   type FootprintLayout,
 } from '@/components/charting/orderflow/types';
 
-// FootprintLayout / FootprintColorScheme are defined in orderflow/types.ts
-// (they're FootprintConfig fields too — see footprintSettingsToConfig below)
-// and re-exported here so UI callers only need to import from this module.
-export type { FootprintColorScheme, FootprintLayout };
+// FootprintLayout / FootprintColorScheme / FootprintColumnSpacing are defined
+// in orderflow/types.ts (they're FootprintConfig fields too — see
+// footprintSettingsToConfig below) and re-exported here so UI callers only
+// need to import from this module.
+export type { FootprintColorScheme, FootprintColumnSpacing, FootprintLayout };
 
 export type FootprintRowSizeMode = 'auto' | 'price' | 'ticks';
 
@@ -68,6 +70,12 @@ export interface FootprintSettings {
   layout: FootprintLayout;
   /** Cell color scheme. Non-'delta' dispatch lands in PR 3 — persisted/exposed now. */
   colorScheme: FootprintColorScheme;
+  /**
+   * Horizontal gap reserved between adjacent bars' footprint bands — fixes
+   * the bug where neighboring candles' cell numbers overlapped/mashed
+   * together. Default 'normal'. See FootprintColumnSpacing's doc comment.
+   */
+  columnSpacing: FootprintColumnSpacing;
   /** Diagonal-imbalance ratio threshold, as a percent (300 = 3.0x / 300%). */
   imbalanceRatioPct: number;
   /** Minimum consecutive same-side imbalanced levels to qualify as a "stacked" zone. */
@@ -124,6 +132,7 @@ export const DEFAULT_FOOTPRINT_SETTINGS: FootprintSettings = {
   content: 'bidAsk',
   layout: 'numbers',
   colorScheme: 'delta',
+  columnSpacing: 'normal',
   imbalanceRatioPct: 300,
   imbalanceStackedCount: DEFAULT_STACKED_MIN,
   imbalanceStackedOnly: false,
@@ -190,6 +199,7 @@ export function footprintSettingsToConfig(
     magnifierEnabled: settings.magnifierEnabled,
     layout: settings.layout,
     colorScheme: settings.colorScheme,
+    columnSpacing: settings.columnSpacing,
     showValueArea: settings.showValueArea,
     statsRows: settings.statsRows,
     valuesDivider: settings.valuesDivider,

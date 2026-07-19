@@ -225,6 +225,19 @@ export type FootprintLayout = 'numbers' | 'histogram';
  */
 export type FootprintColorScheme = 'delta' | 'volumeHeat' | 'solid';
 
+/**
+ * Inter-bar horizontal spacing preset for the footprint band. Fixes the bug
+ * where adjacent candles' footprint cells touched and neighboring cells'
+ * numbers overlapped/mashed together (e.g. "0.12" running into "9.59") —
+ * Elad screenshot report, 2026-07-19. Maps to a GAP FRACTION of the bar's
+ * full pixel slot (candleWidthPx) via `resolveColumnSpacingFraction` in
+ * footprintRender.ts, clamped to [FOOTPRINT_COLUMN_GAP_MIN_PX,
+ * FOOTPRINT_COLUMN_GAP_MAX_PX] (footprintTheme.ts). Default 'normal' is the
+ * new baseline spacing (previously the band always spanned the FULL bar
+ * slot with no gap at all).
+ */
+export type FootprintColumnSpacing = 'compact' | 'normal' | 'wide';
+
 export interface FootprintConfig {
   cellMode: FootprintCellMode;
   /** Which opinionated imbalance preset is active — drives the fields below. */
@@ -304,6 +317,11 @@ export interface FootprintConfig {
    * today). Dispatch for 'volumeHeat'/'solid' lands in PR 3.
    */
   colorScheme: FootprintColorScheme;
+  /**
+   * Horizontal gap reserved between adjacent bars' footprint bands — see
+   * FootprintColumnSpacing's doc comment. Default 'normal'.
+   */
+  columnSpacing: FootprintColumnSpacing;
   /**
    * Render the Value Area band (VAH/VAL) on the volume-profile overlay.
    * Default OFF. Dispatch lands in PR 3 — plumbed here for persistence
@@ -401,6 +419,7 @@ export const DEFAULT_FOOTPRINT_CONFIG: FootprintConfig = {
   magnifierEnabled: true,
   layout: 'numbers',
   colorScheme: 'delta',
+  columnSpacing: 'normal',
   showValueArea: false,
   statsRows: {
     volume: true,
