@@ -118,6 +118,10 @@ export function migrateV1ToV2(v1Raw: unknown): ArenaIndicatorPreferences {
     bbands: p.bbands === true,
     atr: p.atr === true,
     volumeProfile: true,
+    // CVD/DELTA didn't exist when v1 was written — always false for a
+    // migrated user, same as every other field that had no v1 counterpart.
+    cvd: false,
+    delta: false,
   };
 
   return { enabled, params: { ...ARENA_INDICATOR_PARAM_DEFAULTS } };

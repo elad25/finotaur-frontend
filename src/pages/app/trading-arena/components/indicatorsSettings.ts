@@ -38,6 +38,10 @@ import { isIntradayInterval } from '@/components/charting/indicators';
 // ═══════════════════════════════════════════════════════════════
 export interface ArenaIndicatorEnabled extends IndicatorSettings {
   volumeProfile: boolean;
+  /** Cumulative Volume Delta — crypto-only order-flow indicator (see `orderFlowData` on FinotaurChart.tsx). */
+  cvd: boolean;
+  /** Per-Bar Volume Delta — crypto-only order-flow indicator (see `orderFlowData` on FinotaurChart.tsx). */
+  delta: boolean;
 }
 
 export type ArenaIndicatorKey = keyof ArenaIndicatorEnabled;
@@ -107,6 +111,20 @@ export const ARENA_INDICATOR_DEFINITIONS: ArenaIndicatorDefinition[] = [
     description: 'Average True Range - volatility measured in price, not percent.',
     section: 'panes',
   },
+  {
+    key: 'cvd',
+    label: 'CVD (Cumulative Volume Delta)',
+    shortLabel: 'CVD',
+    description: 'Running total of buy minus sell volume - crypto-only data for now.',
+    section: 'panes',
+  },
+  {
+    key: 'delta',
+    label: 'Delta (Per-Bar Volume Delta)',
+    shortLabel: 'Delta',
+    description: 'Buy minus sell volume for the current bar - crypto-only data for now.',
+    section: 'panes',
+  },
 ];
 
 export function getArenaIndicatorDefinition(key: ArenaIndicatorKey): ArenaIndicatorDefinition {
@@ -117,6 +135,8 @@ export function getArenaIndicatorDefinition(key: ArenaIndicatorKey): ArenaIndica
 export const ARENA_INDICATOR_ENABLED_DEFAULTS: ArenaIndicatorEnabled = {
   ...INDICATOR_DEFAULTS,
   volumeProfile: true,
+  cvd: false,
+  delta: false,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -135,6 +155,11 @@ export interface MacdParams {
 export interface BbandsParams {
   period: number;
   stdDev: number;
+}
+
+/** CVD's only editable param — see `Indicator.displayMode` (types.ts) for the chart-side effect. */
+export interface CvdParams {
+  displayMode: 'pane' | 'overlay';
 }
 
 export interface ArenaIndicatorParams {
@@ -266,6 +291,17 @@ export const DEFAULT_ARENA_INDICATOR_STYLES: ArenaIndicatorStyles = {
     lower: defaultLineStyle('#a78bfa', 0.5, 1),
   },
 };
+
+/**
+ * Default line colors for CVD / DELTA — kept separate from
+ * `DEFAULT_ARENA_INDICATOR_STYLES` (that record's shape mirrors the legacy
+ * v1-v3 `ArenaIndicatorStyles` interface, which these two new types were
+ * deliberately NOT added to) but chosen to match FinotaurChart.tsx's
+ * `INDICATOR_COLORS.CVD`/`.DELTA` so a fresh instance's Style-tab swatch
+ * matches what's already on the chart before any user edit.
+ */
+const CVD_DEFAULT_LINE_COLOR = '#38bdf8';   // sky-400
+const DELTA_DEFAULT_LINE_COLOR = '#fb923c'; // orange-400
 
 /** ~20-color swatch palette shown in the Style tab's color popover. */
 export const INDICATOR_COLOR_SWATCHES: string[] = [
@@ -428,6 +464,8 @@ export function sanitizeArenaIndicatorEnabled(
     bbands: asBool(p.bbands, fallback.bbands),
     atr: asBool(p.atr, fallback.atr),
     volumeProfile: asBool(p.volumeProfile, fallback.volumeProfile),
+    cvd: asBool(p.cvd, fallback.cvd),
+    delta: asBool(p.delta, fallback.delta),
   };
 }
 
@@ -623,6 +661,9 @@ export interface ArenaIndicatorParamsByType {
   rsi: PeriodParam;
   macd: MacdParams;
   atr: PeriodParam;
+  cvd: CvdParams;
+  /** Param-less, same as vwap — no editable settings. */
+  delta: Record<string, never>;
 }
 
 /** Per-type style shape — mirrors `ArenaIndicatorStyles` above but also covers volumeProfile (no chart-line style of its own). */
@@ -635,6 +676,16 @@ export interface ArenaIndicatorStylesByType {
   rsi: ArenaSingleLineStyle;
   macd: ArenaMacdStyle;
   atr: ArenaSingleLineStyle;
+  cvd: ArenaSingleLineStyle;
+  /**
+   * Single style slot, reused as the histogram's BASE color — actual bars
+   * are always colored per-point by sign (green up / red down, see
+   * FinotaurChart.tsx's DELTA data-apply case), same pattern as MACD's
+   * histogram. No "Auto" override slot exists yet for this v1 pass; this
+   * color is mostly inert today (kept for the visible/opacity toggle and to
+   * match every other indicator's Style-tab shape).
+   */
+  delta: ArenaSingleLineStyle;
 }
 
 /**
@@ -665,8 +716,11 @@ export function defaultParamsForType(type: ArenaIndicatorKey): ArenaIndicatorPar
       return { ...ARENA_INDICATOR_PARAM_DEFAULTS.bbands };
     case 'atr':
       return { ...ARENA_INDICATOR_PARAM_DEFAULTS.atr };
+    case 'cvd':
+      return { displayMode: 'pane' } satisfies CvdParams;
     case 'vwap':
     case 'volumeProfile':
+    case 'delta': // param-less, same as vwap
     default:
       return {};
   }
@@ -680,6 +734,10 @@ export function defaultStylesForType(type: ArenaIndicatorKey): ArenaIndicatorSty
       return { ...DEFAULT_ARENA_INDICATOR_STYLES.bbands };
     case 'volumeProfile':
       return {};
+    case 'cvd':
+      return { line: defaultLineStyle(CVD_DEFAULT_LINE_COLOR) };
+    case 'delta':
+      return { line: defaultLineStyle(DELTA_DEFAULT_LINE_COLOR) };
     case 'ema':
     case 'sma':
     case 'vwap':
@@ -740,8 +798,14 @@ function sanitizeInstanceParams(type: ArenaIndicatorKey, raw: unknown): ArenaInd
         stdDev: asClampedFloat(p.stdDev, f.stdDev, BBANDS_STDDEV_RANGE.min, BBANDS_STDDEV_RANGE.max),
       };
     }
+    case 'cvd': {
+      // Invalid/missing displayMode coerces to 'pane' (the safe/default layout).
+      const displayMode = p.displayMode === 'overlay' ? 'overlay' : 'pane';
+      return { displayMode } satisfies CvdParams;
+    }
     case 'vwap':
     case 'volumeProfile':
+    case 'delta': // param-less, same as vwap
     default:
       return {};
   }
@@ -1009,6 +1073,30 @@ export function buildIndicatorsFromArenaSettings(
         list.push({
           type: 'ATR',
           period: params.period,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+        });
+        break;
+      }
+      case 'cvd': {
+        const params = instance.params as CvdParams;
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'CVD',
+          period: 0,
+          instanceId: instance.id,
+          color: styles.line.color,
+          lineStyles: { line: toChartLineStyle(styles.line) },
+          displayMode: params.displayMode,
+        });
+        break;
+      }
+      case 'delta': {
+        const styles = instance.styles as ArenaSingleLineStyle;
+        list.push({
+          type: 'DELTA',
+          period: 0,
           instanceId: instance.id,
           color: styles.line.color,
           lineStyles: { line: toChartLineStyle(styles.line) },
