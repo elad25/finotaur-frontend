@@ -227,9 +227,6 @@ export function PaperTradeRail({
           {/* Header row */}
           <div className="flex items-center justify-between">
             <span className={cn('text-[13px] font-bold', light ? 'text-[#131722]' : 'text-white')}>{symbol}</span>
-            <span className="rounded border border-[#C9A646]/30 bg-[#C9A646]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C9A646]">
-              Paper
-            </span>
           </div>
 
           {/* Order button grid */}
@@ -265,7 +262,6 @@ export function PaperTradeRail({
               className="flex flex-col items-center rounded-md border border-[rgba(29,158,117,0.2)] bg-[rgba(29,158,117,0.06)] py-1.5 text-[11px] font-semibold text-[#3ddc9a] transition-colors hover:bg-[rgba(29,158,117,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Buy Bid
-              <span className="text-[9px] font-normal normal-case text-[#3ddc9a]/60">wait · limit</span>
             </button>
             <button
               type="button"
@@ -277,7 +273,6 @@ export function PaperTradeRail({
               className="flex flex-col items-center rounded-md border border-[rgba(212,83,126,0.2)] bg-[rgba(212,83,126,0.06)] py-1.5 text-[11px] font-semibold text-[#ff6b93] transition-colors hover:bg-[rgba(212,83,126,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Sell Ask
-              <span className="text-[9px] font-normal normal-case text-[#ff6b93]/60">wait · limit</span>
             </button>
 
             <button
