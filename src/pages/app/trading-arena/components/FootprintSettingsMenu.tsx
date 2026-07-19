@@ -255,6 +255,22 @@ export function FootprintSettingsMenu({ settings, onChange, tickSize, rowSizeCla
               >
                 Magnifier
               </button>
+              <button
+                type="button"
+                onClick={() => onChange({ showCvd: !settings.showCvd })}
+                aria-pressed={settings.showCvd}
+                className={pillClass(settings.showCvd)}
+              >
+                CVD
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ showDelta: !settings.showDelta })}
+                aria-pressed={settings.showDelta}
+                className={pillClass(settings.showDelta)}
+              >
+                Delta
+              </button>
             </div>
           </div>
 

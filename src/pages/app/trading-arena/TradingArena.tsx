@@ -52,12 +52,19 @@ import { ArenaTabSwitcher } from './components/ArenaTabSwitcher';
 import { ArenaWorkspaceTabs } from './components/ArenaWorkspaceTabs';
 import { AccountSelector } from './components/AccountSelector';
 import { ArenaBrokerConnect } from './components/ArenaBrokerConnect';
+import { IndicatorSettingsDialog } from './components/IndicatorSettingsDialog';
 import { useArenaIndicatorPreferences } from './hooks/useArenaIndicatorPreferences';
 import { useArenaOrderflowPrefetch } from './hooks/useArenaOrderflowPrefetch';
 import { useChartStylePreferences } from './hooks/useChartStylePreferences';
 import { useArenaWorkspaces } from './hooks/useArenaWorkspaces';
 import { ChartStyleContext } from './components/chartStyleSettings';
-import { buildIndicatorsFromArenaSettings, type ArenaIndicatorEnabled, type ArenaIndicatorKey } from './components/indicatorsSettings';
+import {
+  buildIndicatorsFromArenaSettings,
+  isIntervalVisibleForIndicators,
+  type ArenaIndicatorEnabled,
+  type ArenaIndicatorKey,
+} from './components/indicatorsSettings';
+import { isIntradayInterval } from '@/components/charting/indicators';
 import type { Indicator } from '@/components/charting/types';
 
 // ---------------------------------------------------------------------------
@@ -125,8 +132,13 @@ export default function TradingArena() {
   const {
     enabled: indicatorsEnabled,
     params: indicatorsParams,
+    styles: indicatorsStyles,
+    visibility: indicatorsVisibility,
     updateEnabled: updateIndicatorsEnabled,
     updateParams: updateIndicatorsParams,
+    updateStyles: updateIndicatorsStyles,
+    updateVisibility: updateIndicatorsVisibility,
+    resetIndicator: resetIndicatorSettings,
     reset: resetIndicators,
   } = useArenaIndicatorPreferences();
 
@@ -142,6 +154,12 @@ export default function TradingArena() {
   const [chartSettingsDialogOpen, setChartSettingsDialogOpen] = useState(false);
   const [indicatorsDialogOpen, setIndicatorsDialogOpen] = useState(false);
   const [indicatorSettingsKey, setIndicatorSettingsKey] = useState<ArenaIndicatorKey | null>(null);
+  // Gear/legend "settings" click opens THIS dialog (TradingView-style
+  // Inputs/Style/Visibility) — separate from `indicatorsDialogOpen`, which
+  // is the "+ Indicators" catalog (IndicatorsDialog.tsx). Both share
+  // `indicatorSettingsKey` for "which indicator" since only one is ever
+  // visible at a time.
+  const [indicatorSettingsDialogOpen, setIndicatorSettingsDialogOpen] = useState(false);
   const [hiddenIndicators, setHiddenIndicators] = useState<Partial<Record<ArenaIndicatorKey, boolean>>>({});
 
   const visibleIndicatorsEnabled = useMemo(
@@ -159,10 +177,14 @@ export default function TradingArena() {
     [indicatorsEnabled, hiddenIndicators],
   );
 
-  const indicators = useMemo<Indicator[]>(
-    () => buildIndicatorsFromArenaSettings(visibleIndicatorsEnabled, indicatorsParams, interval),
-    [visibleIndicatorsEnabled, indicatorsParams, interval],
-  );
+  // Visibility gating: the GLOBAL Visibility tab (see IndicatorSettingsDialog.tsx)
+  // can hide ALL indicators on the current timeframe bucket. Plots hide, but
+  // the legend (driven by `indicatorsEnabled`/`hiddenIndicators`, not this
+  // array) intentionally keeps showing what's configured.
+  const indicators = useMemo<Indicator[]>(() => {
+    if (!isIntervalVisibleForIndicators(interval, indicatorsVisibility)) return [];
+    return buildIndicatorsFromArenaSettings(visibleIndicatorsEnabled, indicatorsParams, interval, indicatorsStyles);
+  }, [visibleIndicatorsEnabled, indicatorsParams, interval, indicatorsStyles, indicatorsVisibility]);
 
   const handleIndicatorHiddenToggle = useCallback((key: ArenaIndicatorKey) => {
     setHiddenIndicators((current) => ({ ...current, [key]: current[key] !== true }));
@@ -174,9 +196,12 @@ export default function TradingArena() {
     if (indicatorSettingsKey === key) setIndicatorSettingsKey(null);
   }, [indicatorSettingsKey, updateIndicatorsEnabled]);
 
+  // Gear/legend "settings" click opens the NEW per-indicator dialog directly
+  // (Inputs/Style/Visibility) — NOT the "+ Indicators" catalog. The catalog
+  // is still reachable via ArenaToolbar's "Indicators (N)" trigger.
   const handleOpenIndicatorSettings = useCallback((key: ArenaIndicatorKey) => {
     setIndicatorSettingsKey(key);
-    setIndicatorsDialogOpen(true);
+    setIndicatorSettingsDialogOpen(true);
   }, []);
 
   const handleIndicatorsReset = useCallback(() => {
@@ -184,6 +209,8 @@ export default function TradingArena() {
     setHiddenIndicators({});
     setIndicatorSettingsKey(null);
   }, [resetIndicators]);
+
+  const intraday = useMemo(() => isIntradayInterval(interval), [interval]);
 
   // Order-flow raw-trade cache warm-up (PR 3, H4) — mounts a fire-and-forget
   // phase-1-sized backfill into flowStoreCache regardless of which tab is
@@ -376,6 +403,26 @@ export default function TradingArena() {
             chartSettingsDialogOpen={chartSettingsDialogOpen}
             onChartSettingsDialogOpenChange={setChartSettingsDialogOpen}
             assetClass={assetClass}
+          />
+
+          {/* Per-indicator TradingView-style settings (Inputs/Style/Visibility) —
+              opened from ActiveIndicatorsLegend.tsx's gear icon, NOT the "+
+              Indicators" catalog above. Rendered here (always mounted) so it
+              opens from any tab that surfaces the legend. */}
+          <IndicatorSettingsDialog
+            open={indicatorSettingsDialogOpen}
+            onOpenChange={setIndicatorSettingsDialogOpen}
+            indicatorKey={indicatorSettingsKey}
+            params={indicatorsParams}
+            onUpdateParams={updateIndicatorsParams}
+            styles={indicatorsStyles}
+            onUpdateStyles={updateIndicatorsStyles}
+            visibility={indicatorsVisibility}
+            onUpdateVisibility={updateIndicatorsVisibility}
+            chartStyle={chartStyle}
+            onChartStyleChange={updateChartStyle}
+            intraday={intraday}
+            onResetIndicator={resetIndicatorSettings}
           />
         </div>
 

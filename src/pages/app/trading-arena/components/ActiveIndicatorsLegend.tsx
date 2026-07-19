@@ -1,4 +1,4 @@
-import { Eye, EyeOff, MoreHorizontal, Settings, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   ARENA_INDICATOR_DEFINITIONS,
@@ -100,15 +100,6 @@ export function ActiveIndicatorsLegend({
               aria-label={`Remove ${definition.label}`}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenSettings(definition.key)}
-              className="flex h-5 w-5 items-center justify-center rounded text-[#C0C0C0] hover:bg-white/10 hover:text-white"
-              title="More"
-              aria-label={`${definition.label} more options`}
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         );

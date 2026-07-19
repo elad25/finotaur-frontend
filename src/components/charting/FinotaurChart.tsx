@@ -48,6 +48,7 @@ import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import { ChartStyleContext, type ChartStyleSettings } from '@/pages/app/trading-arena/components/chartStyleSettings';
 import { DepthProfileGutter } from '@/pages/app/trading-arena/components/DepthProfileGutter';
 import { chartStyleToChartOptions, chartStyleToSeriesOptions } from '@/pages/app/trading-arena/components/chartStyleMapping';
+import { MACD_HISTOGRAM_AUTO_COLOR } from '@/pages/app/trading-arena/components/indicatorsSettings';
 import {
   createChart,
   ColorType,
@@ -67,6 +68,8 @@ import type {
   ChartMarker,
   ChartTheme,
   Indicator,
+  IndicatorLineStyle,
+  IndicatorLineStyles,
   IndicatorType,
   Interval,
 } from './types';
@@ -180,6 +183,130 @@ const INDICATOR_COLORS: Record<IndicatorType, string> = {
 // Companion colors for the multi-series indicators
 const MACD_SIGNAL_COLOR = '#fbbf24';                 // amber-400, slightly bolder than MACD line
 const BBANDS_BAND_COLOR = 'rgba(167, 139, 250, 0.5)'; // violet-400 at 0.5 opacity for upper/lower
+
+// ═══════════════════════════════════════════════════════════════
+// Per-line style resolution (Trading Arena's Style tab — see
+// IndicatorSettingsDialog.tsx + indicatorsSettings.ts's
+// `ArenaIndicatorLineStyle`/`buildIndicatorsFromArenaSettings`, which is the
+// ONLY caller that ever sets `Indicator.lineStyles`). Every helper below
+// falls back to the EXACT pre-existing hardcoded look when `override` is
+// undefined — Journal/Backtest/ReplayChart never set `lineStyles`, so their
+// charts are byte-for-byte unaffected.
+// ═══════════════════════════════════════════════════════════════
+
+/** Multiplies a `#rrggbb`/`#rgb` color's alpha by `opacity`. Non-hex input (e.g. an already-rgba fallback like BBANDS_BAND_COLOR) is returned unchanged — its alpha is already baked in. */
+function applyOpacityToHexColor(color: string, opacity: number): string {
+  if (!color.startsWith('#')) return color;
+  const clamped = Math.min(1, Math.max(0, opacity));
+  const hex = color.slice(1);
+  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+  if (full.length !== 6) return color;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return color;
+  return `rgba(${r}, ${g}, ${b}, ${clamped})`;
+}
+
+function toLightweightLineStyle(kind: IndicatorLineStyle['lineStyle']): LineStyle {
+  switch (kind) {
+    case 'dashed':
+      return LineStyle.Dashed;
+    case 'dotted':
+      return LineStyle.Dotted;
+    case 'solid':
+    default:
+      return LineStyle.Solid;
+  }
+}
+
+interface ResolvedLineOptions {
+  color: string;
+  lineWidth: 1 | 2 | 3 | 4;
+  lineStyle: LineStyle;
+  visible: boolean;
+}
+
+function resolveLineOptions(
+  override: IndicatorLineStyle | undefined,
+  fallbackColor: string,
+  fallbackWidth: 1 | 2 | 3 | 4,
+): ResolvedLineOptions {
+  const opacity = override?.opacity ?? 1;
+  const rawColor = override?.color ?? fallbackColor;
+  return {
+    color: applyOpacityToHexColor(rawColor, opacity),
+    lineWidth: override?.thickness ?? fallbackWidth,
+    lineStyle: toLightweightLineStyle(override?.lineStyle),
+    visible: override?.visible ?? true,
+  };
+}
+
+/** Series index -> `IndicatorLineStyles` slot name, in the same fixed order `createSeriesForType` creates series. */
+function styleSlotOrder(type: IndicatorType): (keyof IndicatorLineStyles)[] {
+  switch (type) {
+    case 'MACD':
+      return ['macdLine', 'signalLine', 'histogram'];
+    case 'BBANDS':
+      return ['basis', 'upper', 'lower'];
+    default:
+      return ['line'];
+  }
+}
+
+/** The pre-existing hardcoded fallback color for a given slot (used when `override` is undefined, i.e. every non-Arena caller). */
+function legacyFallbackColorForSlot(slot: keyof IndicatorLineStyles, primaryColor: string): string {
+  switch (slot) {
+    case 'signalLine':
+      return MACD_SIGNAL_COLOR;
+    case 'upper':
+    case 'lower':
+      return BBANDS_BAND_COLOR;
+    default:
+      return primaryColor;
+  }
+}
+
+function legacyFallbackWidthForSlot(slot: keyof IndicatorLineStyles): 1 | 2 | 3 | 4 {
+  return slot === 'upper' || slot === 'lower' ? 1 : 2;
+}
+
+/**
+ * (Re-)applies per-line style to an already-created series list — called
+ * every time the indicators-apply effect runs, so live edits from the Style
+ * tab reach the chart without recreating series. Idempotent — also called
+ * right after `createSeriesForType` so first paint matches this same logic.
+ */
+function applyIndicatorLineStyles(
+  seriesList: ISeriesApi<'Line' | 'Histogram'>[],
+  type: IndicatorType,
+  lineStyles: IndicatorLineStyles | undefined,
+  primaryColor: string,
+): void {
+  const slots = styleSlotOrder(type);
+  slots.forEach((slot, idx) => {
+    const series = seriesList[idx];
+    if (!series) return;
+    const override = lineStyles?.[slot];
+    if (slot === 'histogram') {
+      // Histogram bars carry their own per-point `color` (see the MACD data-
+      // application switch case) — lineWidth/lineStyle don't apply to bars.
+      (series as ISeriesApi<'Histogram'>).applyOptions({ visible: override?.visible ?? true });
+      return;
+    }
+    const resolved = resolveLineOptions(
+      override,
+      legacyFallbackColorForSlot(slot, primaryColor),
+      legacyFallbackWidthForSlot(slot),
+    );
+    (series as ISeriesApi<'Line'>).applyOptions({
+      color: resolved.color,
+      lineWidth: resolved.lineWidth,
+      lineStyle: resolved.lineStyle,
+      visible: resolved.visible,
+    });
+  });
+}
 
 // Subpane price-scale IDs. Each unknown id creates a new overlay scale in
 // lightweight-charts. The candle pane uses the built-in `right` scale.
@@ -1825,10 +1952,14 @@ export function FinotaurChart({
       if (!seriesList) {
         seriesList = createSeriesForType(chart, type, color, pickTheme(theme));
         current.set(type, seriesList);
-      } else if (seriesList.length > 0 && type !== 'MACD' && type !== 'BBANDS') {
-        // Single-series indicator: color may have changed
-        (seriesList[0] as ISeriesApi<'Line'>).applyOptions({ color });
       }
+      // Re-applies color/thickness/line-style/visibility from `ind.lineStyles`
+      // every run (idempotent right after creation too) — this is what makes
+      // live edits from the Trading Arena's Style tab reach the chart without
+      // recreating series. When `ind.lineStyles` is undefined (every non-
+      // Arena caller), every slot falls back to the EXACT pre-existing
+      // hardcoded look (see legacyFallbackColorForSlot/legacyFallbackWidthForSlot).
+      applyIndicatorLineStyles(seriesList, type, ind.lineStyles, color);
 
       // ── Compute + apply data ──────────────────────────────
       if (bars.length === 0) {
@@ -1865,7 +1996,21 @@ export function FinotaurChart({
           );
           (seriesList[0] as ISeriesApi<'Line'>).setData(macd);
           (seriesList[1] as ISeriesApi<'Line'>).setData(signal);
-          (seriesList[2] as ISeriesApi<'Histogram'>).setData(histogram);
+          // Histogram bars default to computeMACD's own per-bar green/red
+          // momentum coloring (see indicators.ts). A user-picked flat color
+          // from the Style tab (anything other than the
+          // MACD_HISTOGRAM_AUTO_COLOR sentinel) overrides every bar to that
+          // one color instead.
+          const histogramOverride = ind.lineStyles?.histogram;
+          const useCustomHistogramColor =
+            histogramOverride?.color !== undefined && histogramOverride.color !== MACD_HISTOGRAM_AUTO_COLOR;
+          const styledHistogram = useCustomHistogramColor
+            ? histogram.map((point) => ({
+                ...point,
+                color: applyOpacityToHexColor(histogramOverride!.color!, histogramOverride?.opacity ?? 1),
+              }))
+            : histogram;
+          (seriesList[2] as ISeriesApi<'Histogram'>).setData(styledHistogram);
           break;
         }
         case 'BBANDS': {
@@ -2425,23 +2570,6 @@ export function FinotaurChart({
       >
         FINOTAUR
       </div>
-
-      {/* Symbol + interval chip — top-left, replaces lightweight-charts' default */}
-      {!loading && !error && barCount > 0 && (
-        <div
-          className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-          style={{
-            borderColor: themeTokens.border,
-            background: theme === 'light' ? 'rgba(255,255,255,0.75)' : 'rgba(8,8,10,0.7)',
-            color: themeTokens.text,
-            backdropFilter: 'blur(4px)',
-          }}
-        >
-          <span style={{ color: themeTokens.brandGold }}>{symbol}</span>
-          <span className="mx-1.5 opacity-30">·</span>
-          <span>{interval}</span>
-        </div>
-      )}
 
       {showRefocusButton && !loading && !error && barCount > 0 && (
         <button

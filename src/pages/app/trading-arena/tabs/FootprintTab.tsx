@@ -224,15 +224,6 @@ function statusLabel(status: TradeSourceStatus): string {
   }
 }
 
-function quickPillClass(active: boolean): string {
-  return cn(
-    'h-7 min-w-[32px] rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
-    active
-      ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-      : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
-  );
-}
-
 // One module-level singleton per file — BinanceSource is stateless (same
 // pattern ChartTab.tsx and LiquidityTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
@@ -442,111 +433,6 @@ function LiveReviewToggle({ mode, onChange }: LiveReviewToggleProps) {
   );
 }
 
-// ─── Shared "Settings ▾ + quick toggles" strip ──────────────────────────────
-
-interface FootprintToolbarStripProps {
-  settings: FootprintSettings;
-  onSettingsChange: (patch: Partial<FootprintSettings>) => void;
-  /** Current instrument tick size — drives the dialog's Row Size $/ticks translation + snapping. */
-  tickSize: number;
-  /** True when FlowBinStore.wasRowSizeClamped() reports the last setConfig() clamped the row size upward. */
-  rowSizeClamped: boolean;
-  /** Chart tab (general chart-style settings) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
-  chartStyle: ChartStyleSettings;
-  onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
-  onChartStyleReset: () => void;
-  /** 'crypto' | 'futures' — literal per body, only used for the dialog's disabled-hint copy. */
-  assetClass: string;
-  showCvd: boolean;
-  showDelta: boolean;
-  onToggleCvd: () => void;
-  onToggleDelta: () => void;
-  statusNote?: string;
-  historyLimitedNote?: string;
-}
-
-function FootprintToolbarStrip({
-  settings,
-  onSettingsChange,
-  tickSize,
-  rowSizeClamped,
-  chartStyle,
-  onChartStyleChange,
-  onChartStyleReset,
-  assetClass,
-  showCvd,
-  showDelta,
-  onToggleCvd,
-  onToggleDelta,
-  statusNote,
-  historyLimitedNote,
-}: FootprintToolbarStripProps) {
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-
-  return (
-    <div
-      className="flex items-center gap-2 flex-wrap px-3 py-1.5 border-b"
-      style={{ borderColor: 'rgba(201,166,70,0.10)' }}
-      title={historyLimitedNote}
-    >
-      <button
-        type="button"
-        onClick={() => setSettingsDialogOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={settingsDialogOpen}
-        className={cn(
-          'flex items-center gap-1.5 h-7 rounded px-2 text-[11px] font-semibold transition-all duration-150 border',
-          settingsDialogOpen
-            ? 'bg-[rgba(201,166,70,0.18)] text-[#C9A646] border-[rgba(201,166,70,0.45)]'
-            : 'text-[#707070] hover:text-[#C0C0C0] hover:bg-[rgba(255,255,255,0.04)] border-transparent',
-        )}
-      >
-        Settings
-      </button>
-      <FootprintSettingsDialog
-        open={settingsDialogOpen}
-        onOpenChange={setSettingsDialogOpen}
-        settings={settings}
-        onChange={onSettingsChange}
-        onReset={() => onSettingsChange(DEFAULT_FOOTPRINT_SETTINGS)}
-        tickSize={tickSize}
-        rowSizeClamped={rowSizeClamped}
-        chartStyle={chartStyle}
-        onChartStyleChange={onChartStyleChange}
-        onChartStyleReset={onChartStyleReset}
-        assetClass={assetClass}
-      />
-
-      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
-
-      <div className="flex items-center gap-1" role="group" aria-label="Sub-pane quick toggles">
-        <button
-          type="button"
-          onClick={onToggleCvd}
-          aria-pressed={showCvd}
-          className={quickPillClass(showCvd)}
-        >
-          CVD
-        </button>
-        <button
-          type="button"
-          onClick={onToggleDelta}
-          aria-pressed={showDelta}
-          className={quickPillClass(showDelta)}
-        >
-          Delta
-        </button>
-      </div>
-
-      {statusNote && (
-        <span className="text-[10px] text-[#707070] ml-1" aria-live="polite">
-          {statusNote}
-        </span>
-      )}
-    </div>
-  );
-}
-
 // ─── Crypto mode (Binance) ───────────────────────────────────────────────────
 
 interface CryptoFootprintBodyProps {
@@ -584,6 +470,11 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
   }, [symbol, staticTickSize]);
 
   const { settings, update: updateSettings } = useFootprintPreferences(symbol);
+
+  // Footprint Settings dialog — opened via double-click on the chart body
+  // (see the outer container's onDoubleClick below), same pattern
+  // ChartTab.tsx uses for its own settings dialog.
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const { from, to } = useMemo(nowWindowCrypto, [symbol, interval]);
 
@@ -666,7 +557,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
   const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
   const intervalSec = intervalToSeconds(interval);
 
-  const { store, status, backfillCoveredFromSec, backfillInFlight } = useOrderFlow({
+  const { store, backfillCoveredFromSec } = useOrderFlow({
     symbol,
     intervalSec,
     rowSize,
@@ -705,20 +596,6 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
     setTimeFitToken((t) => t + 1);
   }, [backfillCoveredFromSec, to, intervalSec]);
 
-  let statusNote: string | undefined;
-  let historyLimitedNote: string | undefined;
-  if (status === 'connecting') {
-    statusNote = 'Loading order flow…';
-  } else if (backfillInFlight) {
-    statusNote = 'Loading trade history…';
-  }
-  if (backfillCoveredFromSec !== null) {
-    const requestedFromSec = Math.floor(Date.now() / 1000) - 40 * intervalSec;
-    if (backfillCoveredFromSec > requestedFromSec + intervalSec) {
-      historyLimitedNote = 'Order flow history limited to the most recent data';
-    }
-  }
-
   const showSubPanes = klineDeltaInterval !== null && (settings.showCvd || settings.showDelta);
 
   // Candle dimming: this tab's footprint is always forceFullDetail (cells
@@ -744,22 +621,19 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
   }, [book.getBook, book.lastPrice]);
 
   return (
-    <div className="flex flex-1 min-h-0 w-full flex-col">
-      <FootprintToolbarStrip
+    <div className="flex flex-1 min-h-0 w-full flex-col" onDoubleClick={() => setSettingsDialogOpen(true)}>
+      <FootprintSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
         settings={settings}
-        onSettingsChange={updateSettings}
+        onChange={updateSettings}
+        onReset={() => updateSettings(DEFAULT_FOOTPRINT_SETTINGS)}
         tickSize={tickSize}
         rowSizeClamped={rowSizeClamped}
         chartStyle={chartStyle}
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
         assetClass="crypto"
-        showCvd={settings.showCvd}
-        showDelta={settings.showDelta}
-        onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
-        onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
-        statusNote={statusNote}
-        historyLimitedNote={historyLimitedNote}
       />
 
       <div className="flex flex-1 min-h-0 w-full">
@@ -883,6 +757,11 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
   // survive a quarterly rollover instead of resetting every 3 months.
   const { settings, update: updateSettings } = useFootprintPreferences(root);
 
+  // Footprint Settings dialog — opened via double-click on the chart body
+  // (see the outer container's onDoubleClick below), same pattern
+  // ChartTab.tsx uses for its own settings dialog.
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+
   const { from, to } = useMemo(nowWindowFutures, [contractSymbol]);
   const focusRange = useMemo(
     () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
@@ -917,7 +796,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
   const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
   const intervalSec = intervalToSeconds(interval);
 
-  const { store, status, backfillCoveredFromSec } = useOrderFlow({
+  const { store, status } = useOrderFlow({
     symbol: contractSymbol,
     intervalSec,
     rowSize,
@@ -973,18 +852,6 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
     };
   }, [store]);
 
-  let statusNote: string | undefined;
-  let historyLimitedNote: string | undefined;
-  if (status === 'connecting' || status === 'reconnecting') {
-    statusNote = statusLabel(status);
-  }
-  if (backfillCoveredFromSec !== null) {
-    const requestedFromSec = Math.floor(Date.now() / 1000) - 40 * intervalSec;
-    if (backfillCoveredFromSec > requestedFromSec + intervalSec) {
-      historyLimitedNote = 'Order flow history limited to the most recent data';
-    }
-  }
-
   const feedUnavailable = status === 'error';
   const reviewUnsupportedSymbol = customerReview && !REVIEW_SUPPORTED_ROOTS.includes(root);
 
@@ -993,7 +860,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
   const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
 
   return (
-    <div className="flex flex-1 min-h-0 w-full flex-col">
+    <div className="flex flex-1 min-h-0 w-full flex-col" onDoubleClick={() => setSettingsDialogOpen(true)}>
       {/* Contract selector pills — same FUTURES_ROOTS reuse as FuturesChartTab.tsx */}
       <div
         className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b"
@@ -1080,21 +947,18 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
         </span>
       </div>
 
-      <FootprintToolbarStrip
+      <FootprintSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
         settings={settings}
-        onSettingsChange={updateSettings}
+        onChange={updateSettings}
+        onReset={() => updateSettings(DEFAULT_FOOTPRINT_SETTINGS)}
         tickSize={tickSize}
         rowSizeClamped={rowSizeClamped}
         chartStyle={chartStyle}
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
         assetClass="futures"
-        showCvd={settings.showCvd}
-        showDelta={settings.showDelta}
-        onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
-        onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
-        statusNote={statusNote}
-        historyLimitedNote={historyLimitedNote}
       />
 
       <div className="flex flex-1 min-h-0 w-full">
@@ -1160,9 +1024,9 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
 
       {/* CVD/Delta sub-panes: SKIPPED for futures, same as FuturesChartTab.tsx —
           useKlineDelta is Binance-klines-only; TODO(futures-v2): Databento-native.
-          The CVD/Delta quick pills above remain visible for parity with the
-          crypto body (same as the pre-PR-2 OrderFlowControls strip, which
-          rendered the same toggles here even though they were inert). */}
+          The CVD/Delta toggles remain reachable via the Footprint Settings
+          dialog's Panels section for parity with the crypto body, even
+          though they're inert here. */}
     </div>
   );
 }
@@ -1274,6 +1138,11 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
   // Persistence key is the CONTRACT ROOT — same convention as FuturesFootprintBody.
   const { settings, update: updateSettings } = useFootprintPreferences(root);
 
+  // Footprint Settings dialog — opened via double-click on the chart body
+  // (see the outer container's onDoubleClick below), same pattern
+  // ChartTab.tsx uses for its own settings dialog.
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+
   const { from, to } = useMemo(nowWindowFutures, [nt8Symbol]);
   const focusRange = useMemo(
     () => ({ from: to - INITIAL_VISIBLE_BARS * intervalToSeconds(interval), to }),
@@ -1304,7 +1173,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
   const rowSize = resolveEffectiveRowSize(settings, tickSize, suggestedRowSize);
   const intervalSec = intervalToSeconds(interval);
 
-  const { store, status, backfillCoveredFromSec } = useOrderFlow({
+  const { store } = useOrderFlow({
     symbol: nt8Symbol,
     intervalSec,
     rowSize,
@@ -1421,20 +1290,6 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
     };
   }, [store]);
 
-  let statusNote: string | undefined;
-  let historyLimitedNote: string | undefined;
-  if (!isLive) {
-    statusNote = undefined; // Nt8ConnectPanel owns the "not connected" messaging below
-  } else if (status === 'connecting' || status === 'reconnecting') {
-    statusNote = statusLabel(status);
-  }
-  if (backfillCoveredFromSec !== null) {
-    const requestedFromSec = Math.floor(Date.now() / 1000) - 40 * intervalSec;
-    if (backfillCoveredFromSec > requestedFromSec + intervalSec) {
-      historyLimitedNote = 'Order flow history limited to the most recent data';
-    }
-  }
-
   // Candle dimming — same forceFullDetail rationale as CryptoFootprintBody above.
   const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
   const mutedCandles = footprintStage === 'full' || footprintStage === 'shaded';
@@ -1455,7 +1310,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
   }, [book.getBook, book.lastPrice]);
 
   return (
-    <div className="flex flex-1 min-h-0 w-full flex-col">
+    <div className="flex flex-1 min-h-0 w-full flex-col" onDoubleClick={() => setSettingsDialogOpen(true)}>
       <div
         className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b"
         style={{ borderColor: 'rgba(201,166,70,0.10)' }}
@@ -1505,24 +1360,19 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
         <RecordedSessionBanner lastTradeMs={recordedUpToMs} onReconnect={handleReconnect} reconnecting={reconnecting} />
       )}
 
-      {(isLive || showRecordedSession) && (
-        <FootprintToolbarStrip
-          settings={settings}
-          onSettingsChange={updateSettings}
-          tickSize={tickSize}
-          rowSizeClamped={rowSizeClamped}
-          chartStyle={chartStyle}
-          onChartStyleChange={onChartStyleChange}
-          onChartStyleReset={onChartStyleReset}
-          assetClass="futures"
-          showCvd={settings.showCvd}
-          showDelta={settings.showDelta}
-          onToggleCvd={() => updateSettings({ showCvd: !settings.showCvd })}
-          onToggleDelta={() => updateSettings({ showDelta: !settings.showDelta })}
-          statusNote={statusNote}
-          historyLimitedNote={historyLimitedNote}
-        />
-      )}
+      <FootprintSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        settings={settings}
+        onChange={updateSettings}
+        onReset={() => updateSettings(DEFAULT_FOOTPRINT_SETTINGS)}
+        tickSize={tickSize}
+        rowSizeClamped={rowSizeClamped}
+        chartStyle={chartStyle}
+        onChartStyleChange={onChartStyleChange}
+        onChartStyleReset={onChartStyleReset}
+        assetClass="futures"
+      />
 
       <div className="flex flex-1 min-h-0 w-full">
         <div className="relative flex-1 min-w-0">
