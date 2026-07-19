@@ -173,6 +173,18 @@ export interface AnchorRef {
  * the discriminated union small, but is a no-op for the other members of
  * that branch.
  */
+
+/**
+ * Named intraday session windows (Increment 5 — named-session levels).
+ * ALWAYS anchored to `America/New_York`, regardless of the strategy's own
+ * `filters.session.timezone` — "the Asian session" etc. are universally
+ * quoted in ET. Exact minute windows live in `LevelBank.ts`'s
+ * `NAMED_SESSION_WINDOWS` (mirrors the presets already offered in
+ * `SetupInputForm.tsx`'s `SESSION_PRESETS`: asia 18:00-00:00 ET, london
+ * 02:00-05:00 ET, newyork 08:00-16:00 ET).
+ */
+export type NamedSession = 'asia' | 'london' | 'newyork';
+
 export type LevelRef =
   | {
       type:
@@ -186,6 +198,15 @@ export type LevelRef =
         | 'dayOpen';
       /** Opening-range window length in minutes. Default 15. OR-levels only. */
       orMinutes?: number;
+      /**
+       * Named session window (Increment 5) — consulted by `sessionHigh`/
+       * `sessionLow` ONLY (no-op for every other member of this branch).
+       * Absent (default): the CURRENT-day running high/low described above.
+       * Present: the high/low of the most recently COMPLETED window of the
+       * named session, held constant until the NEXT occurrence of that
+       * window closes (see `LevelBank.ts`'s `namedSession()`).
+       */
+      sessionName?: NamedSession;
     }
   | {
       type: 'swingHigh' | 'swingLow';
@@ -225,7 +246,21 @@ export type Operand =
   | { src: 'price'; field: 'open' | 'high' | 'low' | 'close'; offset?: number }
   | { src: 'indicator'; ref: IndicatorRef; offset?: number }
   | { src: 'level'; ref: LevelRef }
-  | { src: 'const'; value: number };
+  | { src: 'const'; value: number }
+  | {
+      /**
+       * Percent difference (Increment 5): `(a - b) / b * 100`, NaN-safe (NaN
+       * if either side is NaN, or if `b` resolves to 0). E.g. "the 9:30am
+       * open gaps at least 0.5% from the prior day's close" ==
+       * `{ src:'pctDiff', a:{src:'level',ref:{type:'dayOpen'}},
+       *    b:{src:'level',ref:{type:'prevDayClose'}} } gte 0.5`.
+       * `a`/`b` must NOT themselves be `pctDiff` — no nesting (enforced by
+       * `validateStrategyStructure`).
+       */
+      src: 'pctDiff';
+      a: Operand;
+      b: Operand;
+    };
 
 /** Closed vocabulary of price-action events resolved by EventBank
  *  (Increment 1, this same commit). `params` is event-specific (e.g.
@@ -385,7 +420,19 @@ export interface StopRuleV2 {
 }
 
 export interface ExitRuleV2 {
-  target: {
+  /**
+   * A fixed price target. OPTIONAL (Increment 5): a strategy may manage
+   * exits purely via `exitWhen`/`timeStopBars`/`trailing` instead (pure
+   * cross-to-cross, no fixed take-profit level at all) — see
+   * `validateStrategyStructure`, which requires at least ONE of
+   * target/exitWhen/timeStopBars/trailing to be present so a position can
+   * always eventually close. When absent, `SignalBuilderV2` skips target
+   * resolution entirely and the built signal's `takeProfit` is `0` —
+   * `OrderExecutionEngine.checkTakeProfit` treats a falsy `takeProfit` as
+   * "disabled" by construction, so the SL-before-TP fill-check never fires
+   * a take-profit hit for these positions.
+   */
+  target?: {
     basis: 'rMultiple' | 'fixedPct' | 'level';
     /** R-multiple (basis 'rMultiple') or percent (basis 'fixedPct'). */
     value?: number;
@@ -400,6 +447,37 @@ export interface ExitRuleV2 {
   };
   /** Force-close the position after this many bars in the trade. */
   timeStopBars?: number;
+  /**
+   * Clock-time flat exit (Increment 5): "HH:MM" in LOCAL time
+   * (`filters.session.timezone ?? 'America/New_York'`). At the first bar
+   * whose local time is `>= flatAt` — on ANY day the position is still
+   * open, not just the entry day — `StrategyEngine.ts` force-closes it at
+   * that bar's close (`exitReason: 'flat_time'`) and cancels any PENDING
+   * unfilled signal at/after `flatAt` each day (never fills into a
+   * post-flat window).
+   */
+  flatAt?: string;
+  /**
+   * Condition-based exit (Increment 5): evaluated every bar a position is
+   * open (execution timeframe ONLY this increment — `validateStrategyStructure`
+   * has no context-TF concept to reject here since `ExitRuleV2` carries no
+   * `.timeframe` field the way `PhaseV2` does, so it is structurally
+   * impossible to author a context-TF ref inside `exitWhen`). Fires -> close
+   * at that bar's close (`exitReason: 'condition'`). Bounded by the same
+   * `MAX_DEPTH`/`MAX_CHILDREN` caps as any other condition tree.
+   *
+   * LIMITATION: evaluated against a FRESH, per-position `RuntimeState` (its
+   * own empty `anchors`/`scratch`, reset on every fill) — the entry
+   * attempt's captured anchors are already gone by the time a position is
+   * open (`StrategyEngine.ts` resets the attempt right after building the
+   * signal). A `phaseAnchor` LevelRef inside `exitWhen` therefore always
+   * resolves to NaN (never fires that branch) — use `exitWhen` for
+   * indicator/price/level conditions, not phase-captured anchors.
+   * `smt` leaves are NOT wired inside `exitWhen` this increment (SmtContext
+   * is only built from phase conditions) — compiling one throws a clear
+   * "no SmtContext bank" error rather than silently misbehaving.
+   */
+  exitWhen?: ConditionNode;
 }
 
 export interface FiltersV2 {
@@ -440,6 +518,18 @@ export interface StrategyDefinitionV2 {
    * `StrategyEngine.ts` / `useAutoBacktestStore.ts`).
    */
   compareSymbols?: string[];
+  /**
+   * Auto-mirrored split-run (Increment 5 — bidirectional strategies). The
+   * definition is authored as its PRIMARY direction (`direction: 'long' |
+   * 'short'`, NEVER `'both'` — see `validateStrategyStructure`). When
+   * `true`, `StrategyEngine.ts`'s `runStrategyV2` ALSO runs the mirrored
+   * variant (`mirrorStrategy.ts`'s `mirrorStrategyV2`) over the same
+   * series and merges both variants' trades into one chronological result
+   * — see `runStrategyV2`'s module doc for the exact merge semantics.
+   * Absent/false: byte-identical single-pass behavior, unchanged from
+   * every earlier increment.
+   */
+  mirror?: boolean;
 }
 
 // ============================================================================
@@ -483,6 +573,16 @@ export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
   }
   if (!def.name || def.name.trim().length === 0) {
     errors.push('name must be a non-empty string');
+  }
+
+  // ---------------------------------------------------------------------
+  // mirror (Increment 5 — auto-mirrored split-run).
+  // ---------------------------------------------------------------------
+  if (def.mirror && def.direction === 'both') {
+    errors.push(
+      "mirror requires direction to be 'long' or 'short' (a primary direction to mirror) — " +
+        "'both' already covers both senses, mirroring it is undefined",
+    );
   }
 
   if (def.phases.length < 1 || def.phases.length > MAX_PHASES) {
@@ -622,7 +722,7 @@ export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
   }
   const globalLevelRefs: Array<{ path: string; ref: LevelRef | undefined }> = [
     { path: 'stop.level', ref: def.stop.level },
-    { path: 'exits.target.level', ref: def.exits.target.level },
+    { path: 'exits.target.level', ref: def.exits.target?.level },
   ];
   for (const { path, ref } of globalLevelRefs) {
     if (ref && ref.type === 'phaseAnchor' && !phaseIndexById.has(ref.phaseId)) {
@@ -636,7 +736,7 @@ export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
   if (def.stop.basis === 'phaseAnchor' && !def.stop.phaseRef) {
     errors.push('stop.phaseRef is required when stop.basis === "phaseAnchor"');
   }
-  if (def.exits.target.basis === 'level' && !def.exits.target.level) {
+  if (def.exits.target?.basis === 'level' && !def.exits.target.level) {
     errors.push('exits.target.level is required when exits.target.basis === "level"');
   }
   if (def.entry.orderType === 'limit' && !def.entry.priceAnchor) {
@@ -644,6 +744,36 @@ export function validateStrategyStructure(def: StrategyDefinitionV2): string[] {
   }
   if (def.entry.validForBars <= 0) {
     errors.push('entry.validForBars must be > 0');
+  }
+
+  // ---------------------------------------------------------------------
+  // exits.exitWhen (Increment 5 — condition-based exit) + the "at least one
+  // exit mechanism" requirement (target is now OPTIONAL — see ExitRuleV2).
+  // ---------------------------------------------------------------------
+  if (
+    !def.exits.target &&
+    !def.exits.exitWhen &&
+    def.exits.timeStopBars === undefined &&
+    !def.exits.trailing
+  ) {
+    errors.push(
+      'exits: at least one of target, exitWhen, timeStopBars, or trailing is required so a ' +
+        'position can eventually close',
+    );
+  }
+  if (def.exits.exitWhen) {
+    validateConditionTree(def.exits.exitWhen, 'exits.exitWhen', errors);
+    // Strategy-level, like entry.priceAnchor/stop.level/exits.target.level:
+    // phaseAnchor refs must name an EXISTING phase, but ordering is not
+    // required (exitWhen only ever evaluates once every phase has already
+    // completed and a position has filled).
+    const exitWhenLevelRefs: Array<{ ref: LevelRef; subPath: string }> = [];
+    collectConditionLevelRefs(def.exits.exitWhen, 'exits.exitWhen', exitWhenLevelRefs);
+    for (const { ref, subPath } of exitWhenLevelRefs) {
+      if (ref.type === 'phaseAnchor' && !phaseIndexById.has(ref.phaseId)) {
+        errors.push(`${subPath} references unknown phase id "${ref.phaseId}"`);
+      }
+    }
   }
 
   return errors;
@@ -688,8 +818,18 @@ function validateConditionTree(node: ConditionNode, path: string, errors: string
         `${path}: '${node.cmp}' requires at least one series operand (both sides are 'const')`,
       );
     }
+    validateOperandNoNestedPctDiff(node.left, `${path}.left`, errors);
+    validateOperandNoNestedPctDiff(node.right, `${path}.right`, errors);
   }
   return 1;
+}
+
+/** pctDiff (Increment 5) must not nest another pctDiff in its own `a`/`b`. */
+function validateOperandNoNestedPctDiff(op: Operand, path: string, errors: string[]): void {
+  if (op.src !== 'pctDiff') return;
+  if (op.a.src === 'pctDiff' || op.b.src === 'pctDiff') {
+    errors.push(`${path}: 'pctDiff' operand's 'a'/'b' must not themselves be 'pctDiff' (no nesting)`);
+  }
 }
 
 /** Walk a ConditionNode and verify every phaseAnchor ref points EARLIER. */
@@ -733,12 +873,28 @@ function collectConditionLevelRefs(
     return;
   }
   if (node.kind === 'compare') {
-    if (node.left.src === 'level') out.push({ ref: node.left.ref, subPath: `${path}.left` });
-    if (node.right.src === 'level') out.push({ ref: node.right.ref, subPath: `${path}.right` });
+    collectOperandLevelRefs(node.left, `${path}.left`, out);
+    collectOperandLevelRefs(node.right, `${path}.right`, out);
   } else if (node.kind === 'levelInteraction') {
     out.push({ ref: node.level, subPath: `${path}.level` });
   }
   // 'event', 'patternActive' and 'smt' leaves carry no LevelRef.
+}
+
+/** Collect every LevelRef reachable from an Operand — recurses into `pctDiff`'s
+ *  `a`/`b` (Increment 5) so a `phaseAnchor` nested inside a pctDiff operand
+ *  is still caught by the phaseAnchor-ordering/existence validators. */
+function collectOperandLevelRefs(
+  op: Operand,
+  path: string,
+  out: Array<{ ref: LevelRef; subPath: string }>,
+): void {
+  if (op.src === 'level') {
+    out.push({ ref: op.ref, subPath: path });
+  } else if (op.src === 'pctDiff') {
+    collectOperandLevelRefs(op.a, `${path}.a`, out);
+    collectOperandLevelRefs(op.b, `${path}.b`, out);
+  }
 }
 
 /** Collect every `Condition{kind:'smt'}` leaf reachable from a ConditionNode,

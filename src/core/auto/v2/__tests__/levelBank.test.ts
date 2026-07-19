@@ -263,3 +263,89 @@ describe('LevelBank phaseAnchor', () => {
     );
   });
 });
+
+// ============================================================================
+// Named-session levels (Increment 5) — ALWAYS America/New_York, regardless of
+// the bank's own `timezone` option. Fixture dates are all January 2024
+// (EST, UTC-5, no DST) so ET offsets are exact and easy to hand-verify:
+// UTC hour - 5 = ET hour (with a date rollback when negative).
+// ============================================================================
+
+describe('LevelBank named session — asia (18:00-00:00 ET), day-rollover close', () => {
+  // Day1 (ET Jan1) asia window = UTC [Jan1 23:00, Jan2 05:00). Contributing
+  // bars: b2(23:00 UTC=18:00 ET,110/90), b3(01:00 UTC Jan2=20:00 ET Jan1,
+  // 108/92), b4(04:00 UTC Jan2=23:00 ET Jan1,105/95) -> high=110, low=90.
+  // The window never explicitly reaches minutes>=endMin(1440) within Jan1 ET
+  // (minutes maxes at 1439) -> it closes via the DAY-ROLLOVER branch, at the
+  // first Jan2-ET bar (b5, UTC Jan2 05:00 = ET Jan2 00:00).
+  // Day2 (ET Jan2) asia window = UTC [Jan2 23:00, Jan3 05:00): b7 contributes
+  // 120/80, closes via rollover at b8 (UTC Jan3 05:00 = ET Jan3 00:00).
+  const candles: Candle[] = [
+    candle(DAY1_00 + 12 * HOUR, 100, 101, 99, 100), // b0: ET Jan1 07:00 — before window
+    candle(DAY1_00 + 22 * HOUR, 100, 101, 99, 100), // b1: ET Jan1 17:00 — before window
+    candle(DAY1_00 + 23 * HOUR, 105, 110, 90, 108), // b2: ET Jan1 18:00 — window starts
+    candle(DAY1_00 + 25 * HOUR, 106, 108, 92, 104), // b3: ET Jan1 20:00 — in window
+    candle(DAY1_00 + 28 * HOUR, 100, 105, 95, 101), // b4: ET Jan1 23:00 — in window (last Jan1 bar)
+    candle(DAY1_00 + 29 * HOUR, 101, 103, 99, 102), // b5: ET Jan2 00:00 — day rolls over, Jan1 window (110/90) now exposed
+    candle(DAY1_00 + 44 * HOUR, 102, 104, 100, 103), // b6: ET Jan2 15:00 — before Jan2's window, still reads 110/90
+    candle(DAY1_00 + 47 * HOUR, 103, 120, 80, 118), // b7: ET Jan2 18:00 — Jan2 window starts (still exposes 110/90 THIS bar)
+    candle(DAY1_00 + 53 * HOUR, 118, 119, 117, 118), // b8: ET Jan3 00:00 — rollover, Jan2 window (120/80) now exposed
+  ];
+
+  it('is NaN before the first completed window, then holds 110/90 through Jan2 until Jan2s window closes', () => {
+    const b = bank(candles);
+    const high = b.getSeries({ type: 'sessionHigh', sessionName: 'asia' });
+    const low = b.getSeries({ type: 'sessionLow', sessionName: 'asia' });
+
+    for (const i of [0, 1, 2, 3, 4]) {
+      expect(Number.isNaN(high[i]), `asia high[${i}]`).toBe(true);
+      expect(Number.isNaN(low[i]), `asia low[${i}]`).toBe(true);
+    }
+    for (const i of [5, 6, 7]) {
+      expect(high[i], `asia high[${i}]`).toBeCloseTo(110, 9);
+      expect(low[i], `asia low[${i}]`).toBeCloseTo(90, 9);
+    }
+    expect(high[8], 'asia high[8]').toBeCloseTo(120, 9);
+    expect(low[8], 'asia low[8]').toBeCloseTo(80, 9);
+  });
+
+  it('is truncated-prefix invariant up to the first rollover (bar 5)', () => {
+    assertPrefixInvariant(candles, { type: 'sessionHigh', sessionName: 'asia' }, 5);
+    assertPrefixInvariant(candles, { type: 'sessionLow', sessionName: 'asia' }, 5);
+  });
+
+  it('unnamed sessionHigh/sessionLow (no sessionName) are unaffected — different cache entry', () => {
+    const b = bank(candles);
+    const namedHigh = b.getSeries({ type: 'sessionHigh', sessionName: 'asia' });
+    const plainHigh = b.getSeries({ type: 'sessionHigh' });
+    // Plain sessionHigh is the CURRENT-day running high using bars strictly
+    // before i — a completely different series from the named-session one.
+    expect(namedHigh).not.toBe(plainHigh);
+  });
+});
+
+describe('LevelBank named session — london (02:00-05:00 ET), mid-day close', () => {
+  // London window = UTC [Jan1 07:00, Jan1 10:00) = ET [02:00, 05:00). Closes
+  // via the minutes>=endMin branch WITHIN the same ET day (never needs the
+  // day-rollover branch) — the OTHER closing path from the asia test above.
+  const candles: Candle[] = [
+    candle(DAY1_00 + 6 * HOUR, 100, 101, 99, 100), // c0: ET 01:00 — before window
+    candle(DAY1_00 + 7 * HOUR, 100, 115, 95, 110), // c1: ET 02:00 — window starts
+    candle(DAY1_00 + 9 * HOUR, 110, 118, 93, 112), // c2: ET 04:00 — in window, new extremes
+    candle(DAY1_00 + 10 * HOUR, 112, 113, 108, 111), // c3: ET 05:00 — window closes HERE (minutes>=endMin)
+    candle(DAY1_00 + 11 * HOUR, 111, 112, 109, 110), // c4: ET 06:00 — first bar to see the completed window
+  ];
+
+  it('is NaN through the closing bar itself, then exposes 118/93 starting the NEXT bar', () => {
+    const b = bank(candles);
+    const high = b.getSeries({ type: 'sessionHigh', sessionName: 'london' });
+    const low = b.getSeries({ type: 'sessionLow', sessionName: 'london' });
+
+    for (const i of [0, 1, 2, 3]) {
+      expect(Number.isNaN(high[i]), `london high[${i}]`).toBe(true);
+      expect(Number.isNaN(low[i]), `london low[${i}]`).toBe(true);
+    }
+    expect(high[4], 'london high[4]').toBeCloseTo(118, 9);
+    expect(low[4], 'london low[4]').toBeCloseTo(93, 9);
+  });
+});

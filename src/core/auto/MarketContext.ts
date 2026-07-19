@@ -470,7 +470,13 @@ export function candleTimeMs(c: Candle): number {
   return t < 1e12 ? t * 1000 : t;
 }
 
-function hhmmToMinutes(hhmm: string): number {
+/**
+ * Parse an "HH:MM" string to minutes-of-day. Exported (v2 Increment 5) so
+ * `v2/StrategyEngine.ts`'s `flatAt` clock-time exit uses the SAME parsing
+ * this module's own session-window logic already relies on, rather than a
+ * second, potentially-drifting implementation.
+ */
+export function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map((x) => parseInt(x, 10));
   return (h || 0) * 60 + (m || 0);
 }
@@ -491,8 +497,15 @@ export function localDayKey(ms: number, timezone: string): string {
   return fmt.format(new Date(ms));
 }
 
-/** Local minutes-of-day and weekday (0=Sun) for a UTC ms timestamp in tz. */
-function localMinutesAndDay(
+/**
+ * Local minutes-of-day and weekday (0=Sun) for a UTC ms timestamp in tz.
+ * Exported (v2 Increment 5) so `v2/LevelBank.ts`'s named-session windows
+ * (always ET) and `v2/StrategyEngine.ts`'s `flatAt` clock-time exit reuse
+ * the SAME `Intl.DateTimeFormat` parsing this module's own session-window
+ * logic already relies on, rather than a second, potentially-drifting
+ * implementation.
+ */
+export function localMinutesAndDay(
   ms: number,
   timezone: string,
 ): { minutes: number; weekday: number } {

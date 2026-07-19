@@ -24,6 +24,9 @@ export function mergeStrategyV2(
   if (partial.name !== undefined) merged.name = partial.name;
   if (partial.description !== undefined) merged.description = partial.description;
   if (partial.direction !== undefined) merged.direction = partial.direction;
+  // mirror (Increment 5 — auto-mirrored split-run) — plain scalar, same
+  // replace-when-present rule as `direction`.
+  if (partial.mirror !== undefined) merged.mirror = partial.mirror;
 
   // Nested objects — field-level merge so unset AI keys keep base values.
   if (partial.instrument !== undefined) {

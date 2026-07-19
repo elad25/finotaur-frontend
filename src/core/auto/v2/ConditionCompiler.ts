@@ -219,6 +219,13 @@ export interface CompiledStrategy {
   /** Resolve an AnchorRef (`state.anchors.get(phaseId)?.[anchor]`, NaN if
    *  absent). Shared with SignalBuilderV2. */
   resolveAnchor: (ref: AnchorRef) => ValueAccessor;
+  /**
+   * Compiled `exits.exitWhen` (Increment 5 — condition-based exit), ALWAYS
+   * compiled against the EXECUTION series (see `ExitRuleV2.exitWhen`'s
+   * doc) — `undefined` when the strategy declares no `exitWhen`, zero
+   * overhead for every earlier-increment strategy.
+   */
+  exitWhen?: CompiledCondition;
 }
 
 // ----------------------------------------------------------------------------
@@ -235,6 +242,11 @@ export function strategyNeedsIndicators(def: StrategyDefinitionV2): boolean {
     if (nodeNeedsIndicators(phase.when)) return true;
     if (phase.invalidateIf && nodeNeedsIndicators(phase.invalidateIf)) return true;
   }
+  // exits.exitWhen (Increment 5) always evaluates on the EXECUTION series —
+  // see ExitRuleV2's doc — so it's scanned here unconditionally (the
+  // TF-scoped `strategyNeedsIndicatorsForTf` below only counts it for
+  // `def.timeframes.execution`).
+  if (def.exits.exitWhen && nodeNeedsIndicators(def.exits.exitWhen)) return true;
   return false;
 }
 
@@ -244,8 +256,16 @@ function nodeNeedsIndicators(node: ConditionNode): boolean {
     return node.children.some(nodeNeedsIndicators);
   }
   if (node.kind === 'compare') {
-    return node.left.src === 'indicator' || node.right.src === 'indicator';
+    return operandNeedsIndicators(node.left) || operandNeedsIndicators(node.right);
   }
+  return false;
+}
+
+/** Recurses into `pctDiff`'s `a`/`b` (Increment 5) so an indicator nested
+ *  inside a pctDiff operand is still detected. */
+function operandNeedsIndicators(op: Operand): boolean {
+  if (op.src === 'indicator') return true;
+  if (op.src === 'pctDiff') return operandNeedsIndicators(op.a) || operandNeedsIndicators(op.b);
   return false;
 }
 
@@ -265,6 +285,15 @@ export function strategyNeedsIndicatorsForTf(def: StrategyDefinitionV2, tf: TF):
     if (effectiveTf !== tf) continue;
     if (nodeNeedsIndicators(phase.when)) return true;
     if (phase.invalidateIf && nodeNeedsIndicators(phase.invalidateIf)) return true;
+  }
+  // exits.exitWhen's effective timeframe is ALWAYS def.timeframes.execution
+  // (Increment 5 — see ExitRuleV2's doc).
+  if (
+    tf === def.timeframes.execution &&
+    def.exits.exitWhen &&
+    nodeNeedsIndicators(def.exits.exitWhen)
+  ) {
+    return true;
   }
   return false;
 }
@@ -372,7 +401,7 @@ function requiredAnchorsByPhase(def: StrategyDefinitionV2): Map<string, Set<Anch
   if (def.stop.basis === 'phaseAnchor' && def.stop.phaseRef) {
     add(def.stop.phaseRef.phaseId, def.stop.phaseRef.anchor);
   }
-  if (def.exits.target.basis === 'level' && def.exits.target.level?.type === 'phaseAnchor') {
+  if (def.exits.target?.basis === 'level' && def.exits.target.level?.type === 'phaseAnchor') {
     add(def.exits.target.level.phaseId, def.exits.target.level.anchor);
   }
 
@@ -583,7 +612,13 @@ export function compileStrategy(
   const resolveLevel = (ref: LevelRef): ValueAccessor => buildLevelAccessor(ref, executionCtx);
   const resolveAnchor = (ref: AnchorRef): ValueAccessor => buildAnchorAccessor(ref);
 
-  return { def, phases, manifest, resolveLevel, resolveAnchor };
+  // exits.exitWhen (Increment 5) — compiled exactly like a phase condition,
+  // always against the EXECUTION context (see ExitRuleV2.exitWhen's doc).
+  const exitWhen = def.exits.exitWhen
+    ? compileNode(def.exits.exitWhen, executionCtx, 'exits.exitWhen')
+    : undefined;
+
+  return { def, phases, manifest, resolveLevel, resolveAnchor, exitWhen };
 }
 
 /**
@@ -674,10 +709,11 @@ function levelRefKeyLocal(ref: LevelRef): string {
     case 'prevDayHigh':
     case 'prevDayLow':
     case 'prevDayClose':
-    case 'sessionHigh':
-    case 'sessionLow':
     case 'dayOpen':
       return ref.type;
+    case 'sessionHigh':
+    case 'sessionLow':
+      return ref.sessionName ? `${ref.type}:${ref.sessionName}` : ref.type;
     case 'openingRangeHigh':
     case 'openingRangeLow':
       return `${ref.type}:${ref.orMinutes ?? 'default'}`;
@@ -745,6 +781,19 @@ function buildOperandAccessor(op: Operand, ctx: CompileCtx): ValueAccessor {
     case 'const': {
       const value = op.value;
       return () => value;
+    }
+    case 'pctDiff': {
+      // (a - b) / b * 100, NaN-safe. `a`/`b` are resolved recursively —
+      // validateStrategyStructure guarantees neither is itself 'pctDiff'
+      // (no nesting), so this recursion is always exactly one level deep.
+      const aAcc = buildOperandAccessor(op.a, ctx);
+      const bAcc = buildOperandAccessor(op.b, ctx);
+      return (i: number, state: RuntimeState) => {
+        const av = aAcc(i, state);
+        const bv = bAcc(i, state);
+        if (Number.isNaN(av) || Number.isNaN(bv) || bv === 0) return NaN;
+        return ((av - bv) / bv) * 100;
+      };
     }
     /* istanbul ignore next -- exhaustiveness guard */
     default: {

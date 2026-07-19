@@ -46,6 +46,8 @@ const EXIT_REASON_LABEL: Record<NonNullable<AutoPosition['exitReason']>, string>
   stop_loss: 'Stop loss',
   take_profit: 'Take profit',
   manual: 'Manual',
+  flat_time: 'Flat (time)',
+  condition: 'Condition exit',
 };
 
 /**

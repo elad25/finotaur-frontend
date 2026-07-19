@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Candle } from '../../../../components/ReplayChart/types';
 import type { StrategyDefinitionV2 } from '../types';
+import { validateStrategyStructure } from '../types';
 import { runStrategyV2 } from '../StrategyEngine';
 import { runAutoBacktest } from '../../AutoBacktestEngine';
 import type { SetupDefinition, FVGParams } from '../../types';
@@ -514,5 +515,241 @@ describe('StrategyEngine v2 — v1<->v2 equivalence (FVG tap)', () => {
       // pullback was moving through.
       expect(Math.abs(v2Trade.entryPrice - v1Trade.entryPrice)).toBeLessThanOrEqual(2);
     });
+  });
+});
+
+// ============================================================================
+// mirror: true — split-run merge (Increment 5)
+// ============================================================================
+
+describe('StrategyEngine v2 — mirror split-run merge', () => {
+  // Combines the FLAGSHIP short (reject prevDayHigh) fixture with a mirror-
+  // image bullish reject of prevDayLow LATER in the same series. Each pass
+  // only fires on its own direction's candles (direction-gated at compile
+  // time), so the SHORT (original) pass produces exactly the flagship's 1
+  // trade, and the LONG (mirrored: reject prevDayLow) pass produces exactly
+  // 1 trade of its own — proving the merge sees BOTH.
+  //
+  // Day1 (bars 0-2): high peaks 115 (bar1) -> prevDayHigh(day2)=115;
+  //   low bottoms 99 (bar0) -> prevDayLow(day2)=99.
+  // SHORT leg (bars 3-5, identical to the FLAGSHIP fixture): bar3 bearish
+  //   rejects 115 (wickExtreme=118); bar4 fills @112 (market sell);
+  //   bar5 TP hits @94. risk=6, size=100/6, pnl=18*100/6=300.
+  // LONG leg (bars 6-8): bar6 bullish rejects 99 (wick pierces 90, body
+  //   stays above 99, wickExtreme=90); bar7 fills @102 (market buy);
+  //   bar8 TP hits @138. risk=12, size=100/12, pnl=36*100/12=300.
+  const candles: Candle[] = [
+    c(0, 100, 110, 99, 105, DAY1_00), // day1: low=99 -> prevDayLow(day2)
+    c(1, 105, 115, 104, 110, DAY1_00), // day1: high=115 -> prevDayHigh(day2)
+    c(2, 110, 112, 108, 109, DAY1_00),
+    c(3, 110, 118, 109, 112, DAY1_00 + 24 * HOUR), // SHORT: bearish reject of 115
+    c(4, 112, 113, 108, 109, DAY1_00 + 25 * HOUR), // SHORT: fill @112
+    c(5, 109, 110, 90, 92, DAY1_00 + 26 * HOUR), // SHORT: TP hit @94
+    c(6, 101, 103, 90, 102, DAY1_00 + 27 * HOUR), // LONG: bullish reject of 99
+    c(7, 102, 104, 101, 103, DAY1_00 + 28 * HOUR), // LONG: fill @102
+    c(8, 102, 140, 101, 135, DAY1_00 + 29 * HOUR), // LONG: TP hit @138
+  ];
+
+  function splitRunDef(): StrategyDefinitionV2 {
+    return {
+      schemaVersion: 2,
+      id: 'split-run',
+      name: 'Reject prevDayHigh short, mirrored for longs',
+      direction: 'short',
+      mirror: true,
+      instrument: { symbol: 'TESTUSD', source: 'binance' },
+      timeframes: { execution: '1h' },
+      phases: [
+        {
+          id: 'p1',
+          when: { kind: 'levelInteraction', level: { type: 'prevDayHigh' }, interaction: 'reject' },
+          capture: [{ anchor: 'wickExtreme' }],
+        },
+      ],
+      entry: { orderType: 'market', validForBars: 5 },
+      stop: { basis: 'wick' },
+      exits: { target: { basis: 'rMultiple', value: 3 } },
+      filters: {},
+      risk: baseRisk(),
+    };
+  }
+
+  it('merges both directions into 2 chronological trades with recomputed statistics', async () => {
+    const result = await runStrategyV2(splitRunDef(), candles);
+    expect(result.trades).toHaveLength(2);
+
+    const [first, second] = result.trades;
+    // Chronological: SHORT (entry bar4, 25h) fires before LONG (entry bar7, 28h).
+    expect(first.type).toBe('short');
+    expect(first.entryTime).toBe(candles[4].time);
+    expect(first.entryPrice).toBeCloseTo(112, 9);
+    expect(first.stopLoss).toBeCloseTo(118, 9);
+    expect(first.takeProfit).toBeCloseTo(94, 9);
+    expect(first.exitReason).toBe('take_profit');
+    expect(first.realizedPnl).toBeCloseTo(300, 6);
+
+    expect(second.type).toBe('long');
+    expect(second.entryTime).toBe(candles[7].time);
+    expect(second.entryPrice).toBeCloseTo(102, 9);
+    expect(second.stopLoss).toBeCloseTo(90, 9);
+    expect(second.takeProfit).toBeCloseTo(138, 9);
+    expect(second.exitReason).toBe('take_profit');
+    expect(second.realizedPnl).toBeCloseTo(300, 6);
+
+    // Statistics recomputed over the MERGED set with the run's real risk params.
+    expect(result.statistics.totalTrades).toBe(2);
+    expect(result.statistics.winningTrades).toBe(2);
+    expect(result.statistics.totalPnl).toBeCloseTo(600, 6);
+    expect(result.statistics.netProfit).toBeCloseTo(600, 6);
+
+    // Equity curve: seed + one point per merged trade, in chronological order.
+    expect(result.equityCurve).toHaveLength(3);
+    expect(result.equityCurve[0].time).toBe(candles[4].time);
+    expect(result.equityCurve[0].balance).toBeCloseTo(10000, 6);
+    expect(result.equityCurve[1].balance).toBeCloseTo(10300, 6);
+    expect(result.equityCurve[2].balance).toBeCloseTo(10600, 6);
+
+    // skippedSignals summed across both passes (none skipped here).
+    expect(result.skippedSignals).toEqual({ zeroSize: 0, expired: 0 });
+  });
+
+  it('a non-mirrored run of the SAME base definition (mirror:false) produces only the short leg', async () => {
+    const def = splitRunDef();
+    def.mirror = false;
+    const result = await runStrategyV2(def, candles);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].type).toBe('short');
+  });
+});
+
+// ============================================================================
+// exits.flatAt — clock-time flat exit (Increment 5)
+// ============================================================================
+
+describe('StrategyEngine v2 — exits.flatAt clock-time flat exit', () => {
+  function flatAtDef(overrides: Partial<StrategyDefinitionV2> = {}): StrategyDefinitionV2 {
+    return {
+      schemaVersion: 2,
+      id: 'flat-at',
+      name: 'Flat by 16:00 UTC',
+      direction: 'long',
+      instrument: { symbol: 'TESTUSD', source: 'binance' },
+      timeframes: { execution: '1h' },
+      phases: [
+        {
+          id: 'p1',
+          when: { kind: 'compare', left: { src: 'price', field: 'close' }, cmp: 'gt', right: { src: 'const', value: 100 } },
+        },
+      ],
+      entry: { orderType: 'market', validForBars: 5 },
+      stop: { basis: 'fixedPct', bufferPct: 50 }, // deliberately far -> never hit in these fixtures
+      exits: { target: { basis: 'rMultiple', value: 100 }, flatAt: '16:00' }, // far target -> never hit
+      filters: { session: { enabled: false, timezone: 'UTC', windows: [] } }, // pins flatAt's timezone to UTC
+      risk: baseRisk(),
+      ...overrides,
+    };
+  }
+
+  it('force-closes an open position at the first bar whose local time >= flatAt, tagged flat_time', async () => {
+    const candles: Candle[] = [
+      c(0, 99, 100, 98, 99, DAY1_00 + 13 * HOUR), // 13:00 UTC baseline
+      c(1, 99, 101, 98, 102, DAY1_00 + 14 * HOUR), // 14:00 UTC -> phase fires (close>100)
+      c(2, 102, 103, 101, 102, DAY1_00 + 15 * HOUR), // 15:00 UTC -> fill @ open=102 (before flatAt)
+      c(3, 103, 104, 101, 103.5, DAY1_00 + 16 * HOUR), // 16:00 UTC -> flatAt reached -> force close @ close=103.5
+      c(4, 103, 105, 102, 104, DAY1_00 + 17 * HOUR), // filler, unused
+    ];
+    const result = await runStrategyV2(flatAtDef(), candles);
+    expect(result.trades).toHaveLength(1);
+    const t = result.trades[0];
+    expect(t.entryPrice).toBeCloseTo(102, 9);
+    expect(t.exitReason).toBe('flat_time');
+    expect(t.exitPrice).toBeCloseTo(103.5, 9);
+    expect(t.exitTime).toBe(candles[3].time);
+  });
+
+  it('cancels a pending unfilled signal at/after flatAt instead of filling it', async () => {
+    const candles: Candle[] = [
+      c(0, 99, 100, 98, 99, DAY1_00 + 15 * HOUR), // 15:00 UTC baseline
+      c(1, 99, 101, 98, 102, DAY1_00 + 16 * HOUR), // 16:00 UTC -> phase fires (close>100), armIndex=1
+      c(2, 99, 100, 97, 99, DAY1_00 + 17 * HOUR), // 17:00 UTC -> earliest fillable bar, but flatAt(16:00) already passed -> cancelled
+      c(3, 98, 99, 97, 99, DAY1_00 + 18 * HOUR), // filler
+    ];
+    const result = await runStrategyV2(flatAtDef(), candles);
+    expect(result.trades).toHaveLength(0);
+    expect(result.skippedSignals).toEqual({ zeroSize: 0, expired: 1 });
+  });
+});
+
+// ============================================================================
+// exits.exitWhen — condition-based exit (Increment 5)
+// ============================================================================
+
+describe('StrategyEngine v2 — exits.exitWhen condition-based exit', () => {
+  // EMA(2) crossesBelow EMA(3) closes an open long, with NO fixed target at
+  // all (pure cross-to-cross) -- proves both the wiring (exitWhen fires and
+  // force-closes) and that `exits.target` being entirely absent is tolerated.
+  // closes = [99, 102, 102, 110, 108, 100].
+  // EMA2 (seed=avg(c0,c1)=100.5, k=2/3): [.,100.5,101.5,107.166667,107.722222,102.574074]
+  // EMA3 (seed=avg(c0..c2)=101, k=1/2):  [.,.,101,105.5,106.75,103.375]
+  // idx2..4: ema2 > ema3 (101.5>101, 107.167>105.5, 107.722>106.75).
+  // idx5: ema2(102.574) < ema3(103.375), prev(idx4) ema2>=ema3 -> crossesBelow fires at idx5.
+  const candles: Candle[] = [
+    c(0, 99, 100, 98, 99),
+    c(1, 99, 101, 98, 102), // fires (close>100, close == next bar's open)
+    c(2, 102, 103, 101, 102), // fill @ open=102 (entryBarIndex=2)
+    c(3, 102, 112, 101, 110),
+    c(4, 110, 111, 105, 108),
+    c(5, 108, 109, 99, 100), // exitWhen fires HERE -> force close @ close=100 (low=99 stays above the 96.9 stop)
+  ];
+
+  function exitWhenDef(): StrategyDefinitionV2 {
+    return {
+      schemaVersion: 2,
+      id: 'exit-when',
+      name: 'EMA cross-back exit, no fixed target',
+      direction: 'long',
+      instrument: { symbol: 'TESTUSD', source: 'binance' },
+      timeframes: { execution: '15m' },
+      phases: [
+        {
+          id: 'p1',
+          when: { kind: 'compare', left: { src: 'price', field: 'close' }, cmp: 'gt', right: { src: 'const', value: 100 } },
+        },
+      ],
+      entry: { orderType: 'market', validForBars: 5 },
+      stop: { basis: 'fixedPct', bufferPct: 5 }, // 102*0.95=96.9 -- never touched in this fixture
+      exits: {
+        // NO `target` at all -- validateStrategyStructure tolerates this
+        // because `exitWhen` is present.
+        exitWhen: {
+          kind: 'compare',
+          left: { src: 'indicator', ref: { type: 'ema', length: 2 } },
+          cmp: 'crossesBelow',
+          right: { src: 'indicator', ref: { type: 'ema', length: 3 } },
+        },
+      },
+      filters: {},
+      risk: baseRisk(),
+    };
+  }
+
+  it('closes the open long the bar the EMA cross-back fires, tagged "condition", with no target configured', async () => {
+    const result = await runStrategyV2(exitWhenDef(), candles);
+    expect(result.trades).toHaveLength(1);
+    const t = result.trades[0];
+    expect(t.entryPrice).toBeCloseTo(102, 9);
+    expect(t.exitReason).toBe('condition');
+    expect(t.exitPrice).toBeCloseTo(100, 9);
+    expect(t.exitTime).toBe(candles[5].time);
+    expect(t.takeProfit).toBe(0); // OrderExecutionEngine's "disabled" sentinel
+  });
+
+  it('validateStrategyStructure rejects exits with NONE of target/exitWhen/timeStopBars/trailing', () => {
+    const def = exitWhenDef();
+    delete def.exits.exitWhen;
+    const errors = validateStrategyStructure(def);
+    expect(errors.some((e) => e.includes('at least one of target, exitWhen, timeStopBars, or trailing'))).toBe(
+      true,
+    );
   });
 });
