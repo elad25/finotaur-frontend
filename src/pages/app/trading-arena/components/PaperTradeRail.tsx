@@ -37,6 +37,29 @@ import { ChartStyleContext } from './chartStyleSettings';
 // so P&L percentages have a denominator. Never displayed to the user.
 const PAPER_BALANCE = 100_000;
 
+// ── Order qty bounds (Task 6 — decimal crypto qty vs integer futures qty) ──
+const DECIMAL_QTY_MIN = 0.001;
+const DECIMAL_QTY_MAX = 1000;
+const DECIMAL_QTY_STEP = 0.01;
+const DECIMAL_QTY_DIGITS = 3;
+
+/** Clamp + round a decimal (crypto) qty to [DECIMAL_QTY_MIN, DECIMAL_QTY_MAX] at 3-decimal precision. */
+function clampDecimalQty(n: number): number {
+  if (!Number.isFinite(n)) return DECIMAL_QTY_STEP;
+  const clamped = Math.min(DECIMAL_QTY_MAX, Math.max(DECIMAL_QTY_MIN, n));
+  return Math.round(clamped * 10 ** DECIMAL_QTY_DIGITS) / 10 ** DECIMAL_QTY_DIGITS;
+}
+
+/**
+ * Format a qty for display, trimming trailing zeros up to 3 decimals
+ * (0.010 -> "0.01"). Exported so ChartTab.tsx can format the same crypto
+ * decimal quantities in its chart order-line titles without duplicating the
+ * rule.
+ */
+export function formatQty(n: number): string {
+  return Number(n.toFixed(DECIMAL_QTY_DIGITS)).toString();
+}
+
 const TIF_OPTIONS: CleanSelectOption<'GTC' | 'Day'>[] = [
   { value: 'GTC', label: 'GTC' },
   { value: 'Day', label: 'Day' },
@@ -63,6 +86,27 @@ export interface PaperTradeRailProps {
    */
   qty?: number;
   onQtyChange?: React.Dispatch<React.SetStateAction<number>>;
+  /**
+   * Order-qty stepping/validation mode. 'integer' (default) preserves the
+   * original min-1/step-1 behavior (futures contracts, and every existing
+   * caller that doesn't pass this prop — e.g. DomTab). 'decimal' switches to
+   * crypto-appropriate fractional sizing (min 0.001, max 1000, step 0.01,
+   * free-text entry clamped/sanitized on blur).
+   */
+  qtyMode?: 'integer' | 'decimal';
+  /**
+   * Shows a subtle one-line "Delayed data — fills are indicative." notice
+   * under the header (futures paper trading — delayed exchange data, no
+   * live tick feed). Default false — zero visual change for every other caller.
+   */
+  delayedData?: boolean;
+  /**
+   * Dollar value of one full point move, per contract — stamped onto every
+   * position/order this panel opens (see useBacktestSession's PaperPosition/
+   * PendingOrder.pointValue). Undefined (every existing caller — crypto,
+   * DomTab) preserves today's 1x multiplier exactly.
+   */
+  pointValue?: number;
 }
 
 export function PaperTradeRail({
@@ -76,6 +120,9 @@ export function PaperTradeRail({
   session,
   qty: qtyProp,
   onQtyChange,
+  qtyMode = 'integer',
+  delayedData = false,
+  pointValue,
 }: PaperTradeRailProps) {
   // Chart Settings' Light Mode (see chartStyleSettings.ts) reaches this rail
   // via context — same fallback pattern FinotaurChart/ChartTab use, no prop
@@ -112,11 +159,31 @@ export function PaperTradeRail({
   // into the engine (paper fills don't distinguish GTC vs Day).
   const [tif, setTif] = useState<'GTC' | 'Day'>('GTC');
 
-  // Unrealized P&L — pure number so we can color it.
+  // Decimal-mode (crypto) free-text qty entry — local text buffer so the
+  // user can type "0.1" through "0.10" without losing the trailing digit on
+  // every keystroke; committed (clamped + sanitized) on blur, mirroring the
+  // arena settings dialogs' NumberField pattern. Synced back to `qty` when
+  // it changes externally (e.g. +/- buttons, or ChartTab resetting the
+  // default on a crypto/futures switch).
+  const [qtyText, setQtyText] = useState(() => formatQty(qty));
+  useEffect(() => {
+    setQtyText(formatQty(qty));
+  }, [qty]);
+  const commitQtyText = () => {
+    const parsed = Number(qtyText);
+    const next = Number.isFinite(parsed) ? clampDecimalQty(parsed) : qty;
+    setQtyText(formatQty(next));
+    if (next !== qty) setQty(next);
+  };
+
+  // Unrealized P&L — pure number so we can color it. Futures contracts carry
+  // a dollar-per-point multiplier (pointValue, stamped on the position at
+  // open) — undefined defaults to 1, matching pre-multiplier behavior for
+  // crypto/every other caller.
   const unrealizedPnl = useMemo(() => {
     if (!activePos || livePrice == null) return null;
     const dir = activePos.side === 'LONG' ? 1 : -1;
-    return (livePrice - activePos.entryPrice) * dir * activePos.size;
+    return (livePrice - activePos.entryPrice) * dir * activePos.size * (activePos.pointValue ?? 1);
   }, [activePos, livePrice]);
 
   // ── Live-tick engine ───────────────────────────────────────────
@@ -228,6 +295,11 @@ export function PaperTradeRail({
           <div className="flex items-center justify-between">
             <span className={cn('text-[13px] font-bold', light ? 'text-[#131722]' : 'text-white')}>{symbol}</span>
           </div>
+          {delayedData && (
+            <p className={cn('text-[10px]', light ? 'text-[#8a8d98]' : 'text-zinc-600')}>
+              Delayed data — fills are indicative.
+            </p>
+          )}
 
           {/* Order button grid */}
           <div className="grid grid-cols-2 gap-[7px]">
@@ -235,7 +307,7 @@ export function PaperTradeRail({
               type="button"
               onClick={() => {
                 if (livePrice <= 0) return;
-                openPosition({ side: 'LONG', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET' });
+                openPosition({ side: 'LONG', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET', pointValue });
               }}
               className="rounded-md border border-[rgba(29,158,117,0.4)] bg-[rgba(29,158,117,0.18)] py-2 text-[12px] font-bold text-[#3ddc9a] transition-colors hover:bg-[rgba(29,158,117,0.28)]"
             >
@@ -245,7 +317,7 @@ export function PaperTradeRail({
               type="button"
               onClick={() => {
                 if (livePrice <= 0) return;
-                openPosition({ side: 'SHORT', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET' });
+                openPosition({ side: 'SHORT', price: livePrice, time: nowSec(), size: qty, entryOrderType: 'MARKET', pointValue });
               }}
               className="rounded-md border border-[rgba(212,83,126,0.4)] bg-[rgba(212,83,126,0.18)] py-2 text-[12px] font-bold text-[#ff6b93] transition-colors hover:bg-[rgba(212,83,126,0.28)]"
             >
@@ -257,7 +329,7 @@ export function PaperTradeRail({
               disabled={bid == null || bid <= 0}
               onClick={() => {
                 if (bid == null || bid <= 0) return;
-                addPendingOrder({ side: 'LONG', type: 'LIMIT', triggerPrice: bid, size: qty, time: nowSec() });
+                addPendingOrder({ side: 'LONG', type: 'LIMIT', triggerPrice: bid, size: qty, time: nowSec(), pointValue });
               }}
               className="flex flex-col items-center rounded-md border border-[rgba(29,158,117,0.2)] bg-[rgba(29,158,117,0.06)] py-1.5 text-[11px] font-semibold text-[#3ddc9a] transition-colors hover:bg-[rgba(29,158,117,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -268,7 +340,7 @@ export function PaperTradeRail({
               disabled={ask == null || ask <= 0}
               onClick={() => {
                 if (ask == null || ask <= 0) return;
-                addPendingOrder({ side: 'SHORT', type: 'LIMIT', triggerPrice: ask, size: qty, time: nowSec() });
+                addPendingOrder({ side: 'SHORT', type: 'LIMIT', triggerPrice: ask, size: qty, time: nowSec(), pointValue });
               }}
               className="flex flex-col items-center rounded-md border border-[rgba(212,83,126,0.2)] bg-[rgba(212,83,126,0.06)] py-1.5 text-[11px] font-semibold text-[#ff6b93] transition-colors hover:bg-[rgba(212,83,126,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -345,7 +417,9 @@ export function PaperTradeRail({
               >
                 <button
                   type="button"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  onClick={() =>
+                    setQty((q) => (qtyMode === 'decimal' ? clampDecimalQty(q - DECIMAL_QTY_STEP) : Math.max(1, q - 1)))
+                  }
                   className={cn(
                     'h-5 w-5 rounded text-[13px] font-bold',
                     light
@@ -355,10 +429,29 @@ export function PaperTradeRail({
                 >
                   −
                 </button>
-                <span className={cn('text-[12px] font-semibold tabular-nums', light ? 'text-[#131722]' : 'text-white')}>{qty}</span>
+                {qtyMode === 'decimal' ? (
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={qtyText}
+                    onChange={(e) => setQtyText(e.target.value)}
+                    onBlur={commitQtyText}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur();
+                    }}
+                    className={cn(
+                      'w-14 bg-transparent text-center text-[12px] font-semibold tabular-nums focus:outline-none',
+                      light ? 'text-[#131722]' : 'text-white',
+                    )}
+                  />
+                ) : (
+                  <span className={cn('text-[12px] font-semibold tabular-nums', light ? 'text-[#131722]' : 'text-white')}>{qty}</span>
+                )}
                 <button
                   type="button"
-                  onClick={() => setQty((q) => q + 1)}
+                  onClick={() =>
+                    setQty((q) => (qtyMode === 'decimal' ? clampDecimalQty(q + DECIMAL_QTY_STEP) : q + 1))
+                  }
                   className={cn(
                     'h-5 w-5 rounded text-[13px] font-bold',
                     light

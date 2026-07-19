@@ -53,6 +53,13 @@ export interface PaperPosition {
   size: number;               // contracts / shares / units — CURRENT remaining size
   /** Total entered quantity across ALL entry fills (scale-ins accumulate; partial closes do NOT reduce it). Basis for TP-leg sizePercent. */
   originalSize?: number;
+  /**
+   * Dollar value of one full point move, per contract (e.g. ES=50, MES=5).
+   * Stamped at creation by the caller for futures symbols; `undefined` for
+   * crypto/stocks — every price-diff PnL computation in this file treats a
+   * missing value as `1` (today's behavior, byte-for-byte unaffected).
+   */
+  pointValue?: number;
   stopLoss?: number;
   takeProfit?: number;        // legacy single TP price (kept for backward compat)
   /** Multi-leg take-profit schedule. Takes precedence over `takeProfit` when set. */
@@ -107,6 +114,8 @@ export interface PendingOrder {
   takeProfit?: number;
   strategyId?: string | null;
   createdAt: number;          // unix seconds (bar.time when placed)
+  /** Dollar value of one full point move, per contract — see PaperPosition.pointValue. Carried onto the resulting position when this order fills. */
+  pointValue?: number;
 }
 
 export interface SessionStats {
@@ -153,6 +162,8 @@ interface OpenPayload {
   strategyId?: string | null;
   /** Phase 6: order type that opened this position. Defaults to MARKET. */
   entryOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
+  /** Dollar value of one full point move, per contract — see PaperPosition.pointValue. */
+  pointValue?: number;
 }
 
 // Phase 6 payloads
@@ -167,6 +178,8 @@ interface AddPendingPayload {
   takeProfit?: number;
   strategyId?: string | null;
   time: number;
+  /** Dollar value of one full point move, per contract — see PaperPosition.pointValue. */
+  pointValue?: number;
 }
 interface CancelPendingPayload { orderId: string; }
 interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
@@ -291,7 +304,7 @@ function positionNetPnl(p: PaperPosition): number {
 
 function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPercent: number } {
   const direction = p.side === 'LONG' ? 1 : -1;
-  const pnl = (exitPrice - p.entryPrice) * direction * p.size;
+  const pnl = (exitPrice - p.entryPrice) * direction * p.size * (p.pointValue ?? 1);
   const pnlPercent = (((exitPrice - p.entryPrice) * direction) / p.entryPrice) * 100;
   return { pnl, pnlPercent };
 }
@@ -307,7 +320,7 @@ function buildExitFill(
   time: number,
 ): FillRecord {
   const direction = pos.side === 'LONG' ? 1 : -1;
-  const grossPnl = (fillPrice - pos.entryPrice) * direction * qty;
+  const grossPnl = (fillPrice - pos.entryPrice) * direction * qty * (pos.pointValue ?? 1);
   const fees = applyCommission(fillPrice, qty, config);
   return {
     kind,
@@ -409,7 +422,7 @@ export const _sessionReducerForTests = reducer;
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
-      const { side, price, time, size, stopLoss, takeProfit, takeProfits, strategyId, entryOrderType } = action.payload;
+      const { side, price, time, size, stopLoss, takeProfit, takeProfits, strategyId, entryOrderType, pointValue } = action.payload;
       const orderType = entryOrderType ?? 'MARKET';
 
       // Apply slippage to entry fill price.
@@ -436,6 +449,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           entryPrice: fillPrice,
           size,
           originalSize: size,
+          pointValue,
           stopLoss,
           takeProfit,
           takeProfits: takeProfits ?? [],
@@ -494,7 +508,7 @@ function reducer(state: SessionState, action: Action): SessionState {
       // Realize PnL on min(qty, remaining size) at fillPrice vs current weighted-avg entry.
       const closeQty = Math.min(size, pos.size);
       const direction = pos.side === 'LONG' ? 1 : -1;
-      const grossPnlOnClose = (fillPrice - pos.entryPrice) * direction * closeQty;
+      const grossPnlOnClose = (fillPrice - pos.entryPrice) * direction * closeQty * (pos.pointValue ?? 1);
       const exitFee = applyCommission(fillPrice, closeQty, state.commissionConfig);
       const exitFill: FillRecord = {
         kind: 'partial_exit',
@@ -556,6 +570,7 @@ function reducer(state: SessionState, action: Action): SessionState {
             entryPrice: fillPrice,
             size: flipQty,
             originalSize: flipQty,
+            pointValue,
             stopLoss,
             takeProfit,
             takeProfits: takeProfits ?? [],
@@ -721,7 +736,7 @@ function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case 'ADD_PENDING': {
-      const { side, type: orderType, triggerPrice, limitPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
+      const { side, type: orderType, triggerPrice, limitPrice, size, stopLoss, takeProfit, strategyId, time, pointValue } = action.payload;
       const order: PendingOrder = {
         id: `ord_${time}_${Math.random().toString(36).slice(2, 8)}`,
         side,
@@ -733,6 +748,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         takeProfit,
         strategyId: strategyId ?? null,
         createdAt: time,
+        pointValue,
       };
       return { ...state, pendingOrders: [...state.pendingOrders, order] };
     }
@@ -791,6 +807,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           takeProfit: order.takeProfit,
           strategyId: order.strategyId,
           entryOrderType: slipType,
+          pointValue: order.pointValue,
         },
       });
     }
@@ -988,6 +1005,9 @@ function reducer(state: SessionState, action: Action): SessionState {
         entryPrice: entryFillPrice,
         size: newSize,
         originalSize: newSize,
+        // Same instrument as the position just closed — carry its multiplier
+        // forward (REVERSE's payload has no pointValue field of its own).
+        pointValue: pos.pointValue,
         takeProfits: [],
         strategyId: pos.strategyId ?? null,
         entryOrderType: 'MARKET',
@@ -1037,7 +1057,7 @@ function reducer(state: SessionState, action: Action): SessionState {
 
       const exitFee = applyCommission(fillPrice, closeQty, state.commissionConfig);
       const direction = pos.side === 'LONG' ? 1 : -1;
-      const grossPnl = (fillPrice - pos.entryPrice) * direction * closeQty;
+      const grossPnl = (fillPrice - pos.entryPrice) * direction * closeQty * (pos.pointValue ?? 1);
       const exitFill: FillRecord = {
         kind: 'partial_exit',
         price: fillPrice,

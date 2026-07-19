@@ -1,9 +1,23 @@
 // src/components/charting/orderflow/futuresContracts.ts
 // CME futures contract specs + front-month resolver for the Trading Arena's
-// admin-only Futures tab. Scope: NQ, ES, MNQ, MES (Nasdaq-100 / S&P 500,
-// standard + micro) — the four contracts the founder actively trades.
+// admin-only Futures tab. Originally scoped to NQ, ES, MNQ, MES (Nasdaq-100 /
+// S&P 500, standard + micro) — the four contracts the founder actively
+// trades. Extended with Dow (YM/MYM), Russell (RTY/M2K), Gold (GC/MGC), and
+// Crude (CL/MCL) for Arena paper-trading's futures PnL/quantity support.
 
-export type FuturesRoot = 'NQ' | 'ES' | 'MNQ' | 'MES';
+export type FuturesRoot =
+  | 'NQ'
+  | 'ES'
+  | 'MNQ'
+  | 'MES'
+  | 'YM'
+  | 'MYM'
+  | 'RTY'
+  | 'M2K'
+  | 'GC'
+  | 'MGC'
+  | 'CL'
+  | 'MCL';
 
 export interface FuturesContractSpec {
   root: FuturesRoot;
@@ -16,13 +30,62 @@ export interface FuturesContractSpec {
 }
 
 export const FUTURES_CONTRACTS: Record<FuturesRoot, FuturesContractSpec> = {
-  NQ:  { root: 'NQ',  displayName: 'Nasdaq-100 (NQ)',       tickSize: 0.25, pointValue: 20 },
-  ES:  { root: 'ES',  displayName: 'S&P 500 (ES)',          tickSize: 0.25, pointValue: 50 },
+  NQ:  { root: 'NQ',  displayName: 'Nasdaq-100 (NQ)',        tickSize: 0.25, pointValue: 20 },
+  ES:  { root: 'ES',  displayName: 'S&P 500 (ES)',           tickSize: 0.25, pointValue: 50 },
   MNQ: { root: 'MNQ', displayName: 'Micro Nasdaq-100 (MNQ)', tickSize: 0.25, pointValue: 2 },
-  MES: { root: 'MES', displayName: 'Micro S&P 500 (MES)',   tickSize: 0.25, pointValue: 5 },
+  MES: { root: 'MES', displayName: 'Micro S&P 500 (MES)',    tickSize: 0.25, pointValue: 5 },
+  YM:  { root: 'YM',  displayName: 'Dow Jones (YM)',         tickSize: 1,    pointValue: 5 },
+  MYM: { root: 'MYM', displayName: 'Micro Dow Jones (MYM)',  tickSize: 1,    pointValue: 0.5 },
+  RTY: { root: 'RTY', displayName: 'Russell 2000 (RTY)',     tickSize: 0.1,  pointValue: 50 },
+  M2K: { root: 'M2K', displayName: 'Micro Russell 2000 (M2K)', tickSize: 0.1, pointValue: 5 },
+  GC:  { root: 'GC',  displayName: 'Gold (GC)',              tickSize: 0.1,  pointValue: 100 },
+  MGC: { root: 'MGC', displayName: 'Micro Gold (MGC)',       tickSize: 0.1,  pointValue: 10 },
+  CL:  { root: 'CL',  displayName: 'Crude Oil (CL)',         tickSize: 0.01, pointValue: 1000 },
+  MCL: { root: 'MCL', displayName: 'Micro Crude Oil (MCL)',  tickSize: 0.01, pointValue: 100 },
 };
 
-export const FUTURES_ROOTS: FuturesRoot[] = ['NQ', 'ES', 'MNQ', 'MES'];
+export const FUTURES_ROOTS: FuturesRoot[] = ['NQ', 'ES', 'MNQ', 'MES', 'YM', 'MYM', 'RTY', 'M2K', 'GC', 'MGC', 'CL', 'MCL'];
+
+// ─── Symbol → root resolution ───────────────────────────────────────────
+//
+// Chart/order-panel symbols arrive in varying shapes depending on source:
+// a bare root ("NQ"), a front-month contract code ("NQU6"), a Yahoo-style
+// continuous code ("NQ=F"), or an NT8-style "<ROOT> <MM-YY>" string. This
+// resolver strips month codes / suffixes and matches against the known
+// roots so callers can look up FUTURES_CONTRACTS without re-deriving the
+// parsing logic at every call site (Arena paper-trading PnL + qty step).
+const MONTH_CODE_CHARS = new Set(['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z']);
+
+/**
+ * Resolve a futures root spec from an arbitrary symbol string. Longest-root-
+ * first so e.g. "MES" isn't mis-matched as "ES" with a stray "M" prefix.
+ * Returns `undefined` when the symbol doesn't match any known root — callers
+ * treat this as "not a futures contract we have a spec for" (safe no-op).
+ */
+export function resolveFuturesSpec(symbol: string): FuturesContractSpec | undefined {
+  if (!symbol) return undefined;
+  // Strip common suffixes/decoration: "=F" (Yahoo), trailing " MM-YY" (NT8),
+  // whitespace, and lowercase for a case-insensitive root match.
+  const base = symbol
+    .toUpperCase()
+    .replace(/=F$/, '')
+    .replace(/\s+\d{2}-\d{2}$/, '')
+    .trim();
+
+  const rootsByLengthDesc = [...FUTURES_ROOTS].sort((a, b) => b.length - a.length);
+  for (const root of rootsByLengthDesc) {
+    if (!base.startsWith(root)) continue;
+    const rest = base.slice(root.length);
+    // Bare root ("NQ") or root + single month-code + 1-2 digit year ("NQU6", "NQZ26").
+    if (rest.length === 0) return FUTURES_CONTRACTS[root];
+    const monthChar = rest[0];
+    const yearDigits = rest.slice(1);
+    if (MONTH_CODE_CHARS.has(monthChar) && /^\d{1,2}$/.test(yearDigits)) {
+      return FUTURES_CONTRACTS[root];
+    }
+  }
+  return undefined;
+}
 
 // ─── Front-month resolution ──────────────────────────────────────────────
 //

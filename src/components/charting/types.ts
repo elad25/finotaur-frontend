@@ -107,6 +107,23 @@ export interface BarFetchMeta {
   fetched_count?: number;
 }
 
+/**
+ * A single order/position price-level line drawn on the main candle series
+ * (Trading Arena paper-trading overlay — active position, pending orders,
+ * SL/TP). Distinct from `OverlayPriceLine` (FinotaurChart.tsx, used for
+ * order-book walls) because callers here update `price`/`title`/`color` on
+ * an EXISTING `id` every tick (e.g. live unrealized PnL in the title) and
+ * expect the line to update in place, not just be added/removed by id.
+ */
+export interface ChartOrderLine {
+  /** Stable unique key — used for diffing (add/update/remove). */
+  id: string;
+  price: number;
+  color: string;
+  lineStyle: 'solid' | 'dashed';
+  title: string;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Indicators (Phase 2 + Phase 2.5)
 // ═══════════════════════════════════════════════════════════════
