@@ -45,6 +45,20 @@ function describeAnchorKind(kind: AnchorKind): string {
   }
 }
 
+/** Named session (Increment 5) English label, e.g. 'asia' -> 'Asian'. */
+function describeNamedSession(name: 'asia' | 'london' | 'newyork'): string {
+  switch (name) {
+    case 'asia':
+      return 'Asian';
+    case 'london':
+      return 'London';
+    case 'newyork':
+      return 'New York';
+    default:
+      return name;
+  }
+}
+
 export function describeLevel(ref: LevelRef): string {
   switch (ref.type) {
     case 'prevDayHigh':
@@ -54,9 +68,9 @@ export function describeLevel(ref: LevelRef): string {
     case 'prevDayClose':
       return 'Previous Day Close';
     case 'sessionHigh':
-      return 'Session High';
+      return ref.sessionName ? `${describeNamedSession(ref.sessionName)} Session High` : 'Session High';
     case 'sessionLow':
-      return 'Session Low';
+      return ref.sessionName ? `${describeNamedSession(ref.sessionName)} Session Low` : 'Session Low';
     case 'openingRangeHigh':
       return `${ref.orMinutes ?? 15}min Opening Range High`;
     case 'openingRangeLow':
@@ -89,6 +103,8 @@ function describeOperand(op: Operand): string {
       return describeLevel(op.ref);
     case 'const':
       return String(op.value);
+    case 'pctDiff':
+      return `%diff(${describeOperand(op.a)}, ${describeOperand(op.b)})`;
     default:
       return 'value';
   }
@@ -235,27 +251,35 @@ export function describeStop(stop: StopRuleV2): string {
   }
 }
 
-/** One-line description of exits (target + partials + trailing + time-stop). */
+/** One-line description of exits (target + partials + trailing + time-stop
+ *  + flatAt + exitWhen). `target` is OPTIONAL (Increment 5) — a strategy may
+ *  rely purely on exitWhen/timeStopBars/trailing instead. */
 export function describeExits(exits: ExitRuleV2): string {
-  const { target, partials, trailing, timeStopBars } = exits;
+  const { target, partials, trailing, timeStopBars, flatAt, exitWhen } = exits;
   let targetDesc: string;
-  switch (target.basis) {
-    case 'rMultiple':
-      targetDesc = `${target.value ?? '?'}R target`;
-      break;
-    case 'fixedPct':
-      targetDesc = `${target.value ?? '?'}% target`;
-      break;
-    case 'level':
-      targetDesc = `target at ${target.level ? describeLevel(target.level) : 'level'}`;
-      break;
-    default:
-      targetDesc = 'target not configured';
+  if (!target) {
+    targetDesc = 'no fixed target';
+  } else {
+    switch (target.basis) {
+      case 'rMultiple':
+        targetDesc = `${target.value ?? '?'}R target`;
+        break;
+      case 'fixedPct':
+        targetDesc = `${target.value ?? '?'}% target`;
+        break;
+      case 'level':
+        targetDesc = `target at ${target.level ? describeLevel(target.level) : 'level'}`;
+        break;
+      default:
+        targetDesc = 'target not configured';
+    }
   }
   const bits = [`Exit: ${targetDesc}`];
   if (partials && partials.length > 0) bits.push(`${partials.length} partial(s)`);
   if (trailing) bits.push(`trailing (${trailing.mode})`);
   if (timeStopBars) bits.push(`time-stop ${timeStopBars} bars`);
+  if (flatAt) bits.push(`flat by ${flatAt}`);
+  if (exitWhen) bits.push(`exit when ${describeCondition(exitWhen)}`);
   return bits.join(', ');
 }
 

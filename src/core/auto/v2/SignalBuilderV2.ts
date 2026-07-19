@@ -72,11 +72,21 @@ export function buildSignalV2(
   if (dir === 'long' && stopLoss >= entryPrice - EPS) return null;
   if (dir === 'short' && stopLoss <= entryPrice + EPS) return null;
 
-  const takeProfit = resolveTarget(def.exits.target, compiled, i, state, dir, entryPrice, stopLoss);
-  if (takeProfit === null || !Number.isFinite(takeProfit) || takeProfit <= 0) return null;
-
-  if (dir === 'long' && takeProfit <= entryPrice + EPS) return null;
-  if (dir === 'short' && takeProfit >= entryPrice - EPS) return null;
+  let takeProfit: number;
+  if (def.exits.target) {
+    const resolved = resolveTarget(def.exits.target, compiled, i, state, dir, entryPrice, stopLoss);
+    if (resolved === null || !Number.isFinite(resolved) || resolved <= 0) return null;
+    if (dir === 'long' && resolved <= entryPrice + EPS) return null;
+    if (dir === 'short' && resolved >= entryPrice - EPS) return null;
+    takeProfit = resolved;
+  } else {
+    // No fixed target configured (Increment 5) — exits.exitWhen/timeStopBars/
+    // trailing manage the exit instead (validateStrategyStructure guarantees
+    // at least one is present). `0` is OrderExecutionEngine's own "disabled"
+    // sentinel (`if (!position.takeProfit) return null;`), so the
+    // SL-before-TP fill-check simply never fires a take-profit hit.
+    takeProfit = 0;
+  }
 
   return {
     direction: dir,
@@ -213,7 +223,7 @@ function findAnchorAcrossPhases(
 // ----------------------------------------------------------------------------
 
 function resolveTarget(
-  rule: ExitRuleV2['target'],
+  rule: NonNullable<ExitRuleV2['target']>,
   compiled: CompiledStrategy,
   i: number,
   state: RuntimeState,

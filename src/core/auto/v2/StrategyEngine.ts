@@ -12,17 +12,39 @@
 // through `StrategyDefinitionV2.phases`, captures anchors, and — once the
 // LAST phase completes — builds one `TradeSignalV2` via `SignalBuilderV2`.
 //
-// PER-BAR ORDER OF OPERATIONS (see runStrategyV2's loop)
+// PER-BAR ORDER OF OPERATIONS (see runStrategyV2Single's loop)
 // --------------------------------------------------------
 //   (a) Manage the OPEN position, in order: partials -> BE/trailing ->
-//       time-stop -> SL-before-TP fill checks (v1 gap-realism convention:
-//       SL checked before TP on the same bar).
+//       flatAt (Increment 5 — clock-time flat exit) -> exitWhen (Increment 5
+//       — condition-based exit) -> time-stop -> SL-before-TP fill checks
+//       (v1 gap-realism convention: SL checked before TP on the same bar).
+//       flatAt/exitWhen/time-stop are all "force close at this bar's close"
+//       mechanisms, checked in that fixed order — whichever fires FIRST on a
+//       given bar wins (its own exitReason), the rest are never evaluated
+//       that bar.
 //   (b) Attempt to fill the PENDING signal (earliest fill armIndex+1,
 //       validForBars expiry, session gating, maxTradesPerDay, the NEW
-//       dailyLossStopPct filter).
+//       dailyLossStopPct filter, and — Increment 5 — cancel outright once
+//       local time reaches `exits.flatAt`, never filling into a post-flat
+//       window).
 //   (c) Advance the phase state machine — ONLY when no position is open AND
 //       no signal is pending (the machine PAUSES otherwise; see module
 //       doc below on why).
+//
+// MIRROR (Increment 5 — `mirror: true`)
+// ----------------------------------------
+// `runStrategyV2` (the public entry point) is a thin wrapper over the above:
+// when `def.mirror` is unset, it delegates straight to `runStrategyV2Single`
+// (byte-identical to every earlier increment). When set, it ALSO runs
+// `mirrorStrategy.ts`'s `mirrorStrategyV2(def)` as a SECOND, independent
+// `runStrategyV2Single` pass over the SAME candle series, then merges both
+// variants' trades into one chronological result (`mergeStrategyResults`):
+// trades concatenated + sorted by entryTime, statistics/equityCurve/
+// rMultipleDistribution/rLadder recomputed over the MERGED set using the
+// run's real risk params, skippedSignals summed. The two directions run
+// fully independently — a long and a short MAY overlap in time (mirrors
+// TradeZella's independent long/short counts); `maxTradesPerDay` /
+// `dailyLossStopPct` apply PER VARIANT, not to the merged total.
 //
 // PHASE STATE MACHINE
 // --------------------
@@ -85,7 +107,7 @@
 import type { Candle } from '../../../components/ReplayChart/types';
 import type { AutoBacktestResult, BacktestStatisticsLike, RMultipleDistribution } from '../AutoBacktestEngine';
 import { R_LADDER_LEVELS } from '../AutoBacktestEngine';
-import { MarketContext, candleTimeMs, localDayKey } from '../MarketContext';
+import { MarketContext, candleTimeMs, localDayKey, hhmmToMinutes, localMinutesAndDay } from '../MarketContext';
 import { OrderExecutionEngine } from '../../engines/OrderExecutionEngine';
 import { StatisticsEngine } from '../../engines/StatisticsEngine';
 import { getContractSpec, type ContractSpec } from '../contractSpecs';
@@ -117,6 +139,7 @@ import {
   type SmtContext,
 } from './ConditionCompiler';
 import { buildSignalV2, type TradeSignalV2 } from './SignalBuilderV2';
+import { mirrorStrategyV2 } from './mirrorStrategy';
 import { validateStrategyStructure, type AnchorKind, type StrategyDefinitionV2, type TF } from './types';
 
 // ----------------------------------------------------------------------------
@@ -195,7 +218,77 @@ interface OpenPositionV2 extends AutoPosition {
 // Public entry point
 // ----------------------------------------------------------------------------
 
+/** Throws with a consistent, actionable message if `def` fails structural
+ *  validation — shared by the public `runStrategyV2` wrapper (validates the
+ *  ORIGINAL definition before mirroring) and `runStrategyV2Single` (validates
+ *  whichever definition it was actually handed — the original, or the
+ *  mirrored variant, doubling as a correctness safety net on the mirror
+ *  transform itself). */
+function assertStructurallyValid(def: StrategyDefinitionV2): void {
+  const structuralErrors = validateStrategyStructure(def);
+  if (structuralErrors.length > 0) {
+    throw new Error(
+      `runStrategyV2: StrategyDefinitionV2 "${def.id}" failed structural validation: ` +
+        structuralErrors.join('; '),
+    );
+  }
+}
+
+/**
+ * Public entry point. Delegates to `runStrategyV2Single` for every strategy
+ * without `mirror: true` (byte-identical to every earlier increment); see
+ * this module's "MIRROR" doc above for the `mirror: true` split-run + merge
+ * path.
+ */
 export async function runStrategyV2(
+  def: StrategyDefinitionV2,
+  candlesInput: Candle[] | Partial<Record<TF, Candle[]>>,
+  opts: RunStrategyV2Options = {},
+): Promise<AutoBacktestResult> {
+  if (!def.mirror) {
+    return runStrategyV2Single(def, candlesInput, opts);
+  }
+
+  assertStructurallyValid(def);
+  const mirrored = mirrorStrategyV2(def);
+
+  const seriesByTfForMirror: Partial<Record<TF, Candle[]>> = Array.isArray(candlesInput)
+    ? { [def.timeframes.execution]: candlesInput }
+    : candlesInput;
+  const executionCandles = seriesByTfForMirror[def.timeframes.execution];
+  if (!executionCandles || executionCandles.length === 0) {
+    throw new Error(
+      `runStrategyV2: no (non-empty) candle series supplied for the execution timeframe ` +
+        `"${def.timeframes.execution}".`,
+    );
+  }
+  const n = executionCandles.length;
+
+  const primaryResult = await runStrategyV2Single(def, candlesInput, {
+    ...opts,
+    onProgress: opts.onProgress
+      ? (scanned: number, _total: number, found: number) => opts.onProgress!(scanned, n * 2, found)
+      : undefined,
+  });
+  const foundOffset = primaryResult.trades.length;
+  const mirroredResult = await runStrategyV2Single(mirrored, candlesInput, {
+    ...opts,
+    onProgress: opts.onProgress
+      ? (scanned: number, _total: number, found: number) =>
+          opts.onProgress!(n + scanned, n * 2, foundOffset + found)
+      : undefined,
+  });
+
+  return mergeStrategyResults(primaryResult, mirroredResult, executionCandles, def.risk.initialBalance);
+}
+
+/**
+ * Single-direction, single-pass engine run — the ENTIRE Increment 1-4
+ * implementation, unchanged, plus Increment 5's flatAt/exitWhen additions
+ * (see module doc). Renamed from the old `runStrategyV2` (Increment 5) so
+ * the public `runStrategyV2` above can wrap it for the mirror split-run.
+ */
+async function runStrategyV2Single(
   def: StrategyDefinitionV2,
   /**
    * Legacy (Increment 1/2) shape: a plain execution-timeframe candle array —
@@ -208,13 +301,7 @@ export async function runStrategyV2(
   candlesInput: Candle[] | Partial<Record<TF, Candle[]>>,
   opts: RunStrategyV2Options = {},
 ): Promise<AutoBacktestResult> {
-  const structuralErrors = validateStrategyStructure(def);
-  if (structuralErrors.length > 0) {
-    throw new Error(
-      `runStrategyV2: StrategyDefinitionV2 "${def.id}" failed structural validation: ` +
-        structuralErrors.join('; '),
-    );
-  }
+  assertStructurallyValid(def);
 
   // Normalize the legacy array shape into the { [execTf]: candles } map
   // shape — one code path below regardless of which shape the caller used.
@@ -388,6 +475,21 @@ export async function runStrategyV2(
   let dayRealizedPnl = 0;
   let dailyLossStopHit = false;
 
+  // flatAt (Increment 5 — clock-time flat exit). `flatTimezone` mirrors the
+  // dayTimezone convention above but defaults to America/New_York (rather
+  // than UTC) when no session filter is configured — "flat by 4pm" without
+  // an explicit timezone is universally meant in ET for US futures/equities.
+  const flatAtMinutes = def.exits.flatAt !== undefined ? hhmmToMinutes(def.exits.flatAt) : undefined;
+  const flatTimezone = def.filters.session?.timezone ?? 'America/New_York';
+  const isFlatTime = (candle: Candle): boolean =>
+    flatAtMinutes !== undefined && localMinutesAndDay(candleTimeMs(candle), flatTimezone).minutes >= flatAtMinutes;
+
+  // exitWhen (Increment 5 — condition-based exit). Evaluated against a
+  // FRESH, per-position RuntimeState — see ExitRuleV2.exitWhen's
+  // LIMITATION doc (the entry attempt's captured anchors are already gone
+  // by the time a position is open). Reset on every fill, below.
+  let exitWhenState: RuntimeState = { anchors: new Map(), scratch: new Map() };
+
   const advancePhase = (i: number): void => {
     const phase = compiled.phases[phaseIdx];
 
@@ -457,8 +559,20 @@ export async function runStrategyV2(
       } else {
         applyTrailing(open, candle, i, engineCtx);
 
-        if (checkTimeStop(open, i, def.exits.timeStopBars)) {
-          finalizeTimeStop(open, candle, engineCtx);
+        if (isFlatTime(candle)) {
+          finalizeForceClose(open, candle, engineCtx, 'flat_time');
+          balance += open.realizedPnl ?? 0;
+          dayRealizedPnl += open.realizedPnl ?? 0;
+          closed.push(open);
+          open = null;
+        } else if (compiled.exitWhen && compiled.exitWhen.test(i, exitWhenState)) {
+          finalizeForceClose(open, candle, engineCtx, 'condition');
+          balance += open.realizedPnl ?? 0;
+          dayRealizedPnl += open.realizedPnl ?? 0;
+          closed.push(open);
+          open = null;
+        } else if (checkTimeStop(open, i, def.exits.timeStopBars)) {
+          finalizeForceClose(open, candle, engineCtx, 'manual');
           balance += open.realizedPnl ?? 0;
           dayRealizedPnl += open.realizedPnl ?? 0;
           closed.push(open);
@@ -487,7 +601,14 @@ export async function runStrategyV2(
 
     // (b) Attempt to fill the pending signal.
     if (pending && !open) {
-      if (i - pending.armIndex > pending.validForBars) {
+      if (isFlatTime(candle)) {
+        // flatAt (Increment 5): never fill into a post-flat window — cancel
+        // outright, same accounting as a validForBars expiry (it never
+        // became a trade).
+        if (pendingSawZeroSize) skippedZeroSize += 1;
+        else skippedExpired += 1;
+        pending = null;
+      } else if (i - pending.armIndex > pending.validForBars) {
         // Unfillable within its window — expires and unblocks the machine
         // (see StrategyEngine.ts module doc: the machine only ever pauses
         // while `pending` is set, so clearing it here is what lets phase 0
@@ -508,6 +629,11 @@ export async function runStrategyV2(
             open = attempt.position;
             tradesOpenedToday += 1;
             pending = null;
+            // exitWhen (Increment 5): fresh state per position — the phase
+            // attempt's own runtimeState was already reset when the signal
+            // was built (see advancePhase), so this is a SEPARATE state
+            // object, not a reuse of it.
+            exitWhenState = { anchors: new Map(), scratch: new Map() };
           } else if (attempt.kind === 'zero-size') {
             // Sizing rejected this bar (e.g. stop too wide for the risk
             // budget) — keep the signal pending, it may still fill on a
@@ -898,8 +1024,21 @@ function finalizeHit(position: OpenPositionV2, candle: Candle, hit: ExecResult, 
   position.status = 'closed';
 }
 
-/** Force-close at the CLOSE of the bar `timeStopBars` was reached on. */
-function finalizeTimeStop(position: OpenPositionV2, candle: Candle, ctx: EngineCtx): void {
+/**
+ * Force-close at the CLOSE of the current bar, tagged with `exitReason`.
+ * Shared by three "force close at bar's close" mechanisms (Increment 5
+ * renamed this from the Increment 1-4 `finalizeTimeStop`, which only ever
+ * used `'manual'` — that call site is unchanged):
+ *  - `'manual'`   : `timeStopBars` reached (pre-existing, Increment 1-4).
+ *  - `'flat_time'`: `exits.flatAt` clock-time reached (Increment 5).
+ *  - `'condition'`: `exits.exitWhen` fired (Increment 5).
+ */
+function finalizeForceClose(
+  position: OpenPositionV2,
+  candle: Candle,
+  ctx: EngineCtx,
+  exitReason: 'manual' | 'flat_time' | 'condition',
+): void {
   const isLong = position.type === 'long';
   const exitPrice = candle.close;
   let legNetPnl: number;
@@ -924,7 +1063,7 @@ function finalizeTimeStop(position: OpenPositionV2, candle: Candle, ctx: EngineC
 
   position.exitPrice = exitPrice;
   position.exitTime = Math.floor(candleTimeMs(candle) / 1000);
-  position.exitReason = 'manual';
+  position.exitReason = exitReason;
   position.realizedPnl = position.realizedFromPartials + legNetPnl;
   position.realizedPnlPercent = pnlPercent;
   position.status = 'closed';
@@ -944,9 +1083,12 @@ function finalizePartialExhaustion(position: OpenPositionV2, candle: Candle): vo
 // ----------------------------------------------------------------------------
 // R-multiple distribution (identical bucketing to v1's private helper —
 // duplicated since v1's is not exported; see AutoBacktestEngine.ts).
+// Typed `AutoPosition[]` (rather than `OpenPositionV2[]`) so `mergeStrategyResults`
+// (Increment 5 — mirror) can reuse it directly over a merged trade list that
+// no longer carries the v2-only OpenPositionV2 bookkeeping fields.
 // ----------------------------------------------------------------------------
 
-function computeRDistributionV2(closed: OpenPositionV2[]): RMultipleDistribution {
+function computeRDistributionV2(closed: AutoPosition[]): RMultipleDistribution {
   const dist: RMultipleDistribution = {
     '< -2R': 0,
     '-2R to -1R': 0,
@@ -970,6 +1112,53 @@ function computeRDistributionV2(closed: OpenPositionV2[]): RMultipleDistribution
     else dist['> 3R']++;
   }
   return dist;
+}
+
+// ----------------------------------------------------------------------------
+// Mirror merge (Increment 5) — see this module's doc "MIRROR" section.
+// ----------------------------------------------------------------------------
+
+/**
+ * Merge the primary and mirrored `runStrategyV2Single` results into one
+ * chronological `AutoBacktestResult`: trades concatenated + sorted by
+ * `entryTime`, statistics/equityCurve/rMultipleDistribution/rLadder
+ * recomputed over the MERGED set (using the run's real `initialBalance` —
+ * both variants share the same `risk` config, mirroring never touches it),
+ * `skippedSignals` summed. `detections` stays empty, same
+ * shape-compatibility convention `runStrategyV2Single` itself uses.
+ */
+function mergeStrategyResults(
+  a: AutoBacktestResult,
+  b: AutoBacktestResult,
+  candles: Candle[],
+  initialBalance: number,
+): AutoBacktestResult {
+  const merged: AutoPosition[] = [...a.trades, ...b.trades].sort(
+    (x, y) => x.entryTime - y.entryTime,
+  );
+  const totalPnl = merged.reduce((sum, t) => sum + (t.realizedPnl ?? 0), 0);
+  const currentBalance = initialBalance + totalPnl;
+
+  const statsEngine = new StatisticsEngine() as unknown as StatsEngineView;
+  const statistics = statsEngine.calculate(merged, initialBalance, currentBalance);
+  const rMultipleDistribution = computeRDistributionV2(merged);
+  const { perR, perTrade } = computeRLadderAggregate(merged, candles, R_LADDER_LEVELS);
+  merged.forEach((trade, idx) => {
+    trade.rLadder = perTrade[idx];
+  });
+
+  return {
+    detections: [],
+    trades: merged,
+    statistics,
+    equityCurve: statistics.equityCurve ?? [],
+    rMultipleDistribution,
+    rLadder: { perR },
+    skippedSignals: {
+      zeroSize: (a.skippedSignals?.zeroSize ?? 0) + (b.skippedSignals?.zeroSize ?? 0),
+      expired: (a.skippedSignals?.expired ?? 0) + (b.skippedSignals?.expired ?? 0),
+    },
+  };
 }
 
 export type { CompiledStrategy };

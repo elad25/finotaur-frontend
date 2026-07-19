@@ -176,6 +176,10 @@ export function TradeDetailPanel() {
                 ? 'Take profit'
                 : trade.exitReason === 'manual'
                 ? 'Manual'
+                : trade.exitReason === 'flat_time'
+                ? 'Flat (time)'
+                : trade.exitReason === 'condition'
+                ? 'Condition exit'
                 : '—'
             }
           />

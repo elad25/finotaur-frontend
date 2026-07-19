@@ -13,7 +13,7 @@ import { LevelBank } from '../LevelBank';
 import { EventBank } from '../EventBank';
 import { compileStrategy, strategyNeedsIndicators, type RuntimeState } from '../ConditionCompiler';
 import type { StrategyDefinitionV2, PhaseV2, ConditionNode } from '../types';
-import { makeDefaultStrategyV2 } from '../types';
+import { makeDefaultStrategyV2, validateStrategyStructure } from '../types';
 
 function c(i: number, open: number, high: number, low: number, close: number): Candle {
   return { time: 1_700_000_000 + i * 900, open, high, low, close, volume: 1 };
@@ -83,6 +83,83 @@ describe('ConditionCompiler — compare', () => {
     });
     const state = freshState();
     expect(compiled.phases[0].when.resolveDirection(1, state)).toBeNull();
+  });
+});
+
+describe('ConditionCompiler — pctDiff operand', () => {
+  // Day1 (bars 0-1): last bar (bar1) close=100 -> prevDayClose(day2) = 100.
+  // Day2 (bars 2-3): first bar (bar2) open=100.6 -> dayOpen = 100.6, constant
+  // through the day (bar3 too). pctDiff = (100.6-100)/100*100 = 0.6%.
+  const DAY1 = Date.UTC(2024, 0, 1, 0, 0, 0) / 1000;
+  const HOUR = 3600;
+  const candles: Candle[] = [
+    { time: DAY1, open: 97, high: 99, low: 96, close: 98, volume: 1 },
+    { time: DAY1 + HOUR, open: 98, high: 101, low: 97, close: 100, volume: 1 },
+    { time: DAY1 + 24 * HOUR, open: 100.6, high: 101, low: 100, close: 100.8, volume: 1 },
+    { time: DAY1 + 25 * HOUR, open: 100.9, high: 101.5, low: 100.5, close: 101, volume: 1 },
+  ];
+
+  function levelBank() {
+    return new LevelBank(candles, { timezone: 'UTC' });
+  }
+
+  const gapCondition: ConditionNode = {
+    kind: 'compare',
+    left: {
+      src: 'pctDiff',
+      a: { src: 'level', ref: { type: 'dayOpen' } },
+      b: { src: 'level', ref: { type: 'prevDayClose' } },
+    },
+    cmp: 'gte',
+    right: { src: 'const', value: 0.5 },
+  };
+
+  it('resolves (a-b)/b*100 exactly on day2, NaN-safe (false, never throws) on day1', () => {
+    const def = defWith(gapCondition);
+    const compiled = compileStrategy(def, candles, {
+      levels: levelBank(),
+      events: new EventBank(candles, {}),
+    });
+    const state = freshState();
+    // Day1: prevDayClose is NaN (no completed prior day yet) -> pctDiff NaN
+    // -> compare is NaN-safe-false, not a throw.
+    expect(compiled.phases[0].when.test(0, state)).toBe(false);
+    expect(compiled.phases[0].when.test(1, state)).toBe(false);
+    // Day2: dayOpen=100.6, prevDayClose=100 -> +0.6% >= 0.5% -> true, both
+    // day2 bars (dayOpen is constant through the day).
+    expect(compiled.phases[0].when.test(2, state)).toBe(true);
+    expect(compiled.phases[0].when.test(3, state)).toBe(true);
+  });
+
+  it('resolves to NaN (never throws / divides-by-zero) when b is 0', () => {
+    const def = defWith({
+      kind: 'compare',
+      left: { src: 'pctDiff', a: { src: 'const', value: 5 }, b: { src: 'const', value: 0 } },
+      cmp: 'gt',
+      right: { src: 'const', value: -999 },
+    });
+    const compiled = compileStrategy(def, candles, {
+      levels: levelBank(),
+      events: new EventBank(candles, {}),
+    });
+    const state = freshState();
+    expect(compiled.phases[0].when.test(0, state)).toBe(false);
+  });
+
+  it('validateStrategyStructure rejects a nested pctDiff (a/b must not themselves be pctDiff)', () => {
+    const nested: ConditionNode = {
+      kind: 'compare',
+      left: {
+        src: 'pctDiff',
+        a: { src: 'pctDiff', a: { src: 'const', value: 1 }, b: { src: 'const', value: 2 } },
+        b: { src: 'const', value: 3 },
+      },
+      cmp: 'gt',
+      right: { src: 'const', value: 0 },
+    };
+    const def = defWith(nested);
+    const errors = validateStrategyStructure(def);
+    expect(errors.some((e) => e.includes("must not themselves be 'pctDiff'"))).toBe(true);
   });
 });
 

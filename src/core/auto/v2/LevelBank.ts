@@ -35,10 +35,28 @@
 // ============================================================================
 
 import type { Candle } from '../../../components/ReplayChart/types';
-import { candleTimeMs, localDayKey } from '../MarketContext';
-import type { LevelRef } from './types';
+import { candleTimeMs, localDayKey, localMinutesAndDay } from '../MarketContext';
+import type { LevelRef, NamedSession } from './types';
 import { computeConfirmedSwings, nthMostRecentSwingSeries } from './swings';
 import type { ConfirmedSwing } from './swings';
+
+// ----------------------------------------------------------------------------
+// Named-session windows (Increment 5) — ALWAYS America/New_York, regardless
+// of the bank's own configured `timezone` (used for day-bucketing every
+// OTHER level type). Mirrors the presets already offered in
+// `SetupInputForm.tsx`'s `SESSION_PRESETS`. `endMin === 24*60` (asia) is
+// intentionally never reached by `minutes` (which is always in [0,1439]) —
+// see `namedSession()`'s day-rollover finalize branch, which closes that
+// window at the calendar-day boundary instead of via the `minutes >=
+// endMin` in-day branch london/newyork use.
+// ----------------------------------------------------------------------------
+const NAMED_SESSION_TZ = 'America/New_York';
+
+const NAMED_SESSION_WINDOWS: Record<NamedSession, { startMin: number; endMin: number }> = {
+  asia: { startMin: 18 * 60, endMin: 24 * 60 }, // 18:00-00:00 ET
+  london: { startMin: 2 * 60, endMin: 5 * 60 }, // 02:00-05:00 ET
+  newyork: { startMin: 8 * 60, endMin: 16 * 60 }, // 08:00-16:00 ET
+};
 
 /** Options controlling LevelBank's causal-level computation. */
 export interface LevelBankOptions {
@@ -89,6 +107,8 @@ export class LevelBank {
     number,
     { highs: ConfirmedSwing[]; lows: ConfirmedSwing[] }
   >();
+  /** Memoized named-session pass (Increment 5), keyed by session name. */
+  private readonly namedSessionCache = new Map<NamedSession, { high: Float64Array; low: Float64Array }>();
 
   constructor(candles: Candle[], opts: LevelBankOptions) {
     this.candles = candles;
@@ -126,9 +146,9 @@ export class LevelBank {
       case 'dayOpen':
         return this.dayAggregates().dayOpen;
       case 'sessionHigh':
-        return this.dayAggregates().sessionHigh;
+        return ref.sessionName ? this.namedSession(ref.sessionName).high : this.dayAggregates().sessionHigh;
       case 'sessionLow':
-        return this.dayAggregates().sessionLow;
+        return ref.sessionName ? this.namedSession(ref.sessionName).low : this.dayAggregates().sessionLow;
       case 'openingRangeHigh':
         return this.openingRange(ref.orMinutes ?? this.defaultOrMinutes).high;
       case 'openingRangeLow':
@@ -288,6 +308,92 @@ export class LevelBank {
     return result;
   }
 
+  // ----- named sessions (Increment 5) --------------------------------------
+
+  /**
+   * Causal high/low of the most recently COMPLETED window of `session`
+   * (always America/New_York — see module doc), held constant until the
+   * NEXT occurrence of that window closes. NaN before the first completed
+   * window. Single ascending pass, same memoize-on-first-call discipline as
+   * every other series here.
+   *
+   * A window closes one of two ways, both funneling into the same
+   * `completedHigh`/`completedLow` snapshot:
+   *  (a) mid-day, the first bar whose local minutes reach `endMin` (london/
+   *      newyork — `endMin < 24*60`);
+   *  (b) at the calendar-day boundary, for a window that never explicitly
+   *      reaches `endMin` within its own day because it ends exactly at
+   *      midnight (asia — `endMin === 24*60`, and `minutes` never reaches
+   *      1440). Handled generically: ANY window still open (started, not
+   *      yet closed) when the ET day rolls over is finalized right then —
+   *      this also means a sparse/gapped day that never even STARTS the
+   *      window (`winHigh` still `-Infinity`) correctly finalizes nothing
+   *      and leaves the prior completed value untouched.
+   * Either way, a bar's OWN exposed value (`high[i]`/`low[i]`) is always
+   * assigned BEFORE that bar's own membership/finalize logic runs, so the
+   * bar a window closes ON (or the first bar of the next day, for a
+   * midnight-ending window) never sees its own not-yet-finalized range.
+   */
+  private namedSession(session: NamedSession): { high: Float64Array; low: Float64Array } {
+    const cached = this.namedSessionCache.get(session);
+    if (cached) return cached;
+
+    const { startMin, endMin } = NAMED_SESSION_WINDOWS[session];
+    const n = this.candles.length;
+    const high = new Float64Array(n).fill(NaN);
+    const low = new Float64Array(n).fill(NaN);
+
+    let curDayKey: string | null = null;
+    let winHigh = -Infinity;
+    let winLow = Infinity;
+    let winClosed = false;
+    let completedHigh = NaN;
+    let completedLow = NaN;
+
+    for (let i = 0; i < n; i++) {
+      const candle = this.candles[i];
+      const ms = candleTimeMs(candle);
+      const dk = localDayKey(ms, NAMED_SESSION_TZ);
+
+      if (dk !== curDayKey) {
+        // Day rolled over: finalize the PREVIOUS day's window if it was
+        // started but never explicitly closed within that day (e.g. a
+        // window ending exactly at midnight, like 'asia').
+        if (curDayKey !== null && !winClosed && winHigh !== -Infinity) {
+          completedHigh = winHigh;
+          completedLow = winLow;
+        }
+        curDayKey = dk;
+        winHigh = -Infinity;
+        winLow = Infinity;
+        winClosed = false;
+      }
+
+      // Expose the last COMPLETED window's value for THIS bar before this
+      // bar's own membership/finalize logic runs below.
+      high[i] = completedHigh;
+      low[i] = completedLow;
+
+      if (winClosed) continue;
+      const { minutes } = localMinutesAndDay(ms, NAMED_SESSION_TZ);
+      if (minutes >= startMin && minutes < endMin) {
+        winHigh = Math.max(winHigh, candle.high);
+        winLow = Math.min(winLow, candle.low);
+      } else if (minutes >= endMin) {
+        if (winHigh !== -Infinity) {
+          completedHigh = winHigh;
+          completedLow = winLow;
+        }
+        winClosed = true;
+      }
+      // else (minutes < startMin): window hasn't started yet today.
+    }
+
+    const result = { high, low };
+    this.namedSessionCache.set(session, result);
+    return result;
+  }
+
   // ----- swings -----------------------------------------------------------
 
   private confirmedSwings(k: number): { highs: ConfirmedSwing[]; lows: ConfirmedSwing[] } {
@@ -312,10 +418,11 @@ function levelRefKey(ref: LevelRef): string {
     case 'prevDayHigh':
     case 'prevDayLow':
     case 'prevDayClose':
-    case 'sessionHigh':
-    case 'sessionLow':
     case 'dayOpen':
       return ref.type;
+    case 'sessionHigh':
+    case 'sessionLow':
+      return ref.sessionName ? `${ref.type}:${ref.sessionName}` : ref.type;
     case 'openingRangeHigh':
     case 'openingRangeLow':
       return `${ref.type}:${ref.orMinutes ?? 'default'}`;

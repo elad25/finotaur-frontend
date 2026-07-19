@@ -44,7 +44,10 @@ export interface AutoPosition {
   // Filled in on close.
   exitPrice?: number;
   exitTime?: number;
-  exitReason?: 'stop_loss' | 'take_profit' | 'manual';
+  /** 'flat_time' (Increment 5 — clock-time flat exit) and 'condition'
+   *  (Increment 5 — condition-based exit) are v2-only, produced by
+   *  `StrategyEngine.ts`'s `finalizeForceClose`. */
+  exitReason?: 'stop_loss' | 'take_profit' | 'manual' | 'flat_time' | 'condition';
   realizedPnl?: number;
   realizedPnlPercent?: number;
 

@@ -26,6 +26,7 @@ function Chip({ label }: { label: string }) {
 
 function formatTargetChip(definition: StrategyDefinitionV2): string {
   const { target } = definition.exits;
+  if (!target) return 'No fixed target';
   switch (target.basis) {
     case 'rMultiple':
       return `${target.value ?? '?'}R target`;

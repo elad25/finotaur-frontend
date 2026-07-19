@@ -22,6 +22,7 @@ const COMPARABLE_FIELDS: Array<keyof StrategyDefinitionV2> = [
   'exits',
   'filters',
   'risk',
+  'mirror',
 ];
 
 /** Returns the list of top-level field names that differ between two v2 strategy definitions. */
