@@ -150,6 +150,66 @@
 //     instant the tab regains visibility); the paint loop precomputes an
 //     alphaSkipCutoffUsd (depthSignificance.ts) to skip bins whose alpha
 //     would be imperceptible without touching the color/compression math.
+//
+// Phase 7 — LEVEL OF DETAIL (LOD) downsampling (perf fix — the visible-window
+// painting above bounds cell count to the visible time range, but at a wide
+// zoom (e.g. 15m view spanning days) each raw 5s column can collapse to a
+// SUB-PIXEL screen width — painting one bitmap cell per raw column paints
+// millions of cells that collapse into far fewer screen pixels. Bookmap-class
+// tools never paint more cells than screen pixels; this mirrors that:
+//   1. Column bucketing (time axis) — `computeBucketFactorWithHysteresis`
+//      (depthSignificance.ts, review-hardened — see Phase 8 below) derives
+//      how many raw columns to merge into one PAINTED column from the
+//      raw column's current screen-px width (`rawColWidthPxRef`, a one-frame-
+//      lag measurement of pxPerSec * rawIntervalMs, distinct from
+//      `depthColWidthPxRef` which measures the PAINTED column's width and
+//      keeps feeding the existing zoom-density ink-budget logic unchanged).
+//      `bucketColumns` (depthSignificance.ts) groups the window's raw columns
+//      into fixed EPOCH-ALIGNED buckets (stable across repaints/appends,
+//      see its doc comment) and merges each bucket via MAX-q per price
+//      (`mergeColumnsMaxQ`) — a wall visible at any point in the bucket stays
+//      visible, matching Bookmap semantics. The bucketed columns are then fed
+//      through the EXACT SAME `paintColumnsRange`/persistence machinery as
+//      raw columns — from `repaintOffscreen`'s perspective a bucketed column
+//      IS a column, just a synthetic merged one. `bucketFactor <= 1` (the
+//      common case — zoomed in enough that raw columns are already >=1.5px)
+//      is a documented no-op passthrough with IDENTICAL behavior to pre-LOD.
+//   2. Row merging (price axis) — same idea on the price axis:
+//      `computeRowMergeFactor` derives how many raw price rows to merge into
+//      one painted row from an ESTIMATED row height (pane CSS height /
+//      raw numRows — see repaintOffscreen's `paneHeightPxEstimate` param).
+//      `paintColumnsRange` picks the WINNER (max-q) raw bin per merged-row
+//      group and renders only that bin's color/persistence — same
+//      "strongest signal survives" principle as column bucketing, applied to
+//      the vertical axis. `meta.rawNumRows` (pre-merge) is kept alongside
+//      `meta.numRows` (post-merge, the actual bitmap height) so the append
+//      path can still compute the raw price-range bound (`rowMaxPrice`)
+//      correctly.
+//   3. LOD-tier-change rebuild trigger — a `bucketFactor` crossing (measured
+//      every frame from `rawColWidthPxRef`) schedules the SAME debounced
+//      full rebuild as a zoom-tier/margin-exceeded change (`lastBucketFactor
+//      AppliedRef` mirrors the existing `lastZoomMultAppliedRef` pattern).
+//      `rowMergeFactor` has no separate proactive trigger: it depends on
+//      `numRows`, which is itself only known mid-rebuild (from the weighted
+//      price extent), so it's simply recomputed fresh on every rebuild that
+//      already happens for another reason (margin/zoom/bucket/palette
+//      changes) — those fire often enough during real pan/zoom/volatility
+//      that a dedicated trigger would be redundant.
+//   4. Append path under LOD — `meta.lastPaintedRawT` (not the painted
+//      column's own `.t`, which is a BUCKET start once LOD is active) is
+//      what the live-edge check compares against the `columns` prop's
+//      previous last raw timestamp. When `meta.bucketFactor <= 1` the append
+//      path is BYTE-FOR-BYTE the pre-LOD code (see the `bucketFactor <= 1`
+//      branch below) — zero behavior change in the common case. When > 1,
+//      each newly appended RAW column either extends the bucket it belongs
+//      to (`meta.lastBucketRawCols` retains the raw columns composing the
+//      currently-open last bucket so it can be re-merged via
+//      `mergeColumnsMaxQ` on every tick) or starts a new one (advances
+//      `meta.numCols` via the existing WINDOW_SLACK_COLS mechanism); either
+//      way exactly ONE painted pixel column is repainted (or, with
+//      smoothing on, the existing append-smoothing-strip logic runs
+//      unchanged over the now-bucketed `meta.cols`, since that logic only
+//      ever operates on "whatever `meta.cols` currently holds").
 
 import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
@@ -169,6 +229,14 @@ import {
   computeWindowRange,
   alphaSkipCutoffUsd,
   classifyColumnsUpdate,
+  computeRowMergeFactor,
+  computeBucketFactorWithHysteresis,
+  computeRowMergeFactorWithHysteresis,
+  bucketColumns,
+  mergeColumnsMaxQ,
+  bucketStartMs,
+  paintedWindowEndMs,
+  bumpPersistMapForColumn,
   PERSISTENCE_RAMP_COLUMNS_DEFAULT,
   type DepthSensitivity,
 } from './depthSignificance';
@@ -455,6 +523,20 @@ function paintColumnsRange(
   alphaCutoffUsd: number,
   smoothingEnabled: boolean,
   persistMap: Map<number, number>,
+  // LOD (Phase 7) — number of RAW price rows merged into one painted row.
+  // `numRows` above is already the PAINTED (post-merge) row count/bitmap
+  // height; 1 = no merging (pre-LOD behavior, unchanged code path below).
+  rowMergeFactor: number = 1,
+  // LOD (Phase 8, CRITICAL 2 review fix) — columns in [rangeStart,
+  // bumpRangeStart) are painted READ-ONLY against `persistMap` (their
+  // presence never prunes/bumps it) — used by the bucketed append path to
+  // repaint a wide neighborhood for smoothing continuity WITHOUT re-bumping
+  // already-CLOSED buckets whose single contribution was already committed
+  // into the caller's persistence base snapshot. Columns in
+  // [bumpRangeStart, rangeEnd) get the normal prune+bump treatment. Defaults
+  // to `rangeStart` (bump everything — the original, pre-review behavior)
+  // so every OTHER call site is unaffected.
+  bumpRangeStart: number = rangeStart,
 ): void {
   const width = rangeEnd - rangeStart;
   if (width <= 0) return;
@@ -490,15 +572,38 @@ function paintColumnsRange(
 
     // Persistence bookkeeping for THIS column, in order: prune bins that
     // dropped out since the previous column, then bump the survivors + any
-    // newly-appeared bin to count 1.
-    for (const price of persistMap.keys()) {
-      if (!cellMap.has(price)) persistMap.delete(price);
-    }
-    for (const price of cellMap.keys()) {
-      persistMap.set(price, (persistMap.get(price) ?? 0) + 1);
+    // newly-appeared bin to count 1. Skipped for columns before
+    // `bumpRangeStart` (CRITICAL 2 review fix) — those are read-only here;
+    // `persistMap` already reflects their final, once-committed state.
+    // `bumpPersistMapForColumn` (depthSignificance.ts) is the exact same
+    // prune+bump primitive used standalone by the append path's "commit a
+    // just-closed bucket" step — kept as one shared function so the two
+    // never drift apart.
+    if (ci >= bumpRangeStart) {
+      bumpPersistMapForColumn(persistMap, col, priceMin, rowMaxPrice, rowEpsilon, curBinSize);
     }
 
-    for (const [price, q] of cellMap) {
+    // LOD (Phase 7) row merging — when rowMergeFactor > 1, several raw price
+    // rows share one painted row. Pick the WINNER (max-q) raw bin per merged
+    // group first (same "strongest signal survives" principle as column
+    // bucketing's mergeColumnsMaxQ) so only ONE representative bin's
+    // color/persistence gets rendered per painted cell — never an
+    // index-order-dependent overwrite. rowMergeFactor === 1 (the common,
+    // pre-LOD case) skips this entirely: `cellMap` itself is iterated
+    // directly below, byte-for-byte the original behavior.
+    let renderEntries: Iterable<[number, number]> = cellMap;
+    if (rowMergeFactor > 1) {
+      const winners = new Map<number, [number, number]>(); // mergedRow -> [price, q]
+      for (const [price, q] of cellMap) {
+        const priceRow = Math.round((price - priceMin) / curBinSize);
+        const mergedRow = Math.floor(priceRow / rowMergeFactor);
+        const cur = winners.get(mergedRow);
+        if (!cur || q > cur[1]) winners.set(mergedRow, [price, q]);
+      }
+      renderEntries = winners.values();
+    }
+
+    for (const [price, q] of renderEntries) {
       // Cheap extra win — skip bins whose alpha would be imperceptible
       // without touching the color/compression math (see alphaSkipCutoffUsd's
       // doc comment: persistMult can only shrink alpha further, never grow
@@ -512,8 +617,12 @@ function paintColumnsRange(
 
       // Row index: 0 = priceMin, increasing upward in price but canvas Y
       // increases downward — flip so rowIdx 0 = top of canvas = highest price.
+      // With row merging, `numRows` here is the PAINTED (post-merge) row
+      // count, so the merged row index must be flipped against IT, not the
+      // raw row count (see the OffscreenMeta.rawNumRows doc comment).
       const priceRow = Math.round((price - priceMin) / curBinSize);
-      const canvasRow = numRows - 1 - priceRow;
+      const mergedRow = rowMergeFactor > 1 ? Math.floor(priceRow / rowMergeFactor) : priceRow;
+      const canvasRow = numRows - 1 - mergedRow;
       if (canvasRow < 0 || canvasRow >= numRows) continue; // defensive only
 
       const idx = canvasRow * width + localCol;
@@ -544,12 +653,40 @@ interface OffscreenMeta {
   priceMax: number;
   /** Number of REAL (painted) columns — may be less than the canvas's physical width (which includes WINDOW_SLACK_COLS headroom for the append fast path). */
   numCols: number;
+  /** PAINTED (post row-merge) row count — the actual bitmap height. See `rawNumRows` for the pre-merge row count. */
   numRows: number;
-  /** The actual DecodedColumn objects for the painted window, 1:1 with pixel columns 0..numCols-1. Grows in place on live append. */
+  /** Pre-merge row count (priceMax-priceMin span / curBinSize) — needed to compute the raw price-range bound (`rowMaxPrice`) in the append path, since `numRows` above is the (smaller, post-merge) bitmap height once `rowMergeFactor > 1`. Equal to `numRows` when `rowMergeFactor === 1`. */
+  rawNumRows: number;
+  /** The painted column objects for the window, 1:1 with pixel columns 0..numCols-1 — RAW DecodedColumn objects when `bucketFactor === 1` (pre-LOD behavior, unchanged), or synthetic bucket-merged columns (see `bucketColumns`/`mergeColumnsMaxQ`) when `bucketFactor > 1`. Grows in place on live append. */
   cols: DecodedColumn[];
   curBinSize: number;
   /** Physical offscreen canvas width (numCols + slack). */
   bitmapWidth: number;
+  /** LOD (Phase 7) — raw columns merged per painted column. 1 = no bucketing (pre-LOD behavior). */
+  bucketFactor: number;
+  /** LOD (Phase 7) — raw price rows merged per painted row. 1 = no merging. */
+  rowMergeFactor: number;
+  /** LOD (Phase 7) — the raw depth-column sampling interval (ms) used to compute this repaint's bucket boundaries — needed by the append path to keep bucketing epoch-aligned with what was just painted. */
+  rawIntervalMs: number;
+  /** LOD (Phase 7) — the LAST raw column timestamp incorporated into the bitmap (as opposed to `cols[numCols-1].t`, which is a BUCKET start time once `bucketFactor > 1` and would never equal a raw `columns` prop timestamp). Used by the live-edge append check. */
+  lastPaintedRawT: number;
+  /** LOD (Phase 7) — epoch-aligned bucket-start time of the currently-open LAST painted bucket (`cols[numCols-1].t` when `bucketFactor > 1`). Used to decide whether a newly appended raw column extends that bucket or starts a new one. */
+  lastBucketStartT: number;
+  /** LOD (Phase 7) — the raw columns composing the currently-open last painted bucket, retained so it can be re-merged (`mergeColumnsMaxQ`) as new raw columns arrive within the same bucket span. Empty/unused when `bucketFactor === 1`. */
+  lastBucketRawCols: DecodedColumn[];
+  /**
+   * LOD (Phase 8, CRITICAL 2 review fix) — persistence-count snapshot as of
+   * right BEFORE the currently-open last bucket's own contribution. Every
+   * extension repaint of that open bucket derives its persistence multiplier
+   * from a FRESH clone of this base + exactly one bump for the bucket's
+   * CURRENT (re-merged) content — never by mutating a running map across
+   * repeated repaints, which would let a single forming bucket accumulate up
+   * to `bucketFactor` increments instead of exactly 1. Committed (updated to
+   * include the just-closed bucket's own single bump) the moment a NEW
+   * bucket opens. Unused when `bucketFactor === 1` (the pre-LOD append path
+   * doesn't touch it).
+   */
+  persistBaseMap: Map<number, number>;
 }
 
 function getMeta(offscreen: OffscreenCanvas | null): OffscreenMeta | undefined {
@@ -684,6 +821,25 @@ export function DepthMatrixLayer({
   // drifts away from this by more than ZOOM_REPAINT_EPSILON.
   const lastZoomMultAppliedRef = useRef<number>(1);
 
+  // LOD (Phase 7) — screen-px width of ONE RAW (un-bucketed) depth column,
+  // distinct from `depthColWidthPxRef` above (which is the PAINTED column's
+  // width — post-bucket once LOD is active, and stays feeding the existing
+  // ink-budget zoom-density logic unchanged, per the module doc comment's
+  // "LOD design" section point 1). Same one-frame-lag pattern: updated at
+  // the end of THIS frame's affine-mapping step, read at the START of the
+  // NEXT frame's bucket-factor decision.
+  const rawColWidthPxRef = useRef<number>(8);
+  // The column bucket factor actually baked into the LAST repaint — mirrors
+  // `lastZoomMultAppliedRef`'s role: a fresh repaint is forced when the
+  // live bucket factor (derived from rawColWidthPxRef, hysteresis-aware —
+  // see computeBucketFactorWithHysteresis) differs from this.
+  const lastBucketFactorAppliedRef = useRef<number>(1);
+  // SHOULD-FIX 1 (review) — the row merge factor actually baked into the
+  // LAST repaint, so a pane-height (CSS resize) change that would flip the
+  // ceil-based rowMergeFactor also schedules a rebuild — mirrors
+  // `lastBucketFactorAppliedRef` exactly, on the price axis instead of time.
+  const lastRowMergeFactorAppliedRef = useRef<number>(1);
+
   // Keep latest props in refs.
   const columnsRef         = useRef<DecodedColumn[]>(columns);
   const binSizeRef         = useRef<number>(binSize);
@@ -814,16 +970,40 @@ export function DepthMatrixLayer({
     sizePct: number,
     paletteId: DepthPaletteId,
     smoothingEnabled: boolean,
+    // LOD (Phase 7) — raw depth-column sampling interval (ms), the bucket
+    // factor decided from this frame's raw-column screen width, and an
+    // ESTIMATE of the painted pane's CSS height (used to derive the row
+    // merge factor before priceToCoordinate is available — see the module
+    // doc comment's "LOD design" section point 2).
+    rawIntervalMs: number,
+    bucketFactor: number,
+    paneHeightPxEstimate: number,
   ) {
     if (windowEndIdx < windowStartIdx) return;
-    let cols = fullCols.slice(windowStartIdx, windowEndIdx + 1);
+    const rawWindowCols = fullCols.slice(windowStartIdx, windowEndIdx + 1);
+    if (rawWindowCols.length === 0) return;
+
+    // LOD point 1 — column bucketing (epoch-aligned MAX-q merge across each
+    // bucket's raw columns). `bucketFactor <= 1` is a documented no-op
+    // passthrough (`cols` === a copy of `rawWindowCols`, `rawCounts` all 1) —
+    // IDENTICAL behavior to pre-LOD. `rawCounts[i]` = number of raw columns
+    // consumed by bucketed column i, kept so the cell-budget trim below can
+    // map a dropped-bucket-count back to a raw `fullCols` offset for the
+    // persistence warm-up.
+    const bucketed = bucketFactor > 1 ? bucketColumns(rawWindowCols, rawIntervalMs, bucketFactor) : null;
+    // bucketColumns returns the structurally-compatible DecodedColumnLike[]
+    // (depthSignificance.ts stays DOM/type-dependency-free) — the merged
+    // objects it builds are spreads of real DecodedColumn instances (see
+    // its doc comment), so this cast is safe at runtime.
+    let cols: DecodedColumn[] = bucketed ? (bucketed.columns as DecodedColumn[]) : rawWindowCols;
+    let rawCounts: number[] = bucketed ? bucketed.rawCounts : rawWindowCols.map(() => 1);
     if (cols.length === 0) return;
 
     // ── Determine grid extents ────────────────────────────────────────────
-    // Notional-WEIGHTED price extent computed over the WINDOW's columns only
-    // (Phase 6 — cheaper and more relevant than scanning full history). See
-    // MAX_GRID_ROWS/MAX_GRID_CELLS comments above and weightedPriceExtent's
-    // doc comment in depthSignificance.ts.
+    // Notional-WEIGHTED price extent computed over the (possibly bucketed)
+    // WINDOW columns only (Phase 6 — cheaper and more relevant than scanning
+    // full history). See MAX_GRID_ROWS/MAX_GRID_CELLS comments above and
+    // weightedPriceExtent's doc comment in depthSignificance.ts.
     const extentPrices: number[] = [];
     const extentUsd: number[] = [];
     for (const col of cols) {
@@ -848,6 +1028,9 @@ export function DepthMatrixLayer({
     // Hard safety cap — belt-and-suspenders on top of the weighted window
     // above (see MAX_GRID_ROWS comment). Centers a capped window on the
     // weighted MEDIAN price rather than ever letting numRows grow unbounded.
+    // `numRows` here is the RAW (pre row-merge) row count — see
+    // OffscreenMeta.rawNumRows's doc comment for why the raw count is kept
+    // alongside the painted one.
     let numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
     if (numRows > MAX_GRID_ROWS) {
       const clamped = clampExtentToMaxRows(priceMin, priceMax, curBinSize, weighted.median, MAX_GRID_ROWS);
@@ -857,21 +1040,43 @@ export function DepthMatrixLayer({
     }
     if (numRows <= 0) return;
 
-    // Review fix (SHOULD-FIX 2) — feed the REAL numRows back for the NEXT
-    // rebuild's computeWindowRange call (its `numRowsEstimate` param), so
-    // the margin is shrunk to fit the budget up front next time instead of
-    // relying solely on the post-hoc trim below.
+    // Review fix (SHOULD-FIX 2) — feed the REAL (raw) numRows back for the
+    // NEXT rebuild's computeWindowRange call (its `numRowsEstimate` param),
+    // so the margin is shrunk to fit the RAW-column budget up front next
+    // time instead of relying solely on the post-hoc trim below. This stays
+    // a RAW-column budget (computeWindowRange slices `fullCols`, before any
+    // bucketing) — LOD bucketing is a further reduction applied INSIDE this
+    // function on top of whatever raw window that budget selects; see the
+    // module doc comment's "LOD design" section for why the window-margin
+    // mechanism itself is left unchanged (MAX_GRID_CELLS stays a backstop,
+    // not the primary bound, once bucketing is active).
     lastNumRowsRef.current = numRows;
 
-    // Total-cell budget guard (now PER-WINDOW — see MAX_GRID_CELLS comment).
-    // Clip the OLDEST columns OF THE WINDOW (not full history) to fit; the
-    // newest are what's actually visible at the live edge.
-    let trimmedFromStart = 0;
-    if (cols.length * numRows > MAX_GRID_CELLS) {
-      const keepCols = clipColumnsForCellBudget(cols.length, numRows, MAX_GRID_CELLS);
+    // LOD point 2 — row merging. Estimate raw row px from the CSS pane
+    // height (priceToCoordinate isn't available yet at rebuild time — see
+    // the module doc comment) and derive how many raw rows collapse into
+    // one painted row.
+    const rowPxEstimate = numRows > 0 ? paneHeightPxEstimate / numRows : Infinity;
+    const rowMergeFactor = computeRowMergeFactor(rowPxEstimate);
+    let paintedNumRows = rowMergeFactor > 1 ? Math.ceil(numRows / rowMergeFactor) : numRows;
+
+    // Total-cell budget guard (now PER-WINDOW, against the PAINTED grid —
+    // see MAX_GRID_CELLS comment). Clip the OLDEST painted columns to fit;
+    // the newest are what's actually visible at the live edge. Bucketing +
+    // row merging already keep this "naturally" under budget at almost any
+    // zoom (see the module doc comment) — this is the belt-and-suspenders
+    // backstop for pathological cases (e.g. a very tall pane combined with a
+    // capped row-merge factor).
+    let trimmedFromStart = 0; // RAW column count trimmed (rawCounts-summed) — for the warm-up index below.
+    if (cols.length * paintedNumRows > MAX_GRID_CELLS) {
+      const keepCols = clipColumnsForCellBudget(cols.length, paintedNumRows, MAX_GRID_CELLS);
       if (keepCols < cols.length) {
-        trimmedFromStart = cols.length - keepCols;
-        cols = cols.slice(trimmedFromStart);
+        const dropBuckets = cols.length - keepCols;
+        let rawDropped = 0;
+        for (let k = 0; k < dropBuckets; k++) rawDropped += rawCounts[k];
+        cols = cols.slice(dropBuckets);
+        rawCounts = rawCounts.slice(dropBuckets);
+        trimmedFromStart = rawDropped;
       }
     }
     if (cols.length === 0) return;
@@ -883,6 +1088,8 @@ export function DepthMatrixLayer({
     // outside [priceMin, rowMaxPrice] fall outside the clipped grid and must
     // be excluded BEFORE persistMap bookkeeping, otherwise a far-away price
     // key still occupies a slot purely to be discarded a few lines later.
+    // Uses the RAW numRows/curBinSize (the actual price range covered),
+    // independent of how many painted rows that range collapses into.
     const rowMaxPrice = priceMin + (numRows - 1) * curBinSize;
     const rowEpsilon = curBinSize * 0.001;
 
@@ -891,7 +1098,7 @@ export function DepthMatrixLayer({
     // columns without a resize (see the module doc comment's Phase 6
     // section for why the per-frame blit math is unaffected by this).
     const bitmapWidth = numCols + WINDOW_SLACK_COLS;
-    const needed_h = numRows;
+    const needed_h = paintedNumRows;
     if (
       !offscreenRef.current ||
       offscreenRef.current.width !== bitmapWidth ||
@@ -921,15 +1128,23 @@ export function DepthMatrixLayer({
 
     // Phase 2 point 1 + Phase 6 point 2 — persistence weighting, seeded by a
     // bookkeeping-only warm-up pass over the columns immediately preceding
-    // the window (against FULL history, not just this window's slice).
-    const persistMap = buildPersistWarmupMap(
-      fullCols,
-      finalWindowStartIdx,
-      priceMin,
-      rowMaxPrice,
-      rowEpsilon,
-      PERSISTENCE_RAMP_COLUMNS_DEFAULT,
-    );
+    // the window. LOD point 6: warm-up must operate at the SAME granularity
+    // as what's actually painted, so "consecutive columns present" means
+    // "consecutive BUCKETS present" once bucketFactor > 1 — bucket the
+    // preceding raw slice the exact same way before warming up.
+    const rampColumns = PERSISTENCE_RAMP_COLUMNS_DEFAULT;
+    let persistMap: Map<number, number>;
+    if (bucketFactor > 1) {
+      const lookbackRawCount = (rampColumns + 2) * bucketFactor + bucketFactor; // generous margin for partial-bucket edges
+      const warmupRawStart = Math.max(0, finalWindowStartIdx - lookbackRawCount);
+      const warmupRawSlice = fullCols.slice(warmupRawStart, finalWindowStartIdx);
+      const warmupBucketed = warmupRawSlice.length > 0
+        ? (bucketColumns(warmupRawSlice, rawIntervalMs, bucketFactor).columns as DecodedColumn[])
+        : [];
+      persistMap = buildPersistWarmupMap(warmupBucketed, warmupBucketed.length, priceMin, rowMaxPrice, rowEpsilon, rampColumns);
+    } else {
+      persistMap = buildPersistWarmupMap(fullCols, finalWindowStartIdx, priceMin, rowMaxPrice, rowEpsilon, rampColumns);
+    }
 
     // Historical columns render the book exactly as it WAS at that time,
     // even if price later traded through the level — no penetration
@@ -944,7 +1159,7 @@ export function DepthMatrixLayer({
       rowMaxPrice,
       rowEpsilon,
       curBinSize,
-      numRows,
+      paintedNumRows,
       vLo,
       vHi,
       lut,
@@ -952,18 +1167,53 @@ export function DepthMatrixLayer({
       alphaCutoffUsd,
       smoothingEnabled,
       persistMap,
+      rowMergeFactor,
     );
 
     lastPersistMapRef.current = persistMap;
+
+    // LOD append bookkeeping — track the currently-open LAST painted
+    // bucket's raw columns + start time so a subsequent live append (see
+    // drawFrame's bucketFactor > 1 branch) can extend it in place rather
+    // than forcing a full rebuild on every tick.
+    let lastBucketStartT = 0;
+    let lastBucketRawCols: DecodedColumn[] = [];
+    if (bucketFactor > 1) {
+      lastBucketStartT = bucketStartMs(rawWindowCols[rawWindowCols.length - 1].t, rawIntervalMs, bucketFactor);
+      let k = rawWindowCols.length - 1;
+      while (k >= 0 && rawWindowCols[k].t >= lastBucketStartT) k--;
+      lastBucketRawCols = rawWindowCols.slice(k + 1);
+    }
+
+    // CRITICAL 2 review fix — seed `persistBaseMap` = persistence state as
+    // of right BEFORE the last (currently-open, once bucketFactor > 1)
+    // painted bucket's own contribution. A DEDICATED warm-up pass (same
+    // bounded rampColumns+2 lookback as the main persistMap warm-up above,
+    // over the same bucketed `cols` array) rather than reusing `persistMap`
+    // itself, since `persistMap` already includes the last bucket's ONE
+    // bump (from the full-range paintColumnsRange call above) — the append
+    // path needs the state EXCLUDING that. Unused (empty) when
+    // bucketFactor <= 1 — the pre-LOD append path never reads this field.
+    const persistBaseMap = bucketFactor > 1
+      ? buildPersistWarmupMap(cols, numCols - 1, priceMin, rowMaxPrice, rowEpsilon, rampColumns)
+      : new Map<number, number>();
 
     setMeta(offscreenRef.current, {
       priceMin,
       priceMax,
       numCols,
-      numRows,
+      numRows: paintedNumRows,
+      rawNumRows: numRows,
       cols,
       curBinSize,
       bitmapWidth,
+      bucketFactor,
+      rowMergeFactor,
+      rawIntervalMs,
+      lastPaintedRawT: rawWindowCols[rawWindowCols.length - 1].t,
+      lastBucketStartT,
+      lastBucketRawCols,
+      persistBaseMap,
     });
   }
 
@@ -1043,17 +1293,47 @@ export function DepthMatrixLayer({
       const zoomTierChanged = Math.abs(curZoomMult - lastZoomMultAppliedRef.current) > ZOOM_REPAINT_EPSILON;
       if (zoomTierChanged) scheduleRebuild();
 
-      // Phase 6 — classify the `columns` prop's identity change (append /
-      // rotate / reset) every frame (cheap: reference compare + O(1) math).
+      // Raw depth-column sampling interval, computed once per frame and
+      // shared by BOTH the columns-update classification below and the LOD
+      // bucket-factor decision (previously each recomputed this separately).
+      const rawIntervalMs = estimateColumnIntervalMs(cols);
+
+      // Phase 6 — read the current offscreen meta once, up front, so BOTH
+      // the LOD tier-change checks below AND the columns-update
+      // classification further down can use it without re-fetching.
       const meta0 = getMeta(offscreenRef.current);
       let doFullRebuild = !meta0;
       let appendCols: DecodedColumn[] | null = null;
 
+      // LOD (Phase 7) point 3 — column bucket-factor tier-change trigger.
+      // `rawColWidthPxRef` holds the RAW (un-bucketed) column's screen px
+      // width from the PREVIOUS frame's affine-mapping step (one-frame lag,
+      // same pattern as `depthColWidthPxRef`/`barSpacingRef` above). A
+      // bucket-factor crossing schedules the same debounced full rebuild as
+      // a zoom-tier/margin change. Review fix (hysteresis) —
+      // `computeBucketFactorWithHysteresis` adds a dead zone around
+      // TARGET_MIN_COL_PX so sub-pixel float jitter in `pxPerSec` can't
+      // flip the tier (and re-trigger a rebuild) every frame.
+      const curBucketFactor = computeBucketFactorWithHysteresis(rawColWidthPxRef.current, lastBucketFactorAppliedRef.current);
+      const bucketTierChanged = curBucketFactor !== lastBucketFactorAppliedRef.current;
+      if (bucketTierChanged) scheduleRebuild();
+
+      // SHOULD-FIX 1 (review) — row merge-factor pane-resize trigger. Unlike
+      // bucketFactor (measured directly every frame), rowMergeFactor depends
+      // on `numRows`, which is only known mid-rebuild — so this re-ESTIMATES
+      // it from the CSS pane height (which changes on container resize) +
+      // the LAST rebuild's real `rawNumRows`, with the same hysteresis
+      // treatment as bucketFactor.
+      if (meta0 && meta0.rawNumRows > 0) {
+        const curRowPxEstimate = heightRef.current / meta0.rawNumRows;
+        const curRowMergeFactor = computeRowMergeFactorWithHysteresis(curRowPxEstimate, lastRowMergeFactorAppliedRef.current);
+        if (curRowMergeFactor !== lastRowMergeFactorAppliedRef.current) scheduleRebuild();
+      }
+
       const prevCols = lastColumnsArrayRef.current;
       if (cols !== prevCols) {
         if (prevCols && prevCols.length > 0 && cols.length > 0 && meta0) {
-          const intervalMs = estimateColumnIntervalMs(cols);
-          const cls = classifyColumnsUpdate(prevCols, cols, intervalMs);
+          const cls = classifyColumnsUpdate(prevCols, cols, rawIntervalMs);
           if (cls.kind === 'reset') {
             doFullRebuild = true;
             // CRITICAL 1 (review fix) — a 'reset' on an already-mounted
@@ -1071,10 +1351,27 @@ export function DepthMatrixLayer({
             vLoEmaRef.current = null;
           } else if ((cls.kind === 'append' || cls.kind === 'rotate') && cls.appendedCount > 0) {
             const prevLastT = prevCols[prevCols.length - 1].t;
-            const atLiveEdge = meta0.numCols > 0 && meta0.cols[meta0.numCols - 1].t === prevLastT;
+            // LOD (Phase 7) — compare against the last RAW column actually
+            // incorporated into the bitmap, NOT meta0.cols[last].t (which is
+            // a BUCKET start time once bucketFactor > 1 and would never
+            // equal a raw `columns` prop timestamp — see OffscreenMeta's
+            // `lastPaintedRawT` doc comment).
+            const atLiveEdge = meta0.numCols > 0 && meta0.lastPaintedRawT === prevLastT;
             if (atLiveEdge) {
               const appended = cols.slice(cols.length - cls.appendedCount);
-              if (meta0.numCols + appended.length <= meta0.bitmapWidth) {
+              if (meta0.bucketFactor > 1) {
+                // Bucketed append — see the module doc comment's "LOD
+                // design" section point 4. Each newly appended RAW column
+                // either extends the currently-open last bucket or starts a
+                // new one; capacity is checked in BUCKET (painted-column)
+                // units against the bitmap's slack headroom.
+                const worstCaseNewBuckets = appended.length; // upper bound — every appended raw col could start a new bucket
+                if (meta0.numCols + worstCaseNewBuckets <= meta0.bitmapWidth) {
+                  appendCols = appended;
+                } else {
+                  doFullRebuild = true; // slack exhausted (worst case) — fall back to a full rebuild
+                }
+              } else if (meta0.numCols + appended.length <= meta0.bitmapWidth) {
                 appendCols = appended;
               } else {
                 doFullRebuild = true; // slack exhausted — fall back to a full rebuild
@@ -1092,13 +1389,24 @@ export function DepthMatrixLayer({
       // Window-margin check — has the visible range exited the painted
       // window's bounds? (meta.cols is keyed by TIME, so this reads directly
       // off the retained column objects — no separate index bookkeeping.)
+      // CRITICAL 1 (review fix) — the window's true END time is the last
+      // painted column's bucket START PLUS the full bucket span, not the
+      // start alone: once bucketFactor > 1, `cols[last].t` is where the
+      // OPEN bucket began, not where it ends, so comparing the live visible
+      // range's end against that start made `visToSecNow > winEndSec` true
+      // almost continuously while a bucket is still filling — scheduling a
+      // rebuild on effectively every frame and defeating the append fast
+      // path entirely. `paintedWindowEndMs` (depthSignificance.ts) adds the
+      // bucket span; degenerates to the pre-LOD `+rawIntervalMs` behavior
+      // when bucketFactor <= 1.
       if (meta0 && meta0.numCols > 0) {
         const visRangeNow = chartInstance.timeScale().getVisibleRange();
         if (visRangeNow) {
           const visFromSecNow = visRangeNow.from as unknown as number;
           const visToSecNow   = visRangeNow.to   as unknown as number;
           const winStartSec = meta0.cols[0].t / 1000;
-          const winEndSec   = meta0.cols[meta0.numCols - 1].t / 1000;
+          const winEndMs    = paintedWindowEndMs(meta0.cols[meta0.numCols - 1].t, meta0.bucketFactor, meta0.rawIntervalMs);
+          const winEndSec   = winEndMs / 1000;
           if (visFromSecNow < winStartSec || visToSecNow > winEndSec) {
             scheduleRebuild();
           }
@@ -1158,14 +1466,25 @@ export function DepthMatrixLayer({
               sizeFilterRef.current,
               paletteRef.current,
               smoothingRef.current,
+              rawIntervalMs,
+              curBucketFactor,
+              heightRef.current,
             );
             lastZoomMultAppliedRef.current = curZoomMult;
+            lastBucketFactorAppliedRef.current = curBucketFactor;
+            // SHOULD-FIX 1 (review) — commit the row merge factor this
+            // rebuild actually painted with (repaintOffscreen decides it
+            // internally from the real numRows) so the NEXT frame's
+            // pane-resize trigger compares against the truth, not a stale
+            // pre-rebuild value.
+            const metaAfterRebuild = getMeta(offscreenRef.current);
+            if (metaAfterRebuild) lastRowMergeFactorAppliedRef.current = metaAfterRebuild.rowMergeFactor;
           }
         } else if (appendCols && offscreenCtxRef.current) {
           const meta = getMeta(offscreenRef.current);
           if (meta) {
             const octx = offscreenCtxRef.current;
-            const rowMaxPrice = meta.priceMin + (meta.numRows - 1) * meta.curBinSize;
+            const rowMaxPrice = meta.priceMin + (meta.rawNumRows - 1) * meta.curBinSize;
             const rowEpsilon = meta.curBinSize * 0.001;
             const lut = getPaletteLUT(paletteRef.current);
             const legacyQCut = sizeFilterRef.current > 0
@@ -1173,75 +1492,227 @@ export function DepthMatrixLayer({
               : 0;
             const alphaCutoffUsd = alphaSkipCutoffUsd(vLoRef.current);
 
-            if (smoothingRef.current) {
-              // Re-derive + repaint a small trailing strip (including the
-              // new column(s)) so the smoothing/bloom neighborhood ops never
-              // leave a seam at the append boundary — see the module doc
-              // comment's Phase 6 section.
-              meta.cols.push(...appendCols);
-              meta.numCols = meta.numCols + appendCols.length;
-              // Review fix (SHOULD-FIX 1) — widen the strip by 1 extra
-              // column on the LEFT (a border column, also rewritten via
-              // putImageData below) so bloom/smoothing reach is exact at
-              // the strip's own left boundary. Without this, a hot cell at
-              // the strip's leftmost column can't exchange bloom with the
-              // column just to its left (applyBloom's `col > 0` guard
-              // skips it at local index 0), and that boundary is never
-              // revisited on a LATER append either — a persistent 1-column
-              // seam. Each new append-strip extends 1 column further left
-              // than the previous "new" boundary, so the exact edge that
-              // was under-blended last time gets correctly re-blended now.
-              const stripStart = Math.max(0, meta.numCols - APPEND_SMOOTH_STRIP_COLS - 1);
-              const stripWarmMap = buildPersistWarmupMap(
-                meta.cols,
-                stripStart,
-                meta.priceMin,
-                rowMaxPrice,
-                rowEpsilon,
-                PERSISTENCE_RAMP_COLUMNS_DEFAULT,
-              );
-              paintColumnsRange(
-                octx,
-                meta.cols,
-                stripStart,
-                meta.numCols,
-                stripStart,
-                meta.priceMin,
-                rowMaxPrice,
-                rowEpsilon,
-                meta.curBinSize,
-                meta.numRows,
-                vLoRef.current,
-                vHiRef.current,
-                lut,
-                legacyQCut,
-                alphaCutoffUsd,
-                true,
-                stripWarmMap,
-              );
-              lastPersistMapRef.current = stripWarmMap;
+            if (meta.bucketFactor <= 1) {
+              // ── Pre-LOD append path — BYTE-FOR-BYTE unchanged behavior ──
+              if (smoothingRef.current) {
+                // Re-derive + repaint a small trailing strip (including the
+                // new column(s)) so the smoothing/bloom neighborhood ops never
+                // leave a seam at the append boundary — see the module doc
+                // comment's Phase 6 section.
+                meta.cols.push(...appendCols);
+                meta.numCols = meta.numCols + appendCols.length;
+                // Review fix (SHOULD-FIX 1) — widen the strip by 1 extra
+                // column on the LEFT (a border column, also rewritten via
+                // putImageData below) so bloom/smoothing reach is exact at
+                // the strip's own left boundary. Without this, a hot cell at
+                // the strip's leftmost column can't exchange bloom with the
+                // column just to its left (applyBloom's `col > 0` guard
+                // skips it at local index 0), and that boundary is never
+                // revisited on a LATER append either — a persistent 1-column
+                // seam. Each new append-strip extends 1 column further left
+                // than the previous "new" boundary, so the exact edge that
+                // was under-blended last time gets correctly re-blended now.
+                const stripStart = Math.max(0, meta.numCols - APPEND_SMOOTH_STRIP_COLS - 1);
+                const stripWarmMap = buildPersistWarmupMap(
+                  meta.cols,
+                  stripStart,
+                  meta.priceMin,
+                  rowMaxPrice,
+                  rowEpsilon,
+                  PERSISTENCE_RAMP_COLUMNS_DEFAULT,
+                );
+                paintColumnsRange(
+                  octx,
+                  meta.cols,
+                  stripStart,
+                  meta.numCols,
+                  stripStart,
+                  meta.priceMin,
+                  rowMaxPrice,
+                  rowEpsilon,
+                  meta.curBinSize,
+                  meta.numRows,
+                  vLoRef.current,
+                  vHiRef.current,
+                  lut,
+                  legacyQCut,
+                  alphaCutoffUsd,
+                  true,
+                  stripWarmMap,
+                  meta.rowMergeFactor,
+                );
+                lastPersistMapRef.current = stripWarmMap;
+              } else {
+                paintColumnsRange(
+                  octx,
+                  appendCols,
+                  0,
+                  appendCols.length,
+                  meta.numCols,
+                  meta.priceMin,
+                  rowMaxPrice,
+                  rowEpsilon,
+                  meta.curBinSize,
+                  meta.numRows,
+                  vLoRef.current,
+                  vHiRef.current,
+                  lut,
+                  legacyQCut,
+                  alphaCutoffUsd,
+                  false,
+                  lastPersistMapRef.current,
+                  meta.rowMergeFactor,
+                );
+                meta.cols.push(...appendCols);
+                meta.numCols = meta.numCols + appendCols.length;
+              }
+              meta.lastPaintedRawT = appendCols[appendCols.length - 1].t;
             } else {
-              paintColumnsRange(
-                octx,
-                appendCols,
-                0,
-                appendCols.length,
-                meta.numCols,
-                meta.priceMin,
-                rowMaxPrice,
-                rowEpsilon,
-                meta.curBinSize,
-                meta.numRows,
-                vLoRef.current,
-                vHiRef.current,
-                lut,
-                legacyQCut,
-                alphaCutoffUsd,
-                false,
-                lastPersistMapRef.current,
-              );
-              meta.cols.push(...appendCols);
-              meta.numCols = meta.numCols + appendCols.length;
+              // ── LOD bucketed append path (bucketFactor > 1) — see the
+              // module doc comment's "LOD design" section point 4. Each
+              // newly appended RAW column either extends the currently-open
+              // last bucket (re-merged via mergeColumnsMaxQ) or starts a new
+              // bucket (advances meta.numCols by 1). `changedFromCol` tracks
+              // the EARLIEST painted column touched this tick so the
+              // existing paint machinery below repaints exactly (and only)
+              // what changed.
+              let changedFromCol = meta.numCols; // default: nothing changed yet (no new/extended bucket this tick)
+              let forcedRebuildMidBatch = false;
+              for (const rawCol of appendCols) {
+                const thisBucketStart = bucketStartMs(rawCol.t, meta.rawIntervalMs, meta.bucketFactor);
+
+                // SHOULD-FIX 3 (review) — out-of-order raw column: time
+                // moved BACKWARD relative to the currently-open bucket. This
+                // should never happen for a genuine append/rotate (both
+                // classifyColumnsUpdate and the live-edge check already
+                // guard against a real reset), so treat it as an anomaly —
+                // don't push, don't touch meta.lastPaintedRawT for it,
+                // schedule a full rebuild to re-derive a consistent state,
+                // and skip just this column (the anomaly may be a single
+                // bad entry rather than a systemic issue).
+                if (meta.numCols > 0 && thisBucketStart < meta.lastBucketStartT) {
+                  scheduleRebuild();
+                  forcedRebuildMidBatch = true;
+                  continue;
+                }
+
+                if (meta.numCols > 0 && thisBucketStart === meta.lastBucketStartT) {
+                  // Extends the currently-open last bucket.
+                  meta.lastBucketRawCols.push(rawCol);
+                  const merged = mergeColumnsMaxQ(meta.lastBucketRawCols);
+                  const allGap = meta.lastBucketRawCols.every((c) => c.flags & 1);
+                  meta.cols[meta.numCols - 1] = {
+                    ...meta.lastBucketRawCols[0],
+                    t: thisBucketStart,
+                    flags: allGap ? 1 : 0,
+                    bids: merged.bids,
+                    asks: merged.asks,
+                  };
+                  changedFromCol = Math.min(changedFromCol, meta.numCols - 1);
+                  meta.lastPaintedRawT = rawCol.t;
+                } else if (meta.numCols < meta.bitmapWidth) {
+                  // CRITICAL 2 (review fix) — commit the JUST-CLOSED
+                  // bucket's persistence contribution EXACTLY ONCE, into the
+                  // stable base snapshot, before opening the new bucket.
+                  // Without this, `meta.persistBaseMap` would silently fall
+                  // behind (the closed bucket's final content would never
+                  // be folded in), corrupting persistence counts for every
+                  // bucket after it.
+                  if (meta.numCols > 0) {
+                    const committed = new Map(meta.persistBaseMap);
+                    bumpPersistMapForColumn(committed, meta.cols[meta.numCols - 1], meta.priceMin, rowMaxPrice, rowEpsilon, meta.curBinSize);
+                    meta.persistBaseMap = committed;
+                  }
+                  // Starts a new bucket.
+                  meta.lastBucketStartT = thisBucketStart;
+                  meta.lastBucketRawCols = [rawCol];
+                  const merged = mergeColumnsMaxQ(meta.lastBucketRawCols);
+                  meta.cols.push({
+                    ...rawCol,
+                    t: thisBucketStart,
+                    flags: rawCol.flags & 1 ? 1 : 0,
+                    bids: merged.bids,
+                    asks: merged.asks,
+                  });
+                  changedFromCol = Math.min(changedFromCol, meta.numCols);
+                  meta.numCols = meta.numCols + 1;
+                  meta.lastPaintedRawT = rawCol.t;
+                } else {
+                  // SHOULD-FIX 2 (review) — bitmap slack exhausted: do NOT
+                  // update meta.lastPaintedRawT for a column that was never
+                  // actually incorporated into the bitmap (that would desync
+                  // the live-edge check from what's truly painted). Force a
+                  // full rebuild and stop processing this batch — the
+                  // remaining raw columns (if any) are picked up by the
+                  // rebuild instead of silently dropped.
+                  scheduleRebuild();
+                  forcedRebuildMidBatch = true;
+                  break;
+                }
+              }
+
+              // CRITICAL 2 (review fix) — persistence for THIS tick's render
+              // is derived from a FRESH clone of the stable base + exactly
+              // ONE bump for the currently-open bucket's CURRENT (re-merged)
+              // content — never by mutating a map that's been bumped again
+              // on every prior tick this same bucket was open. `bumpRangeStart
+              // = meta.numCols - 1` (paintColumnsRange, Phase 8) makes any
+              // OTHER columns in the repainted range (already-closed buckets
+              // included only for the smoothing strip's pixel continuity)
+              // strictly READ-ONLY against this map — their contribution is
+              // already baked into `persistBaseMap` via the commit-on-close
+              // step above, so they must NOT be bumped again here.
+              if (!forcedRebuildMidBatch && changedFromCol < meta.numCols) {
+                const workingMap = new Map(meta.persistBaseMap);
+                const bumpRangeStart = meta.numCols - 1;
+                if (smoothingRef.current) {
+                  const stripStart = Math.max(0, Math.min(changedFromCol, meta.numCols - APPEND_SMOOTH_STRIP_COLS - 1));
+                  paintColumnsRange(
+                    octx,
+                    meta.cols,
+                    stripStart,
+                    meta.numCols,
+                    stripStart,
+                    meta.priceMin,
+                    rowMaxPrice,
+                    rowEpsilon,
+                    meta.curBinSize,
+                    meta.numRows,
+                    vLoRef.current,
+                    vHiRef.current,
+                    lut,
+                    legacyQCut,
+                    alphaCutoffUsd,
+                    true,
+                    workingMap,
+                    meta.rowMergeFactor,
+                    bumpRangeStart,
+                  );
+                } else {
+                  paintColumnsRange(
+                    octx,
+                    meta.cols,
+                    changedFromCol,
+                    meta.numCols,
+                    changedFromCol,
+                    meta.priceMin,
+                    rowMaxPrice,
+                    rowEpsilon,
+                    meta.curBinSize,
+                    meta.numRows,
+                    vLoRef.current,
+                    vHiRef.current,
+                    lut,
+                    legacyQCut,
+                    alphaCutoffUsd,
+                    false,
+                    workingMap,
+                    meta.rowMergeFactor,
+                    bumpRangeStart,
+                  );
+                }
+                lastPersistMapRef.current = workingMap;
+              }
             }
           }
         }
@@ -1351,6 +1822,17 @@ export function DepthMatrixLayer({
         // depthColWidthPxRef — one-frame lag, same pattern as barSpacingRef).
         if (Number.isFinite(colWidthPx) && colWidthPx > 0) {
           depthColWidthPxRef.current = colWidthPx;
+        }
+
+        // LOD (Phase 7) — stash this frame's RAW (un-bucketed) column pixel
+        // width for the NEXT frame's bucket-factor decision. Computed
+        // independently of `colWidthPx` above (which is the PAINTED
+        // column's width and would already reflect bucketing once LOD is
+        // active) via pxPerSec * rawIntervalMs directly — see the module
+        // doc comment's "LOD design" section point 1.
+        const rawColWidthPx = pxPerSec * (rawIntervalMs / 1000);
+        if (Number.isFinite(rawColWidthPx) && rawColWidthPx > 0) {
+          rawColWidthPxRef.current = rawColWidthPx;
         }
 
         // Raw (unclipped) left/right canvas edges of the entire offscreen.

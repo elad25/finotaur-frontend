@@ -655,6 +655,347 @@ export interface ColumnLike {
  * masquerading as an append/rotation purely because columns sit on a fixed
  * epoch-aligned interval grid.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 7 — Level-of-Detail (LOD) downsampling (perf fix — see
+// DepthMatrixLayer.tsx's module doc comment, "LOD design" section, for the
+// full rationale). Zoomed far out, raw 5s columns collapse to sub-pixel
+// screen width and price bins collapse to sub-pixel screen height — painting
+// one bitmap cell per raw (column, price-bin) pair then paints millions of
+// cells that collapse into far fewer screen pixels. Bookmap-class tools never
+// paint more cells than screen pixels; these helpers implement the same
+// bound:
+//
+//   1. computeBucketFactor / computeRowMergeFactor / computeLodFactors —
+//      given the current screen-px-per-raw-column and screen-px-per-raw-row,
+//      decide how many raw columns/rows to merge into one painted cell so
+//      painted cells never go below ~TARGET_MIN_COL_PX / TARGET_MIN_ROW_PX
+//      screen pixels wide/tall.
+//   2. bucketStartMs — fixed epoch-aligned bucket boundaries (not "however
+//      many columns happen to be in the window"), so buckets are STABLE
+//      across repaints and live appends — the same raw column always
+//      belongs to the same bucket regardless of where the window starts.
+//   3. mergeColumnsMaxQ — merges multiple raw columns' bid/ask bins into one
+//      via MAX-q per price (Bookmap semantics: a wall visible at ANY point
+//      in the bucket stays visible; summing would be wrong — it would make
+//      a bucket's "size" scale with bucketFactor, which has nothing to do
+//      with book depth). Gap columns contribute nothing. Technical dust is
+//      NOT re-filtered here — it was already removed upstream at the
+//      SAMPLING layer (useDepthSlices.ts's dustCutoffUsd, see the module doc
+//      comment above) before columns ever reach the renderer, so a merge of
+//      already-dust-filtered columns cannot manufacture new dust.
+//   4. bucketColumns — walks a raw column array and groups it into
+//      epoch-aligned buckets of `bucketFactor` raw columns each (the last
+//      bucket in a slice may be partial), returning one synthetic merged
+//      DecodedColumn-shaped object per bucket. Also returns the raw column
+//      COUNT consumed by each bucket, so a caller trimming buckets for a
+//      cell-budget guard can map back to a raw-column offset (needed for
+//      persistence warm-up, which looks up raw history preceding the
+//      window).
+
+/** Screen-px floor for a PAINTED column below which columns get merged (bucketed) together. */
+export const TARGET_MIN_COL_PX = 1.5;
+/** Screen-px floor for a PAINTED row below which price rows get merged together. */
+export const TARGET_MIN_ROW_PX = 1.2;
+/** Hard ceiling on how many raw columns one painted bucket may merge — belt-and-suspenders against a pathological (near-zero) px-per-column input. */
+export const LOD_MAX_BUCKET_FACTOR = 64;
+/** Hard ceiling on how many raw price rows one painted row may merge. */
+export const LOD_MAX_ROW_MERGE_FACTOR = 64;
+
+/**
+ * Number of raw columns to merge into one painted column so painted columns
+ * never render narrower than `TARGET_MIN_COL_PX` screen pixels. Returns 1
+ * (no bucketing) when `pxPerRawColumn` is already at/above the target, or
+ * non-finite/non-positive (can't reason about it — render 1:1 rather than
+ * guessing).
+ */
+export function computeBucketFactor(
+  pxPerRawColumn: number,
+  maxBucketFactor: number = LOD_MAX_BUCKET_FACTOR,
+): number {
+  if (!Number.isFinite(pxPerRawColumn) || pxPerRawColumn <= 0 || pxPerRawColumn >= TARGET_MIN_COL_PX) return 1;
+  return Math.min(maxBucketFactor, Math.ceil(TARGET_MIN_COL_PX / pxPerRawColumn));
+}
+
+/**
+ * Number of raw price rows to merge into one painted row so painted rows
+ * never render shorter than `TARGET_MIN_ROW_PX` screen pixels. Same
+ * shape/semantics as `computeBucketFactor` above, applied to the price axis.
+ */
+export function computeRowMergeFactor(
+  rowPx: number,
+  maxRowMergeFactor: number = LOD_MAX_ROW_MERGE_FACTOR,
+): number {
+  if (!Number.isFinite(rowPx) || rowPx <= 0 || rowPx >= TARGET_MIN_ROW_PX) return 1;
+  return Math.min(maxRowMergeFactor, Math.ceil(TARGET_MIN_ROW_PX / rowPx));
+}
+
+export interface LodFactors {
+  bucketFactor: number;
+  rowMergeFactor: number;
+}
+
+export interface LodCaps {
+  maxBucketFactor?: number;
+  maxRowMergeFactor?: number;
+}
+
+/** Convenience composite of computeBucketFactor + computeRowMergeFactor — see DepthMatrixLayer.tsx's "LOD design" doc comment. */
+export function computeLodFactors(
+  pxPerRawColumn: number,
+  rowPx: number,
+  caps: LodCaps = {},
+): LodFactors {
+  return {
+    bucketFactor: computeBucketFactor(pxPerRawColumn, caps.maxBucketFactor),
+    rowMergeFactor: computeRowMergeFactor(rowPx, caps.maxRowMergeFactor),
+  };
+}
+
+/**
+ * Fixed epoch-aligned bucket start time for raw timestamp `t`, given the raw
+ * column sampling interval and a bucket factor (raw columns per bucket).
+ * Epoch-aligned (not "aligned to the first column in the current window") so
+ * the SAME raw column always maps to the SAME bucket boundary regardless of
+ * where a window starts/ends — buckets stay stable across repaints and live
+ * appends (no reshuffling every time the visible window shifts by one raw
+ * column). Returns `t` unchanged if `intervalMs`/`factor` are non-positive
+ * (degenerate — nothing to align to).
+ */
+export function bucketStartMs(t: number, intervalMs: number, factor: number): number {
+  if (!(intervalMs > 0) || !(factor > 0)) return t;
+  const bucketSpanMs = intervalMs * factor;
+  return Math.floor(t / bucketSpanMs) * bucketSpanMs;
+}
+
+/** Minimal shape the LOD merge helpers need from a decoded column's bin — just enough to merge by price. */
+export interface DepthBinLike {
+  price: number;
+  q: number;
+}
+
+/** Minimal shape the LOD merge helpers need from a decoded column — matches DecodedColumn's relevant fields (depthTypes.ts) without importing it (keeps this module DOM/type-dependency-free). */
+export interface DecodedColumnLike {
+  t: number;
+  binSize: number;
+  flags: number;
+  bids: DepthBinLike[];
+  asks: DepthBinLike[];
+}
+
+/**
+ * Merges multiple raw columns' bid/ask bins into one via MAX-q per price —
+ * Bookmap semantics: a wall visible at ANY point within the bucket stays
+ * visible in the painted (downsampled) column. Summing across columns would
+ * be wrong (a bucket's rendered "size" would scale with bucketFactor, which
+ * has nothing to do with book depth). Gap columns (flags bit0) and q<=0
+ * entries contribute nothing.
+ */
+export function mergeColumnsMaxQ(cols: readonly DecodedColumnLike[]): { bids: DepthBinLike[]; asks: DepthBinLike[] } {
+  const bidMap = new Map<number, number>();
+  const askMap = new Map<number, number>();
+  for (const col of cols) {
+    if (col.flags & 1) continue; // gap column — never contributes
+    for (const r of col.bids) {
+      if (r.q <= 0) continue;
+      const cur = bidMap.get(r.price) ?? 0;
+      if (r.q > cur) bidMap.set(r.price, r.q);
+    }
+    for (const r of col.asks) {
+      if (r.q <= 0) continue;
+      const cur = askMap.get(r.price) ?? 0;
+      if (r.q > cur) askMap.set(r.price, r.q);
+    }
+  }
+  const bids: DepthBinLike[] = [];
+  for (const [price, q] of bidMap) bids.push({ price, q });
+  const asks: DepthBinLike[] = [];
+  for (const [price, q] of askMap) asks.push({ price, q });
+  return { bids, asks };
+}
+
+export interface BucketedColumns {
+  /** One synthetic merged column per bucket, `t` = the bucket's epoch-aligned start time. Structurally `DecodedColumnLike` — callers that need the concrete `DecodedColumn` shape (with its extra `anchor` field, preserved at runtime via the object spread below) cast at the call site rather than fighting a generic here. */
+  columns: DecodedColumnLike[];
+  /** Number of RAW columns (from the input array) consumed by each bucket, 1:1 with `columns` — lets a caller trimming buckets map back to a raw-array offset. */
+  rawCounts: number[];
+}
+
+/**
+ * Groups a raw column array into epoch-aligned buckets of `bucketFactor` raw
+ * columns each (see `bucketStartMs`) and merges each bucket via
+ * `mergeColumnsMaxQ`. The FIRST/LAST bucket in the slice may be partial (the
+ * slice doesn't necessarily start/end on a bucket boundary) — that's fine,
+ * a partial bucket just merges however many raw columns it actually has.
+ * `bucketFactor <= 1` is a no-op passthrough (returns the input columns
+ * unchanged, one bucket per raw column, `rawCounts` all 1) so callers can
+ * unconditionally route through this function without a behavior change
+ * when LOD isn't active.
+ */
+export function bucketColumns(
+  cols: readonly DecodedColumnLike[],
+  intervalMs: number,
+  bucketFactor: number,
+): BucketedColumns {
+  if (bucketFactor <= 1 || cols.length === 0) {
+    return { columns: cols.slice(), rawCounts: cols.map(() => 1) };
+  }
+  const bucketSpanMs = intervalMs * bucketFactor;
+  const columns: DecodedColumnLike[] = [];
+  const rawCounts: number[] = [];
+  const n = cols.length;
+  let i = 0;
+  while (i < n) {
+    const startT = bucketStartMs(cols[i].t, intervalMs, bucketFactor);
+    const endT = startT + bucketSpanMs; // exclusive
+    let j = i;
+    while (j < n && cols[j].t < endT) j++;
+    const group = cols.slice(i, j);
+    const { bids, asks } = mergeColumnsMaxQ(group);
+    const allGap = group.every((c) => c.flags & 1);
+    columns.push({
+      ...group[0],
+      t: startT,
+      flags: allGap ? 1 : 0,
+      bids,
+      asks,
+    });
+    rawCounts.push(j - i);
+    i = j;
+  }
+  return { columns, rawCounts };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 — LOD review-fix hardening (code review of the initial Phase 7 diff
+// found 2 critical + 3 should-fix issues; these helpers implement the fixes
+// as pure, unit-testable functions rather than inline component logic):
+//
+//   CRITICAL 1 — window-margin-exceeded check must compare against the
+//   painted window's true END time, not the last painted column's START
+//   time. Once bucketFactor > 1 the last painted column's `.t` is a BUCKET
+//   START, not its end — comparing the live visible-range end against that
+//   start makes `visToSecNow > winEndSec` true almost always while a bucket
+//   is still open, firing a rebuild every ~120ms and defeating the append
+//   fast path entirely. `paintedWindowEndMs` adds the bucket span.
+//
+//   CRITICAL 2 — persistence must advance ONCE per CLOSED bucket, not once
+//   per repaint of a still-open bucket. `bumpPersistMapForColumn` is the
+//   single-column prune+bump primitive (extracted so it's shared — and
+//   provably identical — between the full-window paint's per-column chain
+//   and the append path's "commit a just-closed bucket" step) that the
+//   caller invokes EXACTLY ONCE per bucket close, using a stable persistence
+//   BASE snapshot rather than the live per-tick map.
+//
+//   SHOULD-FIX (hysteresis) — a tier-change trigger recomputed from a raw
+//   pixel measurement every frame can THRASH if that measurement hovers at
+//   the exact threshold (sub-pixel float jitter from repeated pxPerSec
+//   arithmetic). `computeBucketFactorWithHysteresis` /
+//   `computeRowMergeFactorWithHysteresis` add a dead zone around the target
+//   threshold (±~10%) — Schmitt-trigger semantics: only cross INTO a new
+//   tier when clearly past the threshold in that direction; within the dead
+//   zone, keep whatever tier is currently applied.
+
+/** Ratio applied to the target px (TARGET_MIN_COL_PX / TARGET_MIN_ROW_PX) for the LOW hysteresis bound (below which bucketing/merging increases). ≈ 1.4/1.5 for columns. */
+export const LOD_HYSTERESIS_LOW_RATIO = 0.933;
+/** Ratio applied to the target px for the HIGH hysteresis bound (above which bucketing/merging decreases). ≈ 1.65/1.5 for columns. */
+export const LOD_HYSTERESIS_HIGH_RATIO = 1.1;
+
+function computeFactorWithHysteresis(
+  px: number,
+  appliedFactor: number,
+  targetPx: number,
+  maxFactor: number,
+  computeFn: (px: number, max: number) => number,
+): number {
+  const fallback = appliedFactor > 0 ? appliedFactor : 1;
+  if (!Number.isFinite(px) || px <= 0) return fallback;
+  const lowBound = targetPx * LOD_HYSTERESIS_LOW_RATIO;
+  const highBound = targetPx * LOD_HYSTERESIS_HIGH_RATIO;
+  if (px < lowBound || px > highBound) return computeFn(px, maxFactor);
+  return fallback; // dead zone — keep whatever's currently applied, don't thrash
+}
+
+/**
+ * Hysteresis-aware column bucket-factor decision for the PER-FRAME rebuild
+ * trigger (see the module doc comment above). The actual bucketFactor a
+ * rebuild paints with should ALSO be sourced from this function (not the
+ * plain `computeBucketFactor`) so the "should I rebuild" check and "what do
+ * I paint with" decision never disagree.
+ */
+export function computeBucketFactorWithHysteresis(
+  pxPerRawColumn: number,
+  appliedFactor: number,
+  maxBucketFactor: number = LOD_MAX_BUCKET_FACTOR,
+): number {
+  return computeFactorWithHysteresis(pxPerRawColumn, appliedFactor, TARGET_MIN_COL_PX, maxBucketFactor, computeBucketFactor);
+}
+
+/** Hysteresis-aware row merge-factor decision — same shape/semantics as `computeBucketFactorWithHysteresis`, applied to the price axis (SHOULD-FIX 1 — pane-resize rebuild trigger). */
+export function computeRowMergeFactorWithHysteresis(
+  rowPx: number,
+  appliedFactor: number,
+  maxRowMergeFactor: number = LOD_MAX_ROW_MERGE_FACTOR,
+): number {
+  return computeFactorWithHysteresis(rowPx, appliedFactor, TARGET_MIN_ROW_PX, maxRowMergeFactor, computeRowMergeFactor);
+}
+
+/**
+ * The painted window's true END time (ms) — CRITICAL 1 fix. The last
+ * painted column's OWN `.t` is its bucket START (or, pre-LOD, the raw
+ * column's own timestamp — equivalent to a 1-raw-column "bucket"), so the
+ * window's true end is that start PLUS the full bucket span
+ * (bucketFactor × rawIntervalMs). `bucketFactor <= 1` degenerates to
+ * `lastColStartT + rawIntervalMs`, matching pre-LOD behavior (the window
+ * end is one raw column past the last column's own start — i.e. up to but
+ * not including the NEXT column's arrival).
+ */
+export function paintedWindowEndMs(lastColStartT: number, bucketFactor: number, rawIntervalMs: number): number {
+  const factor = bucketFactor > 0 ? bucketFactor : 1;
+  const interval = rawIntervalMs > 0 ? rawIntervalMs : 0;
+  return lastColStartT + factor * interval;
+}
+
+/**
+ * Single-column persistence prune+bump primitive (CRITICAL 2 fix) — applies
+ * EXACTLY ONE column's presence to `persistMap` in place: prune bins absent
+ * from this column, then bump survivors + newly-appeared bins by 1. This is
+ * the same operation `paintColumnsRange`'s per-column loop performs (kept
+ * bit-for-bit identical — same cellMap-derived "present" semantics, i.e. no
+ * additional q<=0 filter beyond what the range check already implies) so a
+ * caller applying it standalone (e.g. "commit a just-closed bucket's
+ * contribution ONCE") is provably consistent with what the normal per-column
+ * paint loop would have produced. Gap columns (flags bit0) or a `binSize`
+ * mismatch never touch `persistMap` at all (mirrors `paintColumnsRange`'s
+ * own skip condition AND `buildPersistWarmupMap`'s gap-column skip).
+ */
+export function bumpPersistMapForColumn(
+  persistMap: Map<number, number>,
+  col: DecodedColumnLike,
+  priceMin: number,
+  rowMaxPrice: number,
+  rowEpsilon: number,
+  curBinSize: number,
+): void {
+  if ((col.flags & 1) || col.binSize !== curBinSize) return;
+
+  const present = new Set<number>();
+  for (const r of col.bids) {
+    if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+    present.add(r.price);
+  }
+  for (const r of col.asks) {
+    if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+    present.add(r.price);
+  }
+
+  for (const price of persistMap.keys()) {
+    if (!present.has(price)) persistMap.delete(price);
+  }
+  for (const price of present) {
+    persistMap.set(price, (persistMap.get(price) ?? 0) + 1);
+  }
+}
+
 export function classifyColumnsUpdate(
   prevCols: ArrayLike<ColumnLike>,
   nextCols: ArrayLike<ColumnLike>,
