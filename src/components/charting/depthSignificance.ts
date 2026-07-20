@@ -408,3 +408,297 @@ export function clipColumnsForCellBudget(
   const maxCols = Math.floor(maxCells / numRows);
   return Math.max(1, Math.min(numColsAvailable, maxCols));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5 — visible-window painting (perf fix — see DepthMatrixLayer.tsx's
+// repaintOffscreen doc comment for the full windowed-paint design). Three
+// pure helpers used by the orchestration there:
+//
+//   1. computeWindowRange — given the chart's visible time range and the
+//      column timestamps, returns the [startIdx, endIdx] slice of columns to
+//      paint, expanded by a margin so small pans/zooms inside it need no
+//      rebuild. Budget-aware (review fix, SHOULD-FIX 2): callers pass a
+//      `numRowsEstimate` + `maxCells` so the margin itself is shrunk UP
+//      FRONT to already fit the cell budget — the returned bounds ARE the
+//      bounds that get painted, not a pre-budget wish-list that a later
+//      trim silently narrows. That silent narrowing was the bug: if
+//      repaintOffscreen's own post-hoc clipColumnsForCellBudget trim ran
+//      AFTER this function returned its (untrimmed) margin, the ACTUAL
+//      painted window ended up narrower than the caller's margin-exceeded
+//      check assumed, so an ordinary small pan (well inside the intended
+//      40% margin) could exceed the SHRUNKEN actual window and trigger a
+//      rebuild — defeating the whole point of having a margin. When over
+//      budget, margin is trimmed OLDEST (left) side first, biased toward
+//      preserving margin on the live-edge (right/newest) side, since new
+//      columns keep arriving there; the visible CORE range itself is only
+//      ever trimmed as a last resort (trimmed from its oldest/left side).
+//      `numRowsEstimate` is intentionally an ESTIMATE (typically the last
+//      rebuild's real numRows) — repaintOffscreen still keeps its own
+//      final clipColumnsForCellBudget call as a safety net for when the
+//      estimate turns out to be off, but in the common case (numRows
+//      doesn't change wildly tick-to-tick) that safety net is a no-op,
+//      so painted bounds and intended bounds stay the same thing.
+//
+//   2. alphaSkipCutoffUsd — inverts softKneeAlpha to find the USD value below
+//      which a cell's alpha would fall under a visibility threshold, so the
+//      paint loop can skip those cells' color/compression math entirely.
+//      Safe as a pre-filter on the RAW softKneeAlpha alone: persistenceFactor
+//      only ever SHRINKS a cell's final alpha, never grows it, so if the raw
+//      soft-knee alpha is already under threshold the painted alpha will be
+//      too.
+//
+//   3. classifyColumnsUpdate — classifies a `columns` prop update (an
+//      identity-changed array) as a pure append, a ring rotation (oldest
+//      column(s) spliced off the front — the steady-state case once the
+//      history cap is hit, since EVERY new column both appends and rotates
+//      there), or something that needs a full window rebuild. Keyed on
+//      column TIMESTAMPS, not array indices: a rotated array's surviving
+//      columns keep their original times, so a caller that tracks its
+//      painted window by column time (not index) never needs an index-shift
+//      step at all — the window's time bounds stay valid across a rotation
+//      unless the rotation actually evicted a column inside the window
+//      (extremely rare in practice — the window sits near the live edge
+//      while the ring cap evicts from deep history). Review fix (CRITICAL
+//      2): a timestamp-only match is NOT sufficient proof of a genuine
+//      append/rotation — columns sit on a fixed epoch-aligned interval
+//      grid, so a full content REPLACEMENT (e.g. a reconnect resync that
+//      clears and refills the store) can produce a `nextFirstT` that
+//      "shifts" by an exact interval multiple purely by coincidence of the
+//      grid alignment, with `atLiveEdge` also usually true. The function
+//      now takes the actual column arrays (not just first-timestamp +
+//      length) and requires an OBJECT-IDENTITY match at the expected
+//      positions (`prevCols[shiftColumns] === nextCols[0]` and
+//      `prevCols[prevLen-1] === nextCols[prevLen-1-shiftColumns]`) — a
+//      genuine splice/append reuses the same column object references;
+//      any identity mismatch is treated as a full-content replacement and
+//      falls back to `'reset'`.
+
+export interface WindowRangeResult {
+  startIdx: number;
+  endIdx: number;
+}
+
+/** First index i in ascending colTimesMs such that colTimesMs[i] >= targetMs (colTimesMs.length if none). */
+function lowerBoundMs(colTimesMs: ArrayLike<number>, targetMs: number): number {
+  let lo = 0;
+  let hi = colTimesMs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (colTimesMs[mid] < targetMs) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Last index i such that colTimesMs[i] <= targetMs (-1 if none). Assumes integer-ms timestamps. */
+function lastIndexLE(colTimesMs: ArrayLike<number>, targetMs: number): number {
+  return lowerBoundMs(colTimesMs, targetMs + 1) - 1;
+}
+
+function clampIdx(i: number, n: number): number {
+  return Math.max(0, Math.min(i, n - 1));
+}
+
+/**
+ * Shrinks a margin-expanded `[startIdx, endIdx]` window down to fit
+ * `maxCells / numRowsEstimate` columns, if needed. Trims the OLDEST (left)
+ * margin first (biased toward preserving margin on the live-edge/right
+ * side), then the right margin, then — only if the visible CORE itself
+ * (`[coreStart, coreEnd]`) doesn't fit — trims the core from its oldest
+ * (left) side too. A no-op (returns the input unchanged) when either
+ * `numRowsEstimate` or `maxCells` is absent/non-positive, or the window
+ * already fits.
+ */
+function applyBudgetClip(
+  n: number,
+  startIdx: number,
+  endIdx: number,
+  coreStart: number,
+  coreEnd: number,
+  numRowsEstimate: number | undefined,
+  maxCells: number | undefined,
+): WindowRangeResult {
+  if (!(numRowsEstimate && numRowsEstimate > 0) || !(maxCells && maxCells > 0)) {
+    return { startIdx, endIdx };
+  }
+  const maxCols = Math.max(1, Math.floor(maxCells / numRowsEstimate));
+  let s = startIdx;
+  let e = endIdx;
+  let cur = e - s + 1;
+  if (cur <= maxCols) return { startIdx: s, endIdx: e };
+
+  const coreLo = clampIdx(Math.min(coreStart, coreEnd), n);
+  const coreHi = clampIdx(Math.max(coreStart, coreEnd), n);
+
+  // Trim the LEFT (older) margin first.
+  while (cur > maxCols && s < coreLo) {
+    s++;
+    cur = e - s + 1;
+  }
+  // Then the RIGHT margin, if still over budget.
+  while (cur > maxCols && e > coreHi) {
+    e--;
+    cur = e - s + 1;
+  }
+  // Last resort — even the core doesn't fit (e.g. a very tall numRows):
+  // trim the core from its oldest (left) side, keeping the live edge.
+  while (cur > maxCols && s < e) {
+    s++;
+    cur = e - s + 1;
+  }
+  return { startIdx: s, endIdx: e };
+}
+
+/**
+ * Returns the [startIdx, endIdx] (inclusive) slice of `colTimesMs` covering
+ * the visible time range `[visibleFromSec, visibleToSec]` expanded by
+ * `marginFraction` of the visible span on each side, clamped to the array
+ * bounds. A degenerate/absent visible range (non-finite, or `to < from`)
+ * falls back to the whole array. An empty `colTimesMs` returns an empty
+ * range (`startIdx: 0, endIdx: -1`). If the margin-expanded window has no
+ * overlap with any column (a large gap, or the visible range sits entirely
+ * outside all columns), falls back to the single nearest column so the
+ * caller always has something to paint.
+ *
+ * `numRowsEstimate` + `maxCells` (both optional — omit for the old
+ * margin/bounds-only behavior) make this budget-aware UP FRONT: see the
+ * module doc comment above (point 1) for why post-hoc trimming elsewhere is
+ * NOT equivalent to trimming the margin here.
+ */
+export function computeWindowRange(
+  colTimesMs: ArrayLike<number>,
+  visibleFromSec: number,
+  visibleToSec: number,
+  marginFraction: number,
+  numRowsEstimate?: number,
+  maxCells?: number,
+): WindowRangeResult {
+  const n = colTimesMs.length;
+  if (n === 0) return { startIdx: 0, endIdx: -1 };
+
+  if (!Number.isFinite(visibleFromSec) || !Number.isFinite(visibleToSec) || visibleToSec < visibleFromSec) {
+    return applyBudgetClip(n, 0, n - 1, 0, n - 1, numRowsEstimate, maxCells);
+  }
+
+  const span = Math.max(0, visibleToSec - visibleFromSec);
+  const margin = span * Math.max(0, marginFraction);
+  const wantFromMs = (visibleFromSec - margin) * 1000;
+  const wantToMs = (visibleToSec + margin) * 1000;
+
+  let startIdx = lowerBoundMs(colTimesMs, wantFromMs);
+  let endIdx = lastIndexLE(colTimesMs, wantToMs);
+
+  if (startIdx > endIdx) {
+    const centerMs = (wantFromMs + wantToMs) / 2;
+    let idx = lowerBoundMs(colTimesMs, centerMs);
+    if (idx >= n) idx = n - 1;
+    if (idx < 0) idx = 0;
+    startIdx = idx;
+    endIdx = idx;
+    return { startIdx, endIdx }; // single fallback column — budget can't do less than 1
+  }
+
+  startIdx = Math.max(0, Math.min(startIdx, n - 1));
+  endIdx = Math.max(0, Math.min(endIdx, n - 1));
+  if (endIdx < startIdx) endIdx = startIdx;
+
+  // Visible CORE (no margin) — the part applyBudgetClip protects first.
+  const coreStart = clampIdx(lowerBoundMs(colTimesMs, visibleFromSec * 1000), n);
+  const coreEnd = clampIdx(lastIndexLE(colTimesMs, visibleToSec * 1000), n);
+
+  return applyBudgetClip(n, startIdx, endIdx, coreStart, coreEnd, numRowsEstimate, maxCells);
+}
+
+/**
+ * Inverts softKneeAlpha: returns the USD value below which
+ * `softKneeAlpha(usd, kneeUsd, minAlpha) < threshold`. With the component's
+ * defaults (minAlpha=0.18, threshold=0.06), `threshold <= minAlpha` so this
+ * correctly returns 0 (skip nothing) — softKneeAlpha never drops below
+ * minAlpha for any usd > 0. The optimization only engages if minAlpha is
+ * ever tuned below the threshold.
+ */
+export function alphaSkipCutoffUsd(kneeUsd: number, threshold = 0.06, minAlpha = 0.18): number {
+  if (!Number.isFinite(kneeUsd) || kneeUsd <= 0) return 0;
+  if (threshold <= minAlpha) return 0; // alpha for any usd > 0 is already >= minAlpha >= threshold
+  if (threshold >= 1) return kneeUsd; // asking to skip everything below the knee itself
+
+  const target = (threshold - minAlpha) / (1 - minAlpha); // target smoothstep value in [0,1]
+  // Invert smoothstep y = x^2*(3-2x) via bisection (monotonic on [0,1]).
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const y = mid * mid * (3 - 2 * mid);
+    if (y < target) lo = mid; else hi = mid;
+  }
+  const x = (lo + hi) / 2;
+  return x * kneeUsd;
+}
+
+export type ColumnsUpdateKind =
+  | { kind: 'unchanged' }
+  | { kind: 'append'; appendedCount: number }
+  | { kind: 'rotate'; shiftColumns: number; appendedCount: number }
+  | { kind: 'reset' };
+
+/** Minimal shape classifyColumnsUpdate needs from a column — just enough to check timestamps + object identity. */
+export interface ColumnLike {
+  t: number;
+}
+
+/**
+ * Classifies a `columns` prop update. `colIntervalMs` is the depth-column
+ * sampling interval (~5000ms in production); the caller estimates it from
+ * recent column timestamp deltas. See the module doc comment above for the
+ * append/rotate/reset semantics, INCLUDING the object-identity spot check
+ * (review fix, CRITICAL 2) that guards against a full-content replacement
+ * masquerading as an append/rotation purely because columns sit on a fixed
+ * epoch-aligned interval grid.
+ */
+export function classifyColumnsUpdate(
+  prevCols: ArrayLike<ColumnLike>,
+  nextCols: ArrayLike<ColumnLike>,
+  colIntervalMs: number,
+): ColumnsUpdateKind {
+  const prevLen = prevCols.length;
+  const nextLen = nextCols.length;
+  if (prevLen <= 0 || nextLen <= 0) return { kind: 'reset' };
+
+  const prevFirstT = prevCols[0].t;
+  const nextFirstT = nextCols[0].t;
+
+  if (nextLen === prevLen && nextFirstT === prevFirstT && prevCols[0] === nextCols[0]) {
+    return { kind: 'unchanged' };
+  }
+  if (nextLen < prevLen) return { kind: 'reset' }; // shrink (symbol/store swap) — safest to rebuild
+
+  if (nextFirstT === prevFirstT) {
+    // Candidate pure append (ring not rotated, shift = 0). Object-identity
+    // spot check: a genuine append never touches the surviving prefix, so
+    // the first AND last pre-existing columns must be the SAME references.
+    if (prevCols[0] !== nextCols[0]) return { kind: 'reset' };
+    if (prevCols[prevLen - 1] !== nextCols[prevLen - 1]) return { kind: 'reset' };
+    return { kind: 'append', appendedCount: nextLen - prevLen };
+  }
+
+  // Candidate ring rotation (oldest column(s) spliced off the front). Derive
+  // the shift from the time delta, keyed on TIMESTAMPS not raw indices.
+  if (!(colIntervalMs > 0)) return { kind: 'reset' };
+  const rawShift = (nextFirstT - prevFirstT) / colIntervalMs;
+  const shiftColumns = Math.round(rawShift);
+  if (shiftColumns <= 0) return { kind: 'reset' }; // time went backward, or didn't move a whole column
+  if (Math.abs(rawShift - shiftColumns) > 0.2) return { kind: 'reset' }; // doesn't line up with the interval — don't trust it
+  if (shiftColumns >= prevLen) return { kind: 'reset' }; // nothing of prev would survive — not a genuine rotation
+
+  const appendedCount = nextLen - (prevLen - shiftColumns);
+  if (appendedCount < 0 || appendedCount > nextLen) return { kind: 'reset' }; // inconsistent — bail to a full rebuild
+
+  // Object-identity spot check — a genuine splice+append reuses the SAME
+  // column object references at the expected positions; any mismatch means
+  // this is a full-content replacement that only LOOKS like a rotation
+  // because columns sit on a fixed epoch-aligned interval grid.
+  if (prevCols[shiftColumns] !== nextCols[0]) return { kind: 'reset' };
+  if (prevCols[prevLen - 1] !== nextCols[prevLen - 1 - shiftColumns]) return { kind: 'reset' };
+
+  return { kind: 'rotate', shiftColumns, appendedCount };
+}

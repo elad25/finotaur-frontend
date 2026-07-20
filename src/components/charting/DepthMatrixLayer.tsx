@@ -83,13 +83,73 @@
 //   `palette` defaults to 'classic' when the prop is absent — MarketScanner.tsx
 //   never passes it, so its render stays pixel-identical to pre-S2.
 //   `smoothing` (default false when absent) adds two post-process passes to
-//   the offscreen raster ONLY (never per-frame — still gated by the same
-//   needsRepaint check as the rest of repaintOffscreen):
+//   the offscreen raster ONLY (never per-frame — gated the same way as the
+//   rest of repaintOffscreen/paintColumnsRange, see Phase 6 below):
 //     1. Vertical 3-tap blend between adjacent price rows (kills hard cell
 //        banding), only blending painted (alpha>0) neighbors into each other.
 //     2. A soft "bloom" halo around cells whose normalized intensity t>=0.95
 //        (max-blended into their 4-neighbors) so the strongest walls read as
 //        bright hot streaks, ATAS-style.
+//
+// Phase 6 — VISIBLE-WINDOW PAINTING (perf fix — PR #1568/#1569 regression:
+// the "all-orders" column change can carry up to 500 bins/side, ~10-20x more
+// cells than before; combined with up to 2880 history columns and a
+// per-column-arrival full rebuild, repaintOffscreen was rebuilding a
+// multi-million-cell bitmap from scratch every ~5s. See MAX_GRID_CELLS below
+// — it is now a PER-WINDOW budget, not a per-history one):
+//
+//   - The offscreen bitmap covers ONLY the columns intersecting the visible
+//     time range, expanded by WINDOW_MARGIN_FRACTION (40%) of the visible
+//     span on each side (computeWindowRange in depthSignificance.ts) — small
+//     pans/zooms inside the margin need no rebuild at all. Grid EXTENT (price
+//     rows) is computed from weightedPriceExtent over the WINDOW's columns
+//     only (cheaper and more relevant than scanning full history).
+//   - The painted window is tracked implicitly via `meta.cols` (the actual
+//     DecodedColumn objects currently painted, indexed 1:1 with offscreen
+//     pixel columns 0..meta.numCols-1) — NOT via raw array indices. Reading
+//     `meta.cols[0].t` / `meta.cols[meta.numCols-1].t` gives the window's
+//     time bounds directly; no separate index bookkeeping is needed across
+//     `columns` prop updates (see classifyColumnsUpdate's rotate/append
+//     handling below — this is exactly why keying by TIME instead of index
+//     survives a ring rotation for free).
+//   - Full window rebuilds (view exits the margin, zoom-tier flips, or
+//     palette/sensitivity/binSize/smoothing changes) are debounced
+//     REBUILD_DEBOUNCE_MS (120ms) via scheduleRebuild() — the OLD bitmap
+//     keeps rendering during the debounce window (slightly stale content for
+//     ≤120ms is an acceptable trade for coalescing rapid changes).
+//   - LIVE-APPEND FAST PATH: the far more common case (a new column arrives
+//     ~every 5s, or the ring rotates at the 2880-column cap — which, at cap,
+//     happens on EVERY tick and both appends AND rotates simultaneously).
+//     classifyColumnsUpdate (depthSignificance.ts) distinguishes append /
+//     rotate / reset from the `columns` prop's identity change, keyed on
+//     timestamps. If the window is at the live edge (its last painted column
+//     matches the array's previous last column) and there's spare capacity
+//     (the offscreen is allocated with WINDOW_SLACK_COLS extra columns to
+//     the right), the new column(s) are painted via a single small
+//     putImageData at x=meta.numCols — no full rebuild. `lastPersistMapRef`
+//     carries the persistence Map's per-price consecutive-count state
+//     forward across appends so the anti-flicker weighting stays correct
+//     without replaying history.
+//   - PERSISTENCE WARM-UP (buildPersistWarmupMap): because a window rebuild
+//     no longer iterates from the start of history, the persistence Map is
+//     seeded by a cheap bookkeeping-only pass over the
+//     PERSISTENCE_RAMP_COLUMNS_DEFAULT+2 columns immediately preceding the
+//     window (or preceding an append-smoothing strip) — no pixels are
+//     written during warm-up, only Map state.
+//   - SMOOTHING ACROSS APPENDS: vertical smoothing + bloom are neighborhood
+//     ops, so a naive single-column append would leave a visible seam at the
+//     boundary. Instead, when `smoothing` is on, the append path re-derives
+//     and repaints the last APPEND_SMOOTH_STRIP_COLS columns (a small strip
+//     including the new column(s) + a few already-painted neighbors) from
+//     their retained DecodedColumn objects in `meta.cols` — this is an exact
+//     recomputation (not an approximation over already-blended pixels),
+//     because the strip's persistence state is rebuilt via
+//     buildPersistWarmupMap immediately before it.
+//   - Cheap extra wins: repaints are skipped entirely while `document.hidden`
+//     (a visibilitychange listener marks dirty so the view refreshes the
+//     instant the tab regains visibility); the paint loop precomputes an
+//     alphaSkipCutoffUsd (depthSignificance.ts) to skip bins whose alpha
+//     would be imperceptible without touching the color/compression math.
 
 import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
@@ -106,6 +166,10 @@ import {
   weightedPriceExtent,
   clampExtentToMaxRows,
   clipColumnsForCellBudget,
+  computeWindowRange,
+  alphaSkipCutoffUsd,
+  classifyColumnsUpdate,
+  PERSISTENCE_RAMP_COLUMNS_DEFAULT,
   type DepthSensitivity,
 } from './depthSignificance';
 
@@ -118,12 +182,36 @@ import {
 // blow the grid up again — the window gets centered on the weighted median
 // and clipped instead.
 const MAX_GRID_ROWS = 4000;
-// Hard ceiling on total offscreen cells (numCols * numRows). createImageData
-// + the per-cell paint loop + applyVerticalSmoothing + applyBloom are all
-// O(cells), so this bounds worst-case repaint cost even when numCols alone
-// (already capped at ~2880 by the visible time range) combines with a wide
-// MAX_GRID_ROWS-sized window.
-const MAX_GRID_CELLS = 12_000_000;
+// Hard ceiling on total offscreen cells (window-cols * numRows). Phase 6
+// (visible-window painting) makes this a PER-WINDOW budget rather than a
+// per-history one — the window is already bounded by the visible time range
+// + margin (see computeWindowRange), so this only trims further in
+// pathological cases (e.g. a huge margin combined with very tall numRows).
+const MAX_GRID_CELLS = 3_000_000;
+
+// Phase 6 — visible-window painting constants.
+// Fraction of the visible time span painted as margin on EACH side beyond
+// the visible range, so small pans/zooms don't need a rebuild.
+const WINDOW_MARGIN_FRACTION = 0.4;
+// Debounce for a full window rebuild (view exits margin / zoom-tier flip /
+// palette-sensitivity-binSize-smoothing change) — coalesces rapid changes
+// (e.g. a sensitivity slider drag or a fast continuous pan) into one rebuild.
+const REBUILD_DEBOUNCE_MS = 120;
+// Extra offscreen columns allocated beyond the painted window so the
+// live-append fast path can paint new columns without a canvas resize. Once
+// exhausted, the next update forces a full window rebuild.
+const WINDOW_SLACK_COLS = 64;
+// Columns re-derived (from their retained DecodedColumn objects) and
+// repainted on every live append when smoothing is enabled, so the vertical
+// smoothing / bloom neighborhood ops never leave a seam at the append
+// boundary. Includes the newly appended column(s) plus a few prior neighbors.
+// An ADDITIONAL 1-column left border is added on top of this at the call
+// site (see the append path's `stripStart` comment) so bloom/smoothing
+// reach is exact at the strip's own left edge too.
+const APPEND_SMOOTH_STRIP_COLS = 8;
+// Fallback depth-column sampling interval (ms) used only when fewer than 2
+// columns are available to estimate it from recent timestamp deltas.
+const DEFAULT_COL_INTERVAL_MS = 5000;
 
 // Normalized-intensity threshold (post-compression t ∈ [0,1]) above which a
 // cell is considered "hot" for the bloom pass.
@@ -137,12 +225,6 @@ const BLOOM_NEIGHBOR_ALPHA_FRACTION = 0.35;
 // so weak levels aren't all crushed to the same near-zero value, then the
 // gamma pushes everything below the top ~10-15% back down to near-dark so
 // only real walls glow — see the module doc comment above for the formula.
-// HEAT_GAMMA was 2.5, which crushed everything below the top ~10-15% of
-// notional to near-black — large resting orders barely stood out from the
-// rest of the book (gold-emphasis-scales-with-notional feedback). 1.6 keeps
-// the mid-tier visible as bronze while the log1p compression above still
-// separates the top from the noise, so brightness now tracks order $ size
-// across the whole range instead of only at the extreme top.
 const HEAT_LOG_SCALE = 9;
 const HEAT_GAMMA = 1.6;
 
@@ -243,9 +325,6 @@ function applyBloom(buf: Uint32Array, hotMask: Uint8Array, numCols: number, numR
 // kneePercentileForInkBudget) so p99 (color reference) and the ink-budget
 // knee (p50/p92/target — Phase 3) share a single histogram build instead of
 // each re-scanning the raw q-value array from scratch.
-
-// Reusable 65536-bin histogram — hoisted to avoid allocating 256KB per call.
-// Module-scoped + single-threaded (rAF) so reuse is safe; zero-filled each call.
 const HIST_SCRATCH = new Uint32Array(65536);
 
 /** Fills HIST_SCRATCH from a uint16 value array and returns it + the total count. Reused across multiple percentile queries in the same recomputeNorm call. */
@@ -254,6 +333,232 @@ function buildQHistogram(qValues: Uint16Array): { hist: Uint32Array; total: numb
   hist.fill(0);
   for (let i = 0; i < qValues.length; i++) hist[qValues[i]]++;
   return { hist, total: qValues.length };
+}
+
+// Legacy binary dimming ceiling (identical value to the old
+// WEAK_CELL_T_CAP) — ONLY reachable via the deprecated sizeFilterPct path.
+const LEGACY_WEAK_CELL_T_CAP = 0.10;
+
+/**
+ * Factory for the per-cell color function shared by the full-window paint
+ * and the live-append paths (Phase 6) — keeps the exact same color/alpha
+ * formula in one place instead of duplicating it. Mutates a closed-over
+ * "was the last cell hot" flag (read via `wasHot()`) instead of allocating a
+ * tuple per cell — this runs O(window-cells) times per rebuild so avoiding
+ * per-cell allocation matters.
+ */
+function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: number) {
+  let lastHot = false;
+  const colorOf = (q: number, persistMult: number): number => {
+    lastHot = false;
+    if (q === 0) return 0; // no data in this bin — transparent (the void)
+
+    const usd = qToUsd(q);
+    const x = Math.min(1, usd / vHi); // linear ratio to the p99 reference, capped at 1
+    let t = compressIntensity(x);
+    if (t > 1) t = 1;
+    if (t < 0) t = 0;
+
+    // Legacy MarketScanner-compat ONLY (legacyQCut > 0 — LiquidityTab.tsx
+    // never triggers this): bins below the relative size cut render at the
+    // old flat intensity ceiling instead of their true continuous `t`.
+    if (legacyQCut > 0 && q < legacyQCut) {
+      t = Math.min(t, LEGACY_WEAK_CELL_T_CAP);
+    }
+
+    lastHot = t >= BLOOM_HOT_THRESHOLD;
+
+    const idx = Math.min(255, Math.max(0, Math.round(t * 255)));
+    // lut already encodes full 0xff alpha at every stop (color-only ramp);
+    // overwrite just the top (alpha) byte with the continuous soft-knee
+    // value (further scaled by the persistence multiplier). ImageData is
+    // stored/read as STRAIGHT (non-premultiplied) alpha per the Canvas
+    // spec, so scaling only the alpha byte is correct.
+    const alpha = softKneeAlpha(usd, vLo) * persistMult;
+    const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
+    const rgb = lut[idx];
+    return (rgb & 0x00ffffff) | (a << 24);
+  };
+  return { colorOf, wasHot: () => lastHot };
+}
+
+/**
+ * Persistence warm-up (Phase 6, point 2) — bookkeeping-only pass over the
+ * `rampColumns + 2` columns immediately preceding `uptoIdxExclusive` in
+ * `cols`. No pixels are written; this only seeds the consecutive-column
+ * count Map so a window/strip that doesn't start at the beginning of history
+ * still has a correct persistence baseline (see the module doc comment).
+ * Reused for both the full-window rebuild (warming up against the FULL
+ * history array, up to the window's start index) and the append-smoothing
+ * strip re-derivation (warming up against the window's own retained
+ * `meta.cols`, up to the strip's start index).
+ */
+function buildPersistWarmupMap(
+  cols: DecodedColumn[],
+  uptoIdxExclusive: number,
+  priceMin: number,
+  rowMaxPrice: number,
+  rowEpsilon: number,
+  rampColumns: number,
+): Map<number, number> {
+  const persistMap = new Map<number, number>();
+  const warmStart = Math.max(0, uptoIdxExclusive - (rampColumns + 2));
+  for (let ci = warmStart; ci < uptoIdxExclusive; ci++) {
+    const col = cols[ci];
+    if (!col || col.flags & 1) continue; // gap column — never touches persistence
+    const present = new Set<number>();
+    for (const r of col.bids) {
+      if (r.q <= 0) continue;
+      if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+      present.add(r.price);
+    }
+    for (const r of col.asks) {
+      if (r.q <= 0) continue;
+      if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+      present.add(r.price);
+    }
+    for (const price of persistMap.keys()) {
+      if (!present.has(price)) persistMap.delete(price);
+    }
+    for (const price of present) {
+      persistMap.set(price, (persistMap.get(price) ?? 0) + 1);
+    }
+  }
+  return persistMap;
+}
+
+/**
+ * Paints columns `cols[rangeStart..rangeEnd)` into a fresh small ImageData
+ * and blits it into `octx` at `destX`. Shared by the full-window rebuild
+ * (rangeStart=0, destX=0) and both live-append paths (raw single/few-column
+ * append when smoothing is off; the append-smoothing strip re-derivation
+ * when smoothing is on) — see the module doc comment's Phase 6 section.
+ * `persistMap` is mutated in place as columns are processed (prune absent
+ * bins, bump survivors) — callers keep the returned/mutated Map to continue
+ * persistence bookkeeping across the next update.
+ */
+function paintColumnsRange(
+  octx: OffscreenCanvasRenderingContext2D,
+  cols: DecodedColumn[],
+  rangeStart: number,
+  rangeEnd: number,
+  destX: number,
+  priceMin: number,
+  rowMaxPrice: number,
+  rowEpsilon: number,
+  curBinSize: number,
+  numRows: number,
+  vLo: number,
+  vHi: number,
+  lut: Uint32Array,
+  legacyQCut: number,
+  alphaCutoffUsd: number,
+  smoothingEnabled: boolean,
+  persistMap: Map<number, number>,
+): void {
+  const width = rangeEnd - rangeStart;
+  if (width <= 0) return;
+
+  const imgData = octx.createImageData(width, numRows);
+  const buf = new Uint32Array(imgData.data.buffer);
+  const hotMask = smoothingEnabled ? new Uint8Array(width * numRows) : null;
+  const { colorOf, wasHot } = makeQToColorFn(vHi, vLo, lut, legacyQCut);
+
+  for (let ci = rangeStart; ci < rangeEnd; ci++) {
+    const col = cols[ci];
+    const localCol = ci - rangeStart;
+    // Gap column, OR a column mid-rebucket to a DIFFERENT binSize (review
+    // fix, SHOULD-FIX 3 — mirrors recomputeNorm's own `col.binSize !==
+    // curBinSize` skip): its bin prices are on the wrong grid for THIS
+    // curBinSize, so `priceRow`/`canvasRow` below would misplace it. Treat
+    // exactly like a gap column — transparent this repaint, don't touch
+    // persistMap; it repaints correctly once the rebucket completes and
+    // columns share curBinSize again.
+    if ((col.flags & 1) || col.binSize !== curBinSize) continue;
+
+    const cellMap = new Map<number, number>(); // price → q
+    for (const r of col.bids) {
+      if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+      const existing = cellMap.get(r.price) ?? 0;
+      cellMap.set(r.price, Math.max(existing, r.q));
+    }
+    for (const r of col.asks) {
+      if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
+      const existing = cellMap.get(r.price) ?? 0;
+      cellMap.set(r.price, Math.max(existing, r.q));
+    }
+
+    // Persistence bookkeeping for THIS column, in order: prune bins that
+    // dropped out since the previous column, then bump the survivors + any
+    // newly-appeared bin to count 1.
+    for (const price of persistMap.keys()) {
+      if (!cellMap.has(price)) persistMap.delete(price);
+    }
+    for (const price of cellMap.keys()) {
+      persistMap.set(price, (persistMap.get(price) ?? 0) + 1);
+    }
+
+    for (const [price, q] of cellMap) {
+      // Cheap extra win — skip bins whose alpha would be imperceptible
+      // without touching the color/compression math (see alphaSkipCutoffUsd's
+      // doc comment: persistMult can only shrink alpha further, never grow
+      // it, so this is a safe pre-filter on the raw softKneeAlpha alone).
+      const usd = qToUsd(q);
+      if (usd < alphaCutoffUsd) continue;
+
+      const persistMult = persistenceFactor(persistMap.get(price) ?? 1);
+      const color = colorOf(q, persistMult);
+      if (color === 0) continue;
+
+      // Row index: 0 = priceMin, increasing upward in price but canvas Y
+      // increases downward — flip so rowIdx 0 = top of canvas = highest price.
+      const priceRow = Math.round((price - priceMin) / curBinSize);
+      const canvasRow = numRows - 1 - priceRow;
+      if (canvasRow < 0 || canvasRow >= numRows) continue; // defensive only
+
+      const idx = canvasRow * width + localCol;
+      buf[idx] = color;
+      if (hotMask && wasHot()) hotMask[idx] = 1;
+    }
+  }
+
+  if (smoothingEnabled) {
+    applyVerticalSmoothing(buf, width, numRows);
+    if (hotMask) applyBloom(buf, hotMask, width, numRows);
+  }
+
+  octx.putImageData(imgData, destX, 0);
+}
+
+/** Estimates the depth-column sampling interval (ms) from the last two column timestamps — robust to an occasional gap column since it only looks at the freshest delta. */
+function estimateColumnIntervalMs(cols: DecodedColumn[]): number {
+  const n = cols.length;
+  if (n < 2) return DEFAULT_COL_INTERVAL_MS;
+  const delta = cols[n - 1].t - cols[n - 2].t;
+  return delta > 0 ? delta : DEFAULT_COL_INTERVAL_MS;
+}
+
+/** Metadata attached to the offscreen canvas describing what's currently painted — read by the per-frame blit step AND mutated in place by the live-append fast path. */
+interface OffscreenMeta {
+  priceMin: number;
+  priceMax: number;
+  /** Number of REAL (painted) columns — may be less than the canvas's physical width (which includes WINDOW_SLACK_COLS headroom for the append fast path). */
+  numCols: number;
+  numRows: number;
+  /** The actual DecodedColumn objects for the painted window, 1:1 with pixel columns 0..numCols-1. Grows in place on live append. */
+  cols: DecodedColumn[];
+  curBinSize: number;
+  /** Physical offscreen canvas width (numCols + slack). */
+  bitmapWidth: number;
+}
+
+function getMeta(offscreen: OffscreenCanvas | null): OffscreenMeta | undefined {
+  if (!offscreen) return undefined;
+  return (offscreen as unknown as Record<string, unknown>)._meta as OffscreenMeta | undefined;
+}
+
+function setMeta(offscreen: OffscreenCanvas, meta: OffscreenMeta): void {
+  (offscreen as unknown as Record<string, unknown>)._meta = meta;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -328,12 +633,29 @@ export function DepthMatrixLayer({
   const offscreenCtxRef    = useRef<OffscreenCanvasRenderingContext2D | null>(null);
 
   const rafRef             = useRef<number | null>(null);
-  const dirtyRef           = useRef<boolean>(true);
   const lastFingerprintRef = useRef<string>('');
 
-  // Track what's painted on the offscreen to avoid redundant repaints.
-  const offscreenVersionRef  = useRef<number>(0);
-  const paintedVersionRef    = useRef<number>(-1);
+  // Phase 6 — full-rebuild debounce (view exits margin / zoom-tier flip /
+  // palette-sensitivity-binSize-smoothing change). scheduleRebuild() arms a
+  // single REBUILD_DEBOUNCE_MS timer; the frame loop consumes rebuildDueRef.
+  const rebuildTimerRef = useRef<number | null>(null);
+  const rebuildDueRef   = useRef<boolean>(false);
+  const isFirstParamsEffectRef = useRef<boolean>(true);
+
+  // Phase 6 — live-append bookkeeping. `lastColumnsArrayRef` detects a
+  // `columns` prop identity change; `lastPersistMapRef` carries the
+  // persistence Map's consecutive-count state forward across appends.
+  const lastColumnsArrayRef = useRef<DecodedColumn[] | null>(null);
+  const lastPersistMapRef   = useRef<Map<number, number>>(new Map());
+
+  // Review fix (SHOULD-FIX 2) — the last rebuild's REAL numRows, fed back
+  // into computeWindowRange as the `numRowsEstimate` for the NEXT rebuild so
+  // the margin itself is shrunk to fit the cell budget UP FRONT (rather than
+  // a later post-hoc trim silently narrowing the painted window below what
+  // the margin-exceeded check assumes). `null` before the first rebuild —
+  // computeWindowRange treats an absent/non-positive estimate as "no budget
+  // clip" (identical to the pre-review behavior for that one first call).
+  const lastNumRowsRef = useRef<number | null>(null);
 
   // Normalization params — recomputed on visible window change or slider move.
   const vLoRef = useRef<number>(0);
@@ -358,14 +680,9 @@ export function DepthMatrixLayer({
   // later in drawFrame.
   const depthColWidthPxRef = useRef<number>(8);
   // The zoom-density multiplier actually baked into the LAST repaint — a
-  // fresh repaint is forced when the live multiplier drifts away from this
-  // by more than ZOOM_REPAINT_EPSILON (debounces continuous zoom/pan so the
-  // expensive offscreen rasterization only re-runs when the zoom TIER
-  // meaningfully changed, not every pixel of a drag).
+  // fresh repaint is forced (via scheduleRebuild) when the live multiplier
+  // drifts away from this by more than ZOOM_REPAINT_EPSILON.
   const lastZoomMultAppliedRef = useRef<number>(1);
-
-  // Debounce recolor to rAF while slider drags.
-  const sliderRafRef = useRef<number | null>(null);
 
   // Keep latest props in refs.
   const columnsRef         = useRef<DecodedColumn[]>(columns);
@@ -389,6 +706,16 @@ export function DepthMatrixLayer({
   smoothingRef.current      = smoothing;
   sensitivityRef.current    = sensitivity;
 
+  // Phase 6 — arms the debounced full-rebuild timer. Idempotent while
+  // already armed (lets it fire once rather than perpetually resetting).
+  function scheduleRebuild() {
+    if (rebuildTimerRef.current !== null) return;
+    rebuildTimerRef.current = window.setTimeout(() => {
+      rebuildDueRef.current = true;
+      rebuildTimerRef.current = null;
+    }, REBUILD_DEBOUNCE_MS);
+  }
+
   // ── Normalization ─────────────────────────────────────────────────────────
 
   // Phase 2 point 3 — EMA smoothing factor for vHi/vLo across recomputes.
@@ -401,16 +728,13 @@ export function DepthMatrixLayer({
     curSensitivity: DepthSensitivity,
     pxPerCell: number,
   ) {
-    // Only look at visible columns.
+    // Only look at visible columns. `cols` is already the WINDOW slice
+    // (Phase 6) — restricting further by visible range (±2min slack) keeps
+    // this unified with the same window bounds repaintOffscreen paints.
     const vis = chart2.timeScale().getVisibleRange();
     const fromSec = vis ? (vis.from as unknown as number) : -Infinity;
     const toSec   = vis ? (vis.to   as unknown as number) : Infinity;
 
-    // Collect all q values in the visible window for both sides. No floor
-    // exclusion here anymore — technical dust is already removed upstream
-    // at the sampling layer (useDepthSlices.ts), so norm stats are now
-    // computed over the full (dust-free) book, not a floor-filtered subset.
-    // See depthSignificance.ts for the dust-cutoff / soft-knee split.
     const qList: number[] = [];
     for (const col of cols) {
       const colSec = col.t / 1000;
@@ -441,19 +765,11 @@ export function DepthMatrixLayer({
     const arr = new Uint16Array(qList.length);
     for (let i = 0; i < qList.length; i++) arr[i] = Math.min(65535, qList[i]);
 
-    // Build the 65536-bin histogram ONCE — shared by the p99 color reference
-    // AND the Phase 3 ink-budget knee (which itself queries p50/p92/target),
-    // instead of each re-scanning the raw array independently.
     const { hist, total } = buildQHistogram(arr);
 
     // vHi = p99 (clamp ice-bergs) — the color-intensity reference.
     const rawHi = histogramPercentile(hist, total, 0.99);
 
-    // vLo (the soft-knee alpha reference) — Phase 3: instead of a hardcoded
-    // p70, pick the knee so ~targetLitFraction of visible cells render lit,
-    // clamped to [p50, p92]. targetLitFraction = sensitivity preset × the
-    // current zoom-density multiplier (fewer lit cells zoomed far out, more
-    // zoomed in — see depthSignificance.ts).
     const targetLitFraction = effectiveTargetLitFraction(curSensitivity, pxPerCell);
     const rawLo = kneePercentileForInkBudget(hist, total, targetLitFraction);
 
@@ -478,41 +794,39 @@ export function DepthMatrixLayer({
     }
   }
 
-  // ── Offscreen repaint ─────────────────────────────────────────────────────
-  // Paints the entire matrix to the offscreen canvas.
-  // Called only when columns change or normalization changes.
+  // ── Offscreen full-window repaint (Phase 6) ───────────────────────────────
+  // Rebuilds the ENTIRE painted window from scratch — only called when the
+  // view exits the margin, the zoom tier flips, or a palette/sensitivity/
+  // binSize/smoothing prop changes (all debounced via scheduleRebuild).
+  // `fullCols` is the FULL history array (needed for the persistence
+  // warm-up, which looks BEFORE the window's start); `windowStartIdx`/
+  // `windowEndIdx` (inclusive) select the window within it.
 
   function repaintOffscreen(
-    colsIn: DecodedColumn[],
+    fullCols: DecodedColumn[],
+    windowStartIdx: number,
+    windowEndIdx: number,
     curBinSize: number,
     vLo: number,
     vHi: number,
     // Legacy MarketScanner-compat only (0 = LiquidityTab.tsx, the new pure
     // mapping) — see the sizeFilterPct prop's @deprecated doc comment.
     sizePct: number,
-    chartInst: IChartApi,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    seriesInst: ISeriesApi<any>,
     paletteId: DepthPaletteId,
     smoothingEnabled: boolean,
   ) {
-    if (colsIn.length === 0) return;
+    if (windowEndIdx < windowStartIdx) return;
+    let cols = fullCols.slice(windowStartIdx, windowEndIdx + 1);
+    if (cols.length === 0) return;
 
     // ── Determine grid extents ────────────────────────────────────────────
-    // Notional-WEIGHTED price extent (perf fix — see MAX_GRID_ROWS/MAX_GRID_
-    // CELLS comments above and weightedPriceExtent's doc comment in
-    // depthSignificance.ts). PR #1568 removed the $1K sampling floor in favor
-    // of a dust-only-by-notional cutoff, so a raw min/max across every bin
-    // let a single far-away dust order (small $, big price distance) blow
-    // the grid extent up to tens of thousands of rows — numCols(<=2880) *
-    // numRows then exploded createImageData + the per-cell paint loop +
-    // applyVerticalSmoothing + applyBloom (all O(cells)) into a multi-second
-    // freeze. Weighting each bin's contribution by its own USD notional (p0.5
-    // /p99.5 cut) means dust falls outside the window while a real distant
-    // WALL (big USD) is preserved.
+    // Notional-WEIGHTED price extent computed over the WINDOW's columns only
+    // (Phase 6 — cheaper and more relevant than scanning full history). See
+    // MAX_GRID_ROWS/MAX_GRID_CELLS comments above and weightedPriceExtent's
+    // doc comment in depthSignificance.ts.
     const extentPrices: number[] = [];
     const extentUsd: number[] = [];
-    for (const col of colsIn) {
+    for (const col of cols) {
       for (const r of col.bids) {
         if (r.q <= 0) continue;
         extentPrices.push(r.price);
@@ -543,45 +857,48 @@ export function DepthMatrixLayer({
     }
     if (numRows <= 0) return;
 
-    // Total-cell budget guard — even a MAX_GRID_ROWS-capped grid can still
-    // exceed a sane cell count on a very wide chart (many columns). Clip the
-    // OLDEST columns (not the price window already computed above) to fit;
-    // the newest columns are what's actually visible at the live edge of the
-    // chart. The extent above was computed over the full (pre-clip) column
-    // set — clipping only trims which columns get PAINTED, it never widens
-    // the already-narrowed price window.
-    let cols = colsIn;
+    // Review fix (SHOULD-FIX 2) — feed the REAL numRows back for the NEXT
+    // rebuild's computeWindowRange call (its `numRowsEstimate` param), so
+    // the margin is shrunk to fit the budget up front next time instead of
+    // relying solely on the post-hoc trim below.
+    lastNumRowsRef.current = numRows;
+
+    // Total-cell budget guard (now PER-WINDOW — see MAX_GRID_CELLS comment).
+    // Clip the OLDEST columns OF THE WINDOW (not full history) to fit; the
+    // newest are what's actually visible at the live edge.
+    let trimmedFromStart = 0;
     if (cols.length * numRows > MAX_GRID_CELLS) {
       const keepCols = clipColumnsForCellBudget(cols.length, numRows, MAX_GRID_CELLS);
       if (keepCols < cols.length) {
-        cols = cols.slice(cols.length - keepCols);
+        trimmedFromStart = cols.length - keepCols;
+        cols = cols.slice(trimmedFromStart);
       }
     }
     if (cols.length === 0) return;
 
     const numCols = cols.length;
-    if (numCols <= 0 || numRows <= 0) return;
+    const finalWindowStartIdx = windowStartIdx + trimmedFromStart;
 
-    // Precise upper price bound for the row-membership filter below —
-    // bins outside [priceMin, rowMaxPrice] fall outside the clipped grid and
-    // must be excluded BEFORE persistMap bookkeeping (not just skipped at
-    // paint time), otherwise a far-away price key still occupies a slot in
-    // persistMap and gets tracked for persistence purely to be discarded a
-    // few lines later. Treating an out-of-window bin as ABSENT (never added)
-    // is both cheaper and correct: it's outside the plotted window either way.
+    // Precise upper price bound for the row-membership filter below — bins
+    // outside [priceMin, rowMaxPrice] fall outside the clipped grid and must
+    // be excluded BEFORE persistMap bookkeeping, otherwise a far-away price
+    // key still occupies a slot purely to be discarded a few lines later.
     const rowMaxPrice = priceMin + (numRows - 1) * curBinSize;
     const rowEpsilon = curBinSize * 0.001;
 
-    // Resize offscreen if needed
-    const needed_w = numCols;
+    // Resize offscreen if needed. Physical canvas is WIDER than numCols —
+    // WINDOW_SLACK_COLS headroom lets the live-append fast path paint new
+    // columns without a resize (see the module doc comment's Phase 6
+    // section for why the per-frame blit math is unaffected by this).
+    const bitmapWidth = numCols + WINDOW_SLACK_COLS;
     const needed_h = numRows;
     if (
       !offscreenRef.current ||
-      offscreenRef.current.width !== needed_w ||
+      offscreenRef.current.width !== bitmapWidth ||
       offscreenRef.current.height !== needed_h
     ) {
       try {
-        offscreenRef.current = new OffscreenCanvas(needed_w, needed_h);
+        offscreenRef.current = new OffscreenCanvas(bitmapWidth, needed_h);
         offscreenCtxRef.current = offscreenRef.current.getContext('2d', { alpha: true })!;
       } catch {
         return;
@@ -591,181 +908,63 @@ export function DepthMatrixLayer({
     const octx = offscreenCtxRef.current;
     if (!octx) return;
 
-    // Clear
-    octx.clearRect(0, 0, needed_w, needed_h);
-
-    const imgData = octx.createImageData(needed_w, needed_h);
-    const buf = new Uint32Array(imgData.data.buffer);
-    // Parallel mask (same row-major indexing as buf) marking cells whose
-    // normalized intensity cleared BLOOM_HOT_THRESHOLD — consumed by
-    // applyBloom() below when smoothingEnabled. Allocated unconditionally
-    // (cheap — one Uint8Array the size of the grid) but only ever written to
-    // / read from when smoothingEnabled, so it's a no-op cost otherwise.
-    const hotMask = smoothingEnabled ? new Uint8Array(needed_w * needed_h) : null;
+    octx.clearRect(0, 0, bitmapWidth, needed_h);
 
     const lut = getPaletteLUT(paletteId);
-
-    const dVHi = vHi;
-    const dVLo = vLo;
-
-    // Set by qToColor on its most recent call — read immediately afterward by
-    // the fill loop (single-threaded, synchronous) to populate hotMask.
-    // Avoids qToColor allocating a [color, hot] tuple on every cell.
-    let lastCellWasHot = false;
-
     // Legacy MarketScanner-compat cut — see sizeFilterPct's @deprecated doc
-    // comment. Reference = vHi (the p99 USD wall in the visible window),
-    // exactly the old formula. Computed ONCE per repaint (not per-cell) since
-    // it only depends on vHi/sizePct; qToColor just compares q < qCut below.
-    // sizePct === 0 (LiquidityTab.tsx, always) → qCut stays 0 → the branch in
-    // qToColor never fires (q < 0 is never true) — zero-cost no-op.
+    // comment. sizePct === 0 (LiquidityTab.tsx, always) → qCut stays 0 → the
+    // branch in colorOf never fires — zero-cost no-op.
     const legacyQCut = sizePct > 0
       ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
       : 0;
-    // Legacy binary dimming ceiling (identical value to the old
-    // WEAK_CELL_T_CAP) — ONLY reachable via the deprecated sizePct path.
-    const LEGACY_WEAK_CELL_T_CAP = 0.10;
+    const alphaCutoffUsd = alphaSkipCutoffUsd(vLo);
 
-    // Helper: map a q value to a canvas pixel color (Bookmap-style continuous
-    // intensity field — see module doc comment above for the exact formula).
-    // Color (`t` / palette index) is driven by vHi, PLUS (legacy-only) the
-    // MarketScanner-compat binary cap below. Visibility is a CONTINUOUS
-    // per-cell alpha (softKneeAlpha, vLo as the soft knee) — see
-    // depthSignificance.ts and the module doc comment above — applied
-    // UNCONDITIONALLY, in addition to (not instead of) the legacy cap.
-    // `persistMult` (Phase 2 — persistenceFactor) further scales the final
-    // alpha byte only; color/intensity (`t`) is never touched by it.
-    function qToColor(q: number, persistMult: number): number {
-      lastCellWasHot = false;
-      if (q === 0) return 0; // no data in this bin — transparent (the void)
+    // Phase 2 point 1 + Phase 6 point 2 — persistence weighting, seeded by a
+    // bookkeeping-only warm-up pass over the columns immediately preceding
+    // the window (against FULL history, not just this window's slice).
+    const persistMap = buildPersistWarmupMap(
+      fullCols,
+      finalWindowStartIdx,
+      priceMin,
+      rowMaxPrice,
+      rowEpsilon,
+      PERSISTENCE_RAMP_COLUMNS_DEFAULT,
+    );
 
-      const usd = qToUsd(q);
-      const x = Math.min(1, usd / dVHi); // linear ratio to the p99 reference, capped at 1
-      let t = compressIntensity(x);
-      if (t > 1) t = 1;
-      if (t < 0) t = 0;
+    // Historical columns render the book exactly as it WAS at that time,
+    // even if price later traded through the level — no penetration
+    // suppression (Bookmap shows the book's full history per column).
+    paintColumnsRange(
+      octx,
+      cols,
+      0,
+      numCols,
+      0,
+      priceMin,
+      rowMaxPrice,
+      rowEpsilon,
+      curBinSize,
+      numRows,
+      vLo,
+      vHi,
+      lut,
+      legacyQCut,
+      alphaCutoffUsd,
+      smoothingEnabled,
+      persistMap,
+    );
 
-      // Legacy MarketScanner-compat ONLY (sizePct > 0 — LiquidityTab.tsx
-      // never triggers this): bins below the relative size cut render at
-      // the old flat intensity ceiling instead of their true continuous `t`
-      // — additive to (not a replacement for) the soft-knee alpha below.
-      if (legacyQCut > 0 && q < legacyQCut) {
-        t = Math.min(t, LEGACY_WEAK_CELL_T_CAP);
-      }
+    lastPersistMapRef.current = persistMap;
 
-      lastCellWasHot = t >= BLOOM_HOT_THRESHOLD;
-
-      const idx = Math.min(255, Math.max(0, Math.round(t * 255)));
-      // lut already encodes full 0xff alpha at every stop (color-only ramp);
-      // overwrite just the top (alpha) byte with the continuous soft-knee
-      // value (further scaled by the persistence multiplier). ImageData is
-      // stored/read as STRAIGHT (non-premultiplied) alpha per the Canvas
-      // spec, so scaling only the alpha byte — without touching R/G/B — is
-      // correct; putImageData below, and the later ctx.drawImage blit
-      // (default source-over compositing), both handle straight alpha
-      // normally. No globalAlpha or premultiplication needed.
-      const alpha = softKneeAlpha(usd, dVLo) * persistMult;
-      const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
-      const rgb = lut[idx];
-      return (rgb & 0x00ffffff) | (a << 24);
-    }
-
-    // Phase 2 point 1 — persistence weighting (anti-flicker, anti-spoof).
-    // Rolling price-bin -> consecutive-column-count map, maintained WHILE
-    // iterating columns in time order (cols[] is ascending by time). A
-    // single Map instance is reused/mutated across the whole cols loop
-    // (allocated once here, not per-column) — total work across the loop is
-    // O(total cells), the same order as the fill loop itself.
-    //   (a) absent this column -> deleted (count resets to 0; next
-    //       appearance starts back at 1 via persistenceFactor's own floor).
-    //   (b) gap columns (flags&1) are skipped entirely below BEFORE this map
-    //       is touched — a data outage must not reset a wall's persistence,
-    //       it isn't the wall being pulled.
-    const persistMap = new Map<number, number>(); // price -> consecutive columns present
-
-    // Fill cells. Historical columns render the book exactly as it WAS at
-    // that time, even if price later traded through the level — no
-    // penetration suppression. Suppressing "already-traded-through" levels
-    // turned continuous walls into isolated blobs; Bookmap shows the book's
-    // full history per column instead.
-    for (let ci = 0; ci < cols.length; ci++) {
-      const col = cols[ci];
-      if (col.flags & 1) continue; // gap column — leave transparent, don't touch persistMap
-
-      // Build a map from binFloor(price) → q for bids + asks combined.
-      // Bids go on one side, asks on another, but for the heatmap we render
-      // them all together by price level (Bookmap style).
-      const cellMap = new Map<number, number>(); // price → q
-
-      // Row-window membership filter — applied HERE, before the bin ever
-      // reaches cellMap/persistMap, not just at paint time below. A bin
-      // outside [priceMin, rowMaxPrice] (clipped by weightedPriceExtent/
-      // MAX_GRID_ROWS/MAX_GRID_CELLS above) is treated as ABSENT — it's
-      // outside the plotted window regardless, so this is both cheaper
-      // (persistMap never grows for far-away dust) and correct (an absent
-      // bin's persistence count naturally resets via the prune step below,
-      // same as a bin that genuinely isn't in this column).
-      for (const r of col.bids) {
-        if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
-        const existing = cellMap.get(r.price) ?? 0;
-        cellMap.set(r.price, Math.max(existing, r.q));
-      }
-      for (const r of col.asks) {
-        if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
-        const existing = cellMap.get(r.price) ?? 0;
-        cellMap.set(r.price, Math.max(existing, r.q));
-      }
-
-      // Persistence bookkeeping for THIS column, in order: prune bins that
-      // dropped out since the previous column, then bump the survivors +
-      // any newly-appeared bin to count 1.
-      for (const price of persistMap.keys()) {
-        if (!cellMap.has(price)) persistMap.delete(price);
-      }
-      for (const price of cellMap.keys()) {
-        persistMap.set(price, (persistMap.get(price) ?? 0) + 1);
-      }
-
-      for (const [price, q] of cellMap) {
-        const persistMult = persistenceFactor(persistMap.get(price) ?? 1);
-        const color = qToColor(q, persistMult);
-        if (color === 0) continue;
-
-        // Row index: 0 = priceMin, increasing upward in price but canvas Y increases downward.
-        // We flip: rowIdx 0 = top of canvas = highest price.
-        const priceRow = Math.round((price - priceMin) / curBinSize);
-        // Canvas row 0 = highest price (numRows - 1 - priceRow)
-        const canvasRow = numRows - 1 - priceRow;
-        // Defensive only — the row-window filter above already excludes any
-        // bin outside [priceMin, rowMaxPrice] before it reaches cellMap, so
-        // this should never fire; kept as a cheap bounds guard against
-        // floating-point rounding at the exact window edge.
-        if (canvasRow < 0 || canvasRow >= numRows) continue;
-
-        const pixelIdx = canvasRow * numCols + ci;
-        buf[pixelIdx] = color;
-        if (hotMask && lastCellWasHot) hotMask[pixelIdx] = 1;
-      }
-    }
-
-    // ── Smoothing / bloom post-process (offscreen-only, dirty-gated) ─────────
-    if (smoothingEnabled) {
-      applyVerticalSmoothing(buf, numCols, numRows);
-      if (hotMask) applyBloom(buf, hotMask, numCols, numRows);
-    }
-
-    octx.putImageData(imgData, 0, 0);
-
-    // Annotate with what price range and column array this represents
-    // (stored so the per-frame compositor can compute the affine mapping).
-    (offscreenRef.current as unknown as Record<string, unknown>)._meta = {
+    setMeta(offscreenRef.current, {
       priceMin,
       priceMax,
       numCols,
       numRows,
       cols,
       curBinSize,
-    };
+      bitmapWidth,
+    });
   }
 
   // Fallback bar spacing used when only 1 column is loaded (can't infer from 2 pts).
@@ -782,6 +981,11 @@ export function DepthMatrixLayer({
     function drawFrame() {
       if (!running) return;
       rafRef.current = requestAnimationFrame(drawFrame);
+
+      // Cheap extra win — skip all work while the tab is hidden. The
+      // visibilitychange listener (below) marks dirty so the view repaints
+      // the instant the tab regains visibility.
+      if (document.hidden) return;
 
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -805,7 +1009,8 @@ export function DepthMatrixLayer({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // ── Step 2: Decide if offscreen needs repaint (ONLY gate this) ───────
+      // ── Step 2: Decide if the offscreen needs a full rebuild or a live
+      // append (ONLY gate this) ─────────────────────────────────────────────
       // Per-frame fingerprint (same pattern as WallHeatLayer).
       const rawPaneW = chartInstance.timeScale().width();
       const paneW = (typeof rawPaneW === 'number' && rawPaneW > 0) ? rawPaneW : cssW;
@@ -818,7 +1023,6 @@ export function DepthMatrixLayer({
       const cols = columnsRef.current;
       let sentinelPrice = 0;
       if (cols.length > 0) {
-        // Find a representative price from the first non-empty column.
         for (const col of cols) {
           if (col.bids.length > 0) { sentinelPrice = col.bids[0].price; break; }
           if (col.asks.length > 0) { sentinelPrice = col.asks[0].price; break; }
@@ -834,53 +1038,212 @@ export function DepthMatrixLayer({
       // Phase 3 point 6 — zoom-awareness. `depthColWidthPxRef` holds the
       // depth-column pixel width from the PREVIOUS frame's affine-mapping
       // step (one-frame lag — same pattern `barSpacingRef` already uses).
-      // Compare the CURRENT zoom-density multiplier to the one baked into
-      // the last repaint; only force a fresh repaint when it drifted enough
-      // to matter (debounces continuous pan/zoom — the multiplier barely
-      // moves frame-to-frame, so this is a no-op almost every frame and only
-      // fires when the zoom TIER actually shifts).
       const ZOOM_REPAINT_EPSILON = 0.03;
       const curZoomMult = zoomDensityMultiplier(depthColWidthPxRef.current);
       const zoomTierChanged = Math.abs(curZoomMult - lastZoomMultAppliedRef.current) > ZOOM_REPAINT_EPSILON;
+      if (zoomTierChanged) scheduleRebuild();
 
-      const needsRepaint = offscreenVersionRef.current !== paintedVersionRef.current || zoomTierChanged;
+      // Phase 6 — classify the `columns` prop's identity change (append /
+      // rotate / reset) every frame (cheap: reference compare + O(1) math).
+      const meta0 = getMeta(offscreenRef.current);
+      let doFullRebuild = !meta0;
+      let appendCols: DecodedColumn[] | null = null;
 
-      // The dirty/fingerprint check gates ONLY the expensive offscreen rasterization.
-      // It must NEVER gate the clear+blit below — those run every frame unconditionally.
-      if (dirtyRef.current || fingerprintChanged || needsRepaint) {
-        dirtyRef.current = false;
-
-        // Recompute the percentile norm ONLY when the offscreen will actually be
-        // repainted (data/version change, OR a meaningful zoom-tier change — Phase
-        // 3). Its output (vLo/vHi) is consumed solely by repaintOffscreen, which is
-        // needsRepaint-gated — so recomputing it on pure pan frames
-        // (fingerprintChanged alone) was wasted work (2x 65536-bin histogram
-        // allocations every frame). The per-frame re-blit (affine mapping +
-        // drawImage) below is unchanged.
-        if (needsRepaint) {
-          recomputeNorm(
-            columnsRef.current,
-            chartInstance,
-            binSizeRef.current,
-            sensitivityRef.current,
-            depthColWidthPxRef.current,
-          );
+      const prevCols = lastColumnsArrayRef.current;
+      if (cols !== prevCols) {
+        if (prevCols && prevCols.length > 0 && cols.length > 0 && meta0) {
+          const intervalMs = estimateColumnIntervalMs(cols);
+          const cls = classifyColumnsUpdate(prevCols, cols, intervalMs);
+          if (cls.kind === 'reset') {
+            doFullRebuild = true;
+            // CRITICAL 1 (review fix) — a 'reset' on an already-mounted
+            // instance means the underlying data distribution may be
+            // completely different (reconnect resync / store
+            // clear-and-refill), NOT just a window/zoom change. Blending
+            // the new distribution's knee against the OLD EMA state would
+            // wash it out/oversaturate it for many frames. Null both EMA
+            // refs so recomputeNorm treats this rebuild as a fresh first
+            // sample (see recomputeNorm's `vHiEmaRef.current === null`
+            // branch) — vLoRef/vHiRef themselves get freshly computed by
+            // that same recomputeNorm call later this frame, no need to
+            // touch them here.
+            vHiEmaRef.current = null;
+            vLoEmaRef.current = null;
+          } else if ((cls.kind === 'append' || cls.kind === 'rotate') && cls.appendedCount > 0) {
+            const prevLastT = prevCols[prevCols.length - 1].t;
+            const atLiveEdge = meta0.numCols > 0 && meta0.cols[meta0.numCols - 1].t === prevLastT;
+            if (atLiveEdge) {
+              const appended = cols.slice(cols.length - cls.appendedCount);
+              if (meta0.numCols + appended.length <= meta0.bitmapWidth) {
+                appendCols = appended;
+              } else {
+                doFullRebuild = true; // slack exhausted — fall back to a full rebuild
+              }
+            }
+            // else: window isn't at the live edge — the new column(s) are
+            // outside the current painted window; nothing to paint.
+          }
+        } else if (cols.length > 0) {
+          doFullRebuild = true; // no previous snapshot (first data, or prev was empty)
         }
+        lastColumnsArrayRef.current = cols;
+      }
 
-        if (needsRepaint) {
-          repaintOffscreen(
-            columnsRef.current,
-            binSizeRef.current,
-            vLoRef.current,
-            vHiRef.current,
-            sizeFilterRef.current,
-            chartInstance,
-            seriesInstance,
-            paletteRef.current,
-            smoothingRef.current,
-          );
-          paintedVersionRef.current = offscreenVersionRef.current;
-          lastZoomMultAppliedRef.current = curZoomMult;
+      // Window-margin check — has the visible range exited the painted
+      // window's bounds? (meta.cols is keyed by TIME, so this reads directly
+      // off the retained column objects — no separate index bookkeeping.)
+      if (meta0 && meta0.numCols > 0) {
+        const visRangeNow = chartInstance.timeScale().getVisibleRange();
+        if (visRangeNow) {
+          const visFromSecNow = visRangeNow.from as unknown as number;
+          const visToSecNow   = visRangeNow.to   as unknown as number;
+          const winStartSec = meta0.cols[0].t / 1000;
+          const winEndSec   = meta0.cols[meta0.numCols - 1].t / 1000;
+          if (visFromSecNow < winStartSec || visToSecNow > winEndSec) {
+            scheduleRebuild();
+          }
+        }
+      }
+
+      if (rebuildDueRef.current) {
+        doFullRebuild = true;
+        rebuildDueRef.current = false;
+      }
+
+      if (doFullRebuild) {
+        appendCols = null; // a full rebuild supersedes any pending append this frame
+      }
+
+      if (doFullRebuild || appendCols) {
+        if (doFullRebuild) {
+          const fullCols = cols;
+          if (fullCols.length > 0) {
+            const colTimesMs = fullCols.map((c) => c.t);
+            const visRangeForWindow = chartInstance.timeScale().getVisibleRange();
+            const visFromSec = visRangeForWindow ? (visRangeForWindow.from as unknown as number) : (fullCols[0].t / 1000);
+            const visToSec   = visRangeForWindow ? (visRangeForWindow.to   as unknown as number) : (fullCols[fullCols.length - 1].t / 1000);
+            // Review fix (SHOULD-FIX 2) — budget-aware up front: pass the
+            // last rebuild's real numRows (or undefined before the first
+            // rebuild) + MAX_GRID_CELLS so the margin itself already fits
+            // the budget. Without this, repaintOffscreen's own cell-budget
+            // trim could silently narrow the painted window below what the
+            // margin-exceeded check above assumes, causing an ordinary
+            // small pan to spuriously exceed the (actually-narrower)
+            // painted bounds and trigger far too many rebuilds.
+            const { startIdx, endIdx } = computeWindowRange(
+              colTimesMs,
+              visFromSec,
+              visToSec,
+              WINDOW_MARGIN_FRACTION,
+              lastNumRowsRef.current ?? undefined,
+              MAX_GRID_CELLS,
+            );
+            const windowCols = fullCols.slice(startIdx, endIdx + 1);
+
+            recomputeNorm(
+              windowCols,
+              chartInstance,
+              binSizeRef.current,
+              sensitivityRef.current,
+              depthColWidthPxRef.current,
+            );
+
+            repaintOffscreen(
+              fullCols,
+              startIdx,
+              endIdx,
+              binSizeRef.current,
+              vLoRef.current,
+              vHiRef.current,
+              sizeFilterRef.current,
+              paletteRef.current,
+              smoothingRef.current,
+            );
+            lastZoomMultAppliedRef.current = curZoomMult;
+          }
+        } else if (appendCols && offscreenCtxRef.current) {
+          const meta = getMeta(offscreenRef.current);
+          if (meta) {
+            const octx = offscreenCtxRef.current;
+            const rowMaxPrice = meta.priceMin + (meta.numRows - 1) * meta.curBinSize;
+            const rowEpsilon = meta.curBinSize * 0.001;
+            const lut = getPaletteLUT(paletteRef.current);
+            const legacyQCut = sizeFilterRef.current > 0
+              ? Math.round(Math.log1p((sizeFilterRef.current / 100) * vHiRef.current) * 1000)
+              : 0;
+            const alphaCutoffUsd = alphaSkipCutoffUsd(vLoRef.current);
+
+            if (smoothingRef.current) {
+              // Re-derive + repaint a small trailing strip (including the
+              // new column(s)) so the smoothing/bloom neighborhood ops never
+              // leave a seam at the append boundary — see the module doc
+              // comment's Phase 6 section.
+              meta.cols.push(...appendCols);
+              meta.numCols = meta.numCols + appendCols.length;
+              // Review fix (SHOULD-FIX 1) — widen the strip by 1 extra
+              // column on the LEFT (a border column, also rewritten via
+              // putImageData below) so bloom/smoothing reach is exact at
+              // the strip's own left boundary. Without this, a hot cell at
+              // the strip's leftmost column can't exchange bloom with the
+              // column just to its left (applyBloom's `col > 0` guard
+              // skips it at local index 0), and that boundary is never
+              // revisited on a LATER append either — a persistent 1-column
+              // seam. Each new append-strip extends 1 column further left
+              // than the previous "new" boundary, so the exact edge that
+              // was under-blended last time gets correctly re-blended now.
+              const stripStart = Math.max(0, meta.numCols - APPEND_SMOOTH_STRIP_COLS - 1);
+              const stripWarmMap = buildPersistWarmupMap(
+                meta.cols,
+                stripStart,
+                meta.priceMin,
+                rowMaxPrice,
+                rowEpsilon,
+                PERSISTENCE_RAMP_COLUMNS_DEFAULT,
+              );
+              paintColumnsRange(
+                octx,
+                meta.cols,
+                stripStart,
+                meta.numCols,
+                stripStart,
+                meta.priceMin,
+                rowMaxPrice,
+                rowEpsilon,
+                meta.curBinSize,
+                meta.numRows,
+                vLoRef.current,
+                vHiRef.current,
+                lut,
+                legacyQCut,
+                alphaCutoffUsd,
+                true,
+                stripWarmMap,
+              );
+              lastPersistMapRef.current = stripWarmMap;
+            } else {
+              paintColumnsRange(
+                octx,
+                appendCols,
+                0,
+                appendCols.length,
+                meta.numCols,
+                meta.priceMin,
+                rowMaxPrice,
+                rowEpsilon,
+                meta.curBinSize,
+                meta.numRows,
+                vLoRef.current,
+                vHiRef.current,
+                lut,
+                legacyQCut,
+                alphaCutoffUsd,
+                false,
+                lastPersistMapRef.current,
+              );
+              meta.cols.push(...appendCols);
+              meta.numCols = meta.numCols + appendCols.length;
+            }
+          }
         }
       }
 
@@ -891,22 +1254,12 @@ export function DepthMatrixLayer({
       const offscreen = offscreenRef.current;
       if (!offscreen) return;
 
-      const meta = (offscreen as unknown as Record<string, unknown>)._meta as {
-        priceMin: number;
-        priceMax: number;
-        numCols: number;
-        numRows: number;
-        cols: DecodedColumn[];
-        curBinSize: number;
-      } | undefined;
+      const meta = getMeta(offscreen);
       if (!meta || meta.numCols === 0 || meta.numRows === 0) return;
 
       try {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         // ── Step 4a: clear the visible canvas every frame ─────────────────
-        // Must run unconditionally, ALWAYS before drawImage. This is the correct
-        // location (after offscreen rasterization, before blit) so there is no
-        // code path that clears without subsequently drawing.
         ctx.clearRect(0, 0, cssW, cssH);
         ctx.imageSmoothingEnabled = false;
 
@@ -1017,16 +1370,11 @@ export function DepthMatrixLayer({
         // When rawLeft < 0 (columns extend before visible range) or
         // rawRight > paneW (columns extend past visible range), naively
         // passing the ENTIRE offscreen to drawImage and clamping only the
-        // destination stretches the bitmap to fill the clamped rect.  That
-        // mis-maps every column's pixel to a different canvas x than the candle
-        // at the same time occupies — exactly the "walls drift during pan"
-        // symptom.
-        //
-        // Fix: map the clamped destination back to the corresponding SOURCE
-        // sub-rectangle so drawImage renders each offscreen column at the exact
-        // canvas x that colToX() would assign it.  The mapping is linear
-        // because both the offscreen column grid and the canvas time axis are
-        // uniformly spaced.
+        // destination stretches the bitmap to fill the clamped rect. This
+        // math operates purely in "real column index" units (meta.numCols),
+        // so it is unaffected by the offscreen canvas's physical width
+        // including WINDOW_SLACK_COLS headroom — see the module doc
+        // comment's Phase 6 section for why.
         const srcScale = meta.numCols / rawWidth;        // offscreen pixels per canvas px
         const srcLeft  = (drawLeft  - rawLeft) * srcScale; // first visible column (fractional)
         const srcRight = (drawRight - rawLeft) * srcScale; // last  visible column (fractional)
@@ -1081,34 +1429,42 @@ export function DepthMatrixLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart, series]);
 
-  // ── Subscriptions that mark dirty ─────────────────────────────────────────
+  // Note: the offscreen rebuild/append decision (drawFrame's Step 2) no
+  // longer needs an external "mark dirty" signal — it re-derives everything
+  // it needs every frame directly from the chart's live visible-range query
+  // and the `columns` reference-identity check, both O(1). A canvas resize
+  // ([width, height]) doesn't require an offscreen rebuild either: the
+  // offscreen bitmap is independent of CSS size, and the per-frame blit
+  // already recomputes drawWidth/drawHeight from the latest cssW/cssH.
+
+  // Cheap extra win — force a fresh full rebuild on regaining visibility.
+  // Repaints were skipped entirely while `document.hidden` (drawFrame's
+  // early return), so the painted window may be far behind after a long
+  // hidden period; scheduleRebuild() is a cheap, defensive top-up on top of
+  // the per-frame classify/margin checks (which would otherwise also
+  // self-heal on the next frame regardless — see the module doc comment's
+  // Phase 6 section).
   useEffect(() => {
-    const timeScale = chart.timeScale();
-    const markDirty = () => { dirtyRef.current = true; };
-    timeScale.subscribeVisibleLogicalRangeChange(markDirty);
-    timeScale.subscribeVisibleTimeRangeChange(markDirty);
-    const interval = setInterval(markDirty, 500);
-    return () => {
-      try { timeScale.unsubscribeVisibleLogicalRangeChange(markDirty); } catch { /* chart gone */ }
-      try { timeScale.unsubscribeVisibleTimeRangeChange(markDirty); }   catch { /* chart gone */ }
-      clearInterval(interval);
+    const onVisibilityChange = () => {
+      if (!document.hidden) scheduleRebuild();
     };
-  }, [chart]);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Mark dirty on size change
+  // ── Schedule a debounced full rebuild on normalization-affecting prop
+  // changes (Phase 6) — `columns` updates are handled per-frame instead (see
+  // drawFrame's classifyColumnsUpdate block) so live appends can take the
+  // fast path rather than always forcing a full rebuild.
   useEffect(() => {
-    dirtyRef.current = true;
-  }, [width, height]);
-
-  // ── Trigger offscreen repaint on column/normalization changes ─────────────
-  useEffect(() => {
-    // Debounce via rAF for slider drags
-    if (sliderRafRef.current !== null) cancelAnimationFrame(sliderRafRef.current);
-    sliderRafRef.current = requestAnimationFrame(() => {
-      offscreenVersionRef.current++;
-      dirtyRef.current = true;
-    });
-  }, [columns, binSize, sizeFilterPct, palette, smoothing, sensitivity]);
+    if (isFirstParamsEffectRef.current) {
+      isFirstParamsEffectRef.current = false;
+      return;
+    }
+    scheduleRebuild();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binSize, sizeFilterPct, palette, smoothing, sensitivity]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
