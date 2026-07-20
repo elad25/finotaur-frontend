@@ -1055,15 +1055,25 @@ export interface FinotaurChartProps {
    */
   refreshToken?: number;
   /**
-   * Optional Volume Profile overlay (ATAS-style visible-range volume-by-price
-   * with POC + Value Area). When provided, mounts a VolumeProfileLayer canvas
-   * fed by `store` (the same FlowBinStore the footprint overlay reads from —
-   * pass the same store instance to keep both overlays in sync).
+   * Optional Volume Profile overlay (ATAS-style volume-by-price with POC +
+   * Value Area). When provided, mounts a VolumeProfileLayer canvas fed by
+   * `store` (the same FlowBinStore the footprint overlay reads from — pass
+   * the same store instance to keep both overlays in sync).
    * Undefined (the default for every existing caller) is a complete no-op.
    */
   volumeProfile?: {
     store: FlowBinStore;
     visible: boolean;
+    /**
+     * When provided (Unix seconds), the profile is computed over
+     * [sessionStartSec, +Inf) from the store — i.e. anchored to a session
+     * (the current trading day, by default) instead of the visible chart
+     * range, and does NOT change while panning/zooming. Recomputes only when
+     * the store's data changes or `sessionStartSec` itself changes (e.g. the
+     * calendar day rolls over) — see VolumeProfileLayer.tsx.
+     * Undefined (the default) keeps the original visible-range behavior.
+     */
+    sessionStartSec?: number;
   };
   /**
    * Optional Chart-tab-only SESSION Volume Profile overlay (ATAS-style,
@@ -2999,6 +3009,7 @@ export function FinotaurChart({
           series={seriesRef.current}
           store={volumeProfile.store}
           visible={volumeProfile.visible}
+          sessionStartSec={volumeProfile.sessionStartSec}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
         />

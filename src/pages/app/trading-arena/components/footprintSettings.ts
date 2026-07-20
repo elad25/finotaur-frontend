@@ -96,7 +96,6 @@ export interface FootprintSettings {
   autoTransform: boolean;
   /** Min bar pixel width (CSS px) to reveal full footprint detail when autoTransform is on. Range [8, 60]. Default 20. */
   autoTransformMinPx: number;
-  showVolumeProfile: boolean;
   showPoc: boolean;
   showValueArea: boolean;
   magnifierEnabled: boolean;
@@ -138,7 +137,6 @@ export const DEFAULT_FOOTPRINT_SETTINGS: FootprintSettings = {
   rowSizeValue: null,
   autoTransform: true,
   autoTransformMinPx: DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX,
-  showVolumeProfile: false,
   showPoc: true,
   showValueArea: false,
   magnifierEnabled: true,

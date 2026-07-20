@@ -13,6 +13,7 @@ import {
   deriveSessionRowSize,
   distributeBarVolumeToBins,
   computeSessionProfiles,
+  startOfCivilDaySec,
 } from '../sessionVolumeProfile';
 import type { Bar } from '../../types';
 import type { UTCTimestamp } from 'lightweight-charts';
@@ -196,5 +197,32 @@ describe('computeSessionProfiles', () => {
 
   it('returns an empty array for an empty bars array', () => {
     expect(computeSessionProfiles([], 'day', 'utc', '09:30', '16:00')).toEqual([]);
+  });
+});
+
+describe('startOfCivilDaySec', () => {
+  it('returns UTC midnight for the "utc" zone', () => {
+    const t = MONDAY_UTC + 15 * 3600 + 42 * 60; // Monday 15:42 UTC
+    expect(startOfCivilDaySec(t, 'utc')).toBe(MONDAY_UTC);
+  });
+
+  it('is idempotent at exactly midnight UTC', () => {
+    expect(startOfCivilDaySec(MONDAY_UTC, 'utc')).toBe(MONDAY_UTC);
+  });
+
+  it('resolves a fixed IANA zone offset (America/New_York, EST/UTC-5 in January)', () => {
+    // Jan 5 2026 03:00 UTC = Jan 4 2026 22:00 EST -> civil day is Jan 4,
+    // whose midnight (00:00 EST) is Jan 4 05:00 UTC.
+    const t = MONDAY_UTC + 3 * 3600;
+    const expected = Date.UTC(2026, 0, 4, 5, 0, 0) / 1000;
+    expect(startOfCivilDaySec(t, 'America/New_York')).toBe(expected);
+  });
+
+  it('handles a timestamp already within the New York trading day (no earlier UTC-day rollback)', () => {
+    // Jan 5 2026 16:00 UTC = Jan 5 2026 11:00 EST -> civil day is Jan 5,
+    // whose midnight (00:00 EST) is Jan 5 05:00 UTC.
+    const t = MONDAY_UTC + 16 * 3600;
+    const expected = Date.UTC(2026, 0, 5, 5, 0, 0) / 1000;
+    expect(startOfCivilDaySec(t, 'America/New_York')).toBe(expected);
   });
 });

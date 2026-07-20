@@ -23,8 +23,6 @@ export interface OrderFlowControlsState {
   enabled: boolean;
   cellMode: FootprintCellMode;
   rowDensity: RowDensity;
-  /** Volume Profile overlay (ATAS-style visible-range histogram + POC/VA). Default OFF. */
-  showVolumeProfile: boolean;
   /** Bookmap-style liquidity heatmap (DepthMatrixLayer, reused from the Market Scanner). Default OFF. */
   showHeatmap: boolean;
   /** Diagonal-imbalance highlighting preset — Standard/Strict/Stacked (see resolveImbalancePreset). Default 'standard'. */
@@ -39,7 +37,6 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   enabled: true,
   cellMode: 'bidAsk',
   rowDensity: 'auto',
-  showVolumeProfile: false,
   showHeatmap: false,
   imbalancePreset: 'standard',
   showStats: true,

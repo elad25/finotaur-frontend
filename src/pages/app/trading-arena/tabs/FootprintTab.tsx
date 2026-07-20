@@ -87,6 +87,7 @@ import { cn } from '@/lib/utils';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import { PaperTradeRailShell } from '../components/PaperTradeRailShell';
 import { useNt8OrderBook } from '../hooks/useNt8OrderBook';
+import { startOfCivilDaySec } from '@/components/charting/orderflow/sessionVolumeProfile';
 
 /** Which futures source is active — 'nt8' is the default for ALL users; 'databento' is an admin-only delayed dev preview (see FuturesFootprintBody's compliance note). */
 export type FuturesSourceMode = 'nt8' | 'databento';
@@ -99,8 +100,40 @@ interface FootprintTabProps {
   isAdmin: boolean;
   /** Active indicator overlays — single source of truth lives in TradingArena.tsx. */
   indicators: Indicator[];
+  /**
+   * Whether the Volume Profile "indicator" is currently active (TradingArena's
+   * `indicatorInstances`/`hiddenIndicatorIds` — the same single source of
+   * truth ChartTab's Session Volume Profile reads, see that file's
+   * `volumeProfileEnabled` prop). Drives the tick-level Volume Profile
+   * overlay's visibility on every footprint body that has a FlowBinStore —
+   * Volume Profile never self-appears; it's a normal opt-in indicator.
+   */
+  volumeProfileEnabled: boolean;
   /** Wired to the Arena's symbol setter — powers the stocks/forex empty state's quick-switch chips. */
   onSelectSymbol?: (symbol: string) => void;
+}
+
+// Session boundary recheck cadence — cheap hourly poll (NOT a per-second
+// timer) so the tick-level Volume Profile's "current trading day" anchor
+// rolls over shortly after midnight without re-rendering on every tick.
+const SESSION_BOUNDARY_RECHECK_MS = 60 * 60 * 1000;
+
+/**
+ * Start of the CURRENT trading day (Unix seconds), used to anchor the
+ * tick-level Volume Profile's default range (see VolumeProfileLayer.tsx's
+ * `sessionStartSec`). Recomputed on an hourly tick so a session rollover
+ * (midnight in `timezone`) is picked up without a per-second timer.
+ */
+function useCurrentTradingDayStartSec(timezone: ChartStyleSettings['timezone']): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), SESSION_BOUNDARY_RECHECK_MS);
+    return () => clearInterval(interval);
+  }, []);
+  return useMemo(
+    () => startOfCivilDaySec(Math.floor(Date.now() / 1000), timezone),
+    [timezone, tick],
+  );
 }
 
 // Initial visible bar count — wide enough that candles clear the footprint's
@@ -298,7 +331,7 @@ function useFootprintOrderFlowData(
   );
 }
 
-export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, onSelectSymbol }: FootprintTabProps) {
+export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators, volumeProfileEnabled, onSelectSymbol }: FootprintTabProps) {
   const [futuresRoot, setFuturesRoot] = useState<FuturesRoot>('NQ');
   // Futures now defaults to the NT8 bridge path for ALL users (not
   // admin-gated) — the Databento delayed preview becomes an admin-only
@@ -328,12 +361,20 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
   // either way and stays perfectly in sync with the Chart tab as before.
   const { settings: chartStyle, update: updateChartStyle, reset: resetChartStyle } = useChartStylePreferences();
 
+  // Tick-level Volume Profile's default range anchor — the start of the
+  // CURRENT trading day, timezone-aware (see startOfCivilDaySec). Computed
+  // once here and threaded to every body below so all asset classes share
+  // the same session boundary.
+  const sessionStartSec = useCurrentTradingDayStartSec(chartStyle.timezone);
+
   if (isCrypto) {
     return (
       <CryptoFootprintBody
         symbol={symbol}
         interval={interval}
         indicators={indicators}
+        volumeProfileEnabled={volumeProfileEnabled}
+        sessionStartSec={sessionStartSec}
         chartStyle={chartStyle}
         onChartStyleChange={updateChartStyle}
         onChartStyleReset={resetChartStyle}
@@ -353,6 +394,8 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
             root={futuresRoot}
             onRootChange={setFuturesRoot}
             indicators={indicators}
+            volumeProfileEnabled={volumeProfileEnabled}
+            sessionStartSec={sessionStartSec}
             isAdmin={isAdmin}
             sourceToggle={sourceToggle}
             chartStyle={chartStyle}
@@ -368,6 +411,8 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
           root={futuresRoot}
           onRootChange={setFuturesRoot}
           indicators={indicators}
+          volumeProfileEnabled={volumeProfileEnabled}
+          sessionStartSec={sessionStartSec}
           sourceToggle={sourceToggle}
           chartStyle={chartStyle}
           onChartStyleChange={updateChartStyle}
@@ -386,6 +431,8 @@ export function FootprintTab({ symbol, interval, assetClass, isAdmin, indicators
         root={futuresRoot}
         onRootChange={setFuturesRoot}
         indicators={indicators}
+        volumeProfileEnabled={volumeProfileEnabled}
+        sessionStartSec={sessionStartSec}
         paidTier={paidTier}
         entitlementLoading={entitlementLoading}
         chartStyle={chartStyle}
@@ -510,6 +557,10 @@ interface CryptoFootprintBodyProps {
   symbol: string;
   interval: ArenaInterval;
   indicators: Indicator[];
+  /** Whether the Volume Profile indicator is active — see FootprintTabProps' doc comment. */
+  volumeProfileEnabled: boolean;
+  /** Start of the current trading day (Unix seconds) — anchors the tick-level Volume Profile's range. See FootprintTab's useCurrentTradingDayStartSec. */
+  sessionStartSec: number;
   /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
   chartStyle: ChartStyleSettings;
   onChartStyleChange: (patch: Partial<ChartStyleSettings>) => void;
@@ -518,7 +569,7 @@ interface CryptoFootprintBodyProps {
   viewSyncKey: string;
 }
 
-function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChartStyleChange, onChartStyleReset, viewSyncKey }: CryptoFootprintBodyProps) {
+function CryptoFootprintBody({ symbol, interval, indicators, volumeProfileEnabled, sessionStartSec, chartStyle, onChartStyleChange, onChartStyleReset, viewSyncKey }: CryptoFootprintBodyProps) {
   // resolveTradeSource('crypto', ...) never returns null (see its doc
   // comment) — the isAdmin opt is only consulted on the 'futures' branch.
   // tickSize here is the synchronous hardcoded-map value (cryptoTickSizes.ts);
@@ -735,7 +786,7 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
                 visible: true,
                 onStageChange: setFootprintStage,
               }}
-              volumeProfile={{ store, visible: settings.showVolumeProfile }}
+              volumeProfile={{ store, visible: volumeProfileEnabled, sessionStartSec }}
               mutedCandles={mutedCandles}
               viewSyncKey={viewSyncKey}
               viewSyncRestoreMaxBars={VIEW_SYNC_RESTORE_MAX_BARS}
@@ -771,6 +822,10 @@ interface FuturesFootprintBodyProps {
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
   indicators: Indicator[];
+  /** Whether the Volume Profile indicator is active — see FootprintTabProps' doc comment. */
+  volumeProfileEnabled: boolean;
+  /** Start of the current trading day (Unix seconds) — anchors the tick-level Volume Profile's range. See FootprintTab's useCurrentTradingDayStartSec. */
+  sessionStartSec: number;
   /** Gates the Databento futures source for the admin dev-preview toggle. See `paidTier` for the paid-customer path. */
   isAdmin: boolean;
   /** True when a non-admin caller has market-data entitlement (useMarketDataEntitled) — unlocks this body as the customer "Session Review" surface. Ignored when isAdmin is true. */
@@ -798,7 +853,7 @@ interface FuturesFootprintBodyProps {
 // root addition can't silently imply Review coverage it doesn't have.
 const REVIEW_SUPPORTED_ROOTS: readonly FuturesRoot[] = FUTURES_ROOTS;
 
-function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmin, paidTier, customerReview, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesFootprintBodyProps) {
+function FuturesFootprintBody({ interval, root, onRootChange, indicators, volumeProfileEnabled, sessionStartSec, isAdmin, paidTier, customerReview, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesFootprintBodyProps) {
   // Server-side cache warm-up (H5). Originally admin-only; now also fires
   // for the paid-customer Session Review path (same warm-up target root,
   // same fire-and-forget contract) since both paths poll the same backfill
@@ -1076,6 +1131,7 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
                 visible: true,
                 onStageChange: setFootprintStage,
               }}
+              volumeProfile={{ store, visible: volumeProfileEnabled, sessionStartSec }}
               mutedCandles={mutedCandles}
               orderFlowData={orderFlowData}
             />
@@ -1105,6 +1161,10 @@ interface FuturesNt8FootprintBodyProps {
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
   indicators: Indicator[];
+  /** Whether the Volume Profile indicator is active — see FootprintTabProps' doc comment. */
+  volumeProfileEnabled: boolean;
+  /** Start of the current trading day (Unix seconds) — anchors the tick-level Volume Profile's range. See FootprintTab's useCurrentTradingDayStartSec. */
+  sessionStartSec: number;
   /** Admin-only NT8/Databento source toggle, rendered in the header — see FuturesSourceToggle. */
   sourceToggle?: FuturesSourceToggleProps;
   /** Chart tab (Footprint Settings dialog) plumbing — see FootprintTab's own useChartStylePreferences() instance. */
@@ -1172,7 +1232,7 @@ function RecordedSessionBanner({ lastTradeMs, onReconnect, reconnecting }: {
  * into the SAME store, so the chart shows the recorded session instead of
  * falling straight back to Nt8ConnectPanel — see RecordedSessionBanner.
  */
-function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesNt8FootprintBodyProps) {
+function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, volumeProfileEnabled, sessionStartSec, sourceToggle, chartStyle, onChartStyleChange, onChartStyleReset }: FuturesNt8FootprintBodyProps) {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>(() => getNt8BridgeStatus());
   useEffect(() => onNt8BridgeStatus(setBridgeStatus), []);
   const isLive = bridgeStatus === 'live';
@@ -1476,6 +1536,7 @@ function FuturesNt8FootprintBody({ interval, root, onRootChange, indicators, sou
                 visible: true,
                 onStageChange: setFootprintStage,
               }}
+              volumeProfile={{ store, visible: volumeProfileEnabled, sessionStartSec }}
               mutedCandles={mutedCandles}
               orderFlowData={orderFlowData}
             />
@@ -1511,6 +1572,10 @@ interface FuturesCustomerFootprintBodyProps {
   root: FuturesRoot;
   onRootChange: (root: FuturesRoot) => void;
   indicators: Indicator[];
+  /** Whether the Volume Profile indicator is active — see FootprintTabProps' doc comment. */
+  volumeProfileEnabled: boolean;
+  /** Start of the current trading day (Unix seconds) — anchors the tick-level Volume Profile's range. See FootprintTab's useCurrentTradingDayStartSec. */
+  sessionStartSec: number;
   /** From useMarketDataEntitled() — paid Journal OR paid+active platform plan. */
   paidTier: boolean;
   /** True while useMarketDataEntitled()'s underlying useSubscription() query is still resolving. */
@@ -1541,6 +1606,8 @@ function FuturesCustomerFootprintBody({
   root,
   onRootChange,
   indicators,
+  volumeProfileEnabled,
+  sessionStartSec,
   paidTier,
   entitlementLoading,
   chartStyle,
@@ -1606,6 +1673,8 @@ function FuturesCustomerFootprintBody({
         root={root}
         onRootChange={onRootChange}
         indicators={indicators}
+        volumeProfileEnabled={volumeProfileEnabled}
+        sessionStartSec={sessionStartSec}
         chartStyle={chartStyle}
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
@@ -1626,6 +1695,8 @@ function FuturesCustomerFootprintBody({
         root={root}
         onRootChange={onRootChange}
         indicators={indicators}
+        volumeProfileEnabled={volumeProfileEnabled}
+        sessionStartSec={sessionStartSec}
         chartStyle={chartStyle}
         onChartStyleChange={onChartStyleChange}
         onChartStyleReset={onChartStyleReset}
@@ -1658,6 +1729,8 @@ function FuturesCustomerFootprintBody({
             root={root}
             onRootChange={onRootChange}
             indicators={indicators}
+            volumeProfileEnabled={volumeProfileEnabled}
+            sessionStartSec={sessionStartSec}
             chartStyle={chartStyle}
             onChartStyleChange={onChartStyleChange}
             onChartStyleReset={onChartStyleReset}
@@ -1668,6 +1741,8 @@ function FuturesCustomerFootprintBody({
             root={root}
             onRootChange={onRootChange}
             indicators={indicators}
+            volumeProfileEnabled={volumeProfileEnabled}
+            sessionStartSec={sessionStartSec}
             isAdmin={false}
             paidTier={paidTier}
             customerReview

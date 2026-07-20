@@ -76,8 +76,11 @@ export function parseHHMM(value: string): number | null {
  * chartStyleMapping.ts's `getZonedParts`, but also handles `tz === 'local'`
  * (no IANA override — reads the JS Date object in the browser's own local
  * timezone, exactly like lightweight-charts' own default formatting).
+ * Exported so other timezone-aware callers (e.g. FootprintTab.tsx's tick-level
+ * Volume Profile session anchor, via `startOfCivilDaySec` below) can reuse the
+ * exact same 'local' handling instead of re-deriving it.
  */
-function zonedPartsFor(timestampSeconds: number, tz: ChartTimezone): ZonedParts {
+export function zonedPartsFor(timestampSeconds: number, tz: ChartTimezone): ZonedParts {
   const ianaZone = resolveIanaZone(tz);
   if (ianaZone) return getZonedParts(timestampSeconds, ianaZone);
   const d = new Date(timestampSeconds * 1000);
@@ -89,6 +92,33 @@ function zonedPartsFor(timestampSeconds: number, tz: ChartTimezone): ZonedParts 
     minute: d.getMinutes(),
     second: d.getSeconds(),
   };
+}
+
+/**
+ * Returns the Unix-seconds (UTC) instant of the start of the CIVIL DAY
+ * (00:00:00 wall-clock) containing `timestampSeconds`, resolved in `tz`.
+ *
+ * Works uniformly for `'utc'`, any fixed IANA zone, and `'local'` (browser
+ * timezone) — no special-casing needed — by deriving the zone's UTC offset
+ * AT THIS INSTANT from `zonedPartsFor` (so it's DST-correct for the specific
+ * date, same as buildTimezoneChartOptions/getZonedParts) and applying that
+ * offset to a UTC-interpreted civil midnight:
+ *   1. Read the wall-clock Y/M/D/H/M/S in `tz` for `timestampSeconds`.
+ *   2. Reinterpret that Y/M/D/H/M/S AS IF it were UTC — the difference from
+ *      `timestampSeconds` IS the zone's current UTC offset.
+ *   3. Reinterpret Y/M/D 00:00:00 AS IF it were UTC, then subtract that same
+ *      offset to get the real UTC instant of local midnight.
+ *
+ * Used by FootprintTab.tsx to anchor the tick-level Volume Profile's default
+ * range to "the current trading day" (see VolumeProfileLayer.tsx's
+ * `sessionStartSec`) regardless of which timezone the chart displays.
+ */
+export function startOfCivilDaySec(timestampSeconds: number, tz: ChartTimezone): number {
+  const parts = zonedPartsFor(timestampSeconds, tz);
+  const wallClockAsUtcSec = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) / 1000;
+  const offsetSec = wallClockAsUtcSec - timestampSeconds;
+  const midnightWallClockAsUtcSec = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) / 1000;
+  return midnightWallClockAsUtcSec - offsetSec;
 }
 
 function pad2(n: number): string {
