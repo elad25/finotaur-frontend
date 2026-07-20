@@ -563,12 +563,42 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
 
     if (gaps.length > 0) {
       const span = chunkSpan(res);
+      // Chunk boundaries are EPOCH-ALIGNED (floor(t / span) * span), not
+      // anchored on the caller's sliding `to` (scale fix, 2026-07-20).
+      // Anchoring on `to = floor(now)` made every user's chunk URLs unique,
+      // which defeated both the server's 24h Cache-Control on settled
+      // history AND the Pages Function's edge cache — every user pulled the
+      // same multi-MB chunks from Supabase individually (O(users) reads on
+      // UNLOGGED tables that already caused the 2026-07-19 Disk-IO
+      // incident). With aligned boundaries, every user requests IDENTICAL
+      // URLs for settled chunks (chunkEnd older than the server's 10-min
+      // settling margin → 24h edge TTL), so a chunk hits Supabase once per
+      // edge colo instead of once per user. The CURRENT (unsettled) chunk:
+      //   - cold load (the gap reaches back past its start) → request the
+      //     full aligned chunk (future `to` is server-valid; the shared 15s
+      //     TTL means cold loads AFTER the first cached response are edge
+      //     hits — note there is NO single-flight/stampede protection, so
+      //     truly simultaneous first-misses still all reach the origin);
+      //   - steady-state 30s slide (gap starts mid-chunk) → request just
+      //     the uncovered sliver, exactly as before (unique URL, tiny
+      //     Supabase range scan — refetching the whole growing chunk every
+      //     slide would be megabytes for nothing).
+      // Settled chunks always request the FULL aligned span even when only
+      // part is uncovered — the overlap is harmless (historicalRef dedupes
+      // by column t; coverage tracking is unchanged) and URL identity is
+      // the entire point.
+      const SETTLED_AGE_MS = 10 * 60_000; // matches the server's isFullyHistorical margin
+      const settledBefore = now - SETTLED_AGE_MS;
       // Newest-first: the visible window hugs 'to', so the most recent chunk paints immediately; older chunks backfill.
       for (const gap of [...gaps].reverse()) {
         let cursor = gap.to;
         while (cursor > gap.from) {
-          const chunkFrom = Math.max(cursor - span, gap.from);
-          const url = `/api/crypto/depth-slices?symbol=${sym}&from=${chunkFrom}&to=${cursor}&res=${res}`;
+          const chunkStart = Math.floor((cursor - 1) / span) * span;
+          const chunkEnd = chunkStart + span;
+          const wantAligned = chunkEnd <= settledBefore || gap.from <= chunkStart;
+          const fetchFrom = wantAligned ? chunkStart : Math.max(gap.from, chunkStart);
+          const fetchTo = wantAligned ? chunkEnd : cursor;
+          const url = `/api/crypto/depth-slices?symbol=${sym}&from=${fetchFrom}&to=${fetchTo}&res=${res}`;
 
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -592,7 +622,7 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
           } finally {
             clearTimeout(timeoutId);
           }
-          cursor = chunkFrom;
+          cursor = chunkStart;
         }
       }
     }
