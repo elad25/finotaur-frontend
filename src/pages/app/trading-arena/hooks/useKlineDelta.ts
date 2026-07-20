@@ -1,10 +1,12 @@
 /**
  * Trading Arena — shared kline-delta data hook
  *
- * Extracted from CvdTab.tsx (Phase 3): fetches Binance klines, reads
- * taker-buy volume (index 9), and derives per-bar delta + cumulative CVD.
- * Both CvdTab (full-page CVD view) and ChartTab's compact CVD/Delta
- * sub-panes consume this hook — one fetch/compute path, no duplicated logic.
+ * Originally extracted from the now-removed standalone CvdTab.tsx (Phase 3):
+ * fetches Binance klines, reads taker-buy volume (index 9), and derives
+ * per-bar delta + cumulative CVD. CVD/Delta are now first-class Arena
+ * indicators (see components/indicatorsSettings.ts) rather than a
+ * standalone tab or sub-pane — ChartTab.tsx's CVD/DELTA indicator overlay
+ * is this hook's sole consumer today.
  *
  *   per-bar delta  = takerBuyVolume − takerSellVolume
  *                  = 2 × takerBuyVolume − totalVolume
@@ -183,9 +185,7 @@ function computeCvdSeries(bars: KlineBar[]): { cvd: CvdPoint[]; delta: DeltaPoin
  * `enabled` (default `true`, added for ChartTab.tsx's CVD/DELTA indicator
  * gate) lets a caller mount this hook unconditionally (rules of hooks) while
  * skipping the fetch/refresh effect entirely when the data isn't needed —
- * e.g. no CVD/DELTA indicator active, or a non-crypto symbol. Every existing
- * caller (CvdTab.tsx, CvdDeltaSubPanes.tsx) omits this param and is
- * byte-for-byte unaffected.
+ * e.g. no CVD/DELTA indicator active, or a non-crypto symbol.
  */
 export function useKlineDelta(symbol: string, interval: Interval, enabled: boolean = true): UseKlineDeltaResult {
   const [cvd, setCvd] = useState<CvdPoint[]>([]);

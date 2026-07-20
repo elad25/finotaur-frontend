@@ -2,20 +2,18 @@
  * arenaViewState — cross-view "synced price scale" store (ATAS-parity).
  *
  * When the user pans/zooms one Trading Arena chart view (Chart / Footprint /
- * Liquidity / CVD) and switches to another for the SAME
+ * Liquidity) and switches to another for the SAME
  * `${assetClass}|${symbol}|${interval}`, the new view should open on the
  * same time window and price window instead of resetting to fitContent()
  * or a fresh rolling window. This module is the plain (no-React) keyed
  * store every view reads/writes — see FinotaurChart.tsx's `viewSyncKey`
- * prop doc comment for how the Chart/Footprint/Liquidity tabs wire it, and
- * CvdTab.tsx for how the CVD pane (which doesn't use FinotaurChart) wires
- * it directly.
+ * prop doc comment for how the Chart/Footprint/Liquidity tabs wire it.
  *
- * Deliberately NOT a React hook: multiple FinotaurChart instances and
- * CvdTab's raw lightweight-charts panes all need to read/write the SAME
- * entry without being mounted at the same time or sharing a React tree —
- * a plain keyed map (mirroring useLiquidityPreferences.ts / useDomPreferences.ts's
- * lazy-read / write-through / corrupt-JSON-safe convention, but backed by
+ * Deliberately NOT a React hook: multiple FinotaurChart instances all need
+ * to read/write the SAME entry without being mounted at the same time or
+ * sharing a React tree — a plain keyed map (mirroring
+ * useLiquidityPreferences.ts / useDomPreferences.ts's lazy-read /
+ * write-through / corrupt-JSON-safe convention, but backed by
  * sessionStorage instead of localStorage) is the simplest correct shape.
  *
  * sessionStorage (not localStorage): a saved view should survive a reload

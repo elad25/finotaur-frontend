@@ -93,8 +93,6 @@ export function sanitizeFootprintSettings(raw: unknown, fallback: FootprintSetti
     rowSizeValue: asNullableNumber(p.rowSizeValue, fallback.rowSizeValue),
     autoTransform: asBool(p.autoTransform, fallback.autoTransform),
     autoTransformMinPx: asNumber(p.autoTransformMinPx, fallback.autoTransformMinPx),
-    showCvd: asBool(p.showCvd, fallback.showCvd),
-    showDelta: asBool(p.showDelta, fallback.showDelta),
     showVolumeProfile: asBool(p.showVolumeProfile, fallback.showVolumeProfile),
     showPoc: asBool(p.showPoc, fallback.showPoc),
     showValueArea: asBool(p.showValueArea, fallback.showValueArea),

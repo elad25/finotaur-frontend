@@ -78,10 +78,9 @@ import {
 import { useFootprintPreferences } from '../hooks/useFootprintPreferences';
 import { useChartStylePreferences } from '../hooks/useChartStylePreferences';
 import { buildViewSyncKey } from '../hooks/arenaViewState';
-import { DEFAULT_FOOTPRINT_SETTINGS, footprintSettingsToConfig, resolveEffectiveRowSize, type FootprintSettings } from '../components/footprintSettings';
+import { DEFAULT_FOOTPRINT_SETTINGS, footprintSettingsToConfig, resolveEffectiveRowSize } from '../components/footprintSettings';
 import { FootprintSettingsDialog } from '../components/FootprintSettingsDialog';
 import type { ChartStyleSettings } from '../components/chartStyleSettings';
-import { CvdSubPane, DeltaSubPane } from '../components/CvdDeltaSubPanes';
 import { TickDataRequiredState } from '../components/TickDataRequiredState';
 import { Nt8ConnectPanel } from '../components/Nt8ConnectPanel';
 import { cn } from '@/lib/utils';
@@ -114,7 +113,7 @@ interface FootprintTabProps {
 const INITIAL_VISIBLE_BARS = 20;
 // View-sync bounded-restore bound (viewSyncRestoreMaxBars — see
 // FinotaurChart's prop doc comment) for the crypto footprint body only:
-// lets a fresh sync window from Chart/CVD win over this tab's own
+// lets a fresh sync window from the Chart tab win over this tab's own
 // legibility-driven focusRange on the INITIAL mount, but only up to ~120
 // bars — wider than that and footprint cells would render too narrow to
 // read (same rationale as INITIAL_VISIBLE_BARS above, just a looser cap
@@ -247,10 +246,9 @@ const binanceSource = new BinanceSource();
 // FlowBinStore instance each body already uses for its footprint/volume-
 // profile overlays — source-agnostic (crypto AND futures, unlike
 // useKlineDelta which is Binance-klines-only), no extra network call.
-// Mirrors CvdDeltaSubPanes.tsx's useStoreDelta store-subscription pattern
-// (onChange + a steady poll heartbeat), just returns ONE combined
-// {time,cvd,delta}[] array (FinotaurChart's `orderFlowData` shape) instead
-// of two separate cvd/delta arrays.
+// Uses an onChange + steady poll heartbeat subscription pattern, returning
+// ONE combined {time,cvd,delta}[] array (FinotaurChart's `orderFlowData`
+// shape).
 const ORDER_FLOW_WINDOW_SEC = 60 * 60 * 24; // 24h — generous, cheap (getRange scans a sorted array by key).
 const ORDER_FLOW_POLL_MS = 1_000; // ~1s recompute cadence.
 
@@ -292,8 +290,7 @@ function useFootprintOrderFlowData(
   }, [store, enabled]);
 
   // `tick` only keeps the memo dependency honest (data itself lives in the
-  // ref, mutated by `recompute` above) — same idiom as useStoreDelta in
-  // CvdDeltaSubPanes.tsx.
+  // ref, mutated by `recompute` above).
   return useMemo(
     () => (enabled && store ? dataRef.current : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,11 +518,6 @@ interface CryptoFootprintBodyProps {
   viewSyncKey: string;
 }
 
-// Binance klines used by useKlineDelta (CVD/Delta sub-panes) only understand
-// a small fixed set of native intervals — custom/aggregated timeframes hide
-// those sub-panes rather than erroring (mirrors ChartTab.tsx's gating).
-const KLINE_DELTA_NATIVE: Interval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
-
 function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChartStyleChange, onChartStyleReset, viewSyncKey }: CryptoFootprintBodyProps) {
   // resolveTradeSource('crypto', ...) never returns null (see its doc
   // comment) — the isAdmin opt is only consulted on the 'futures' branch.
@@ -586,16 +578,13 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
   // Native-vs-aggregate resolution for the candlestick series (see
   // utils/intervals.ts) — arbitrary custom timeframes the resolved source
   // can't serve directly are wrapped in AggregatingSource.
-  const { candleDataSource, candleInterval, klineDeltaInterval } = useMemo(() => {
+  const { candleDataSource, candleInterval } = useMemo(() => {
     const plan = resolveIntervalPlan('binance', interval);
     const resolvedSource = plan.kind === 'native'
       ? binanceSource
       : new AggregatingSource(binanceSource, plan.targetSeconds, plan.baseInterval);
     const resolvedInterval = plan.kind === 'native' ? plan.interval : plan.baseInterval;
-    const klineInterval = plan.kind === 'native' && KLINE_DELTA_NATIVE.includes(plan.interval)
-      ? plan.interval
-      : null;
-    return { candleDataSource: resolvedSource, candleInterval: resolvedInterval, klineDeltaInterval: klineInterval };
+    return { candleDataSource: resolvedSource, candleInterval: resolvedInterval };
   }, [interval]);
 
   // Row size: auto-suggested from the loaded window's average PER-BAR
@@ -681,8 +670,6 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
     setTimeFitToken((t) => t + 1);
   }, [backfillCoveredFromSec, to, intervalSec]);
 
-  const showSubPanes = klineDeltaInterval !== null && (settings.showCvd || settings.showDelta);
-
   // Candle dimming: this tab's footprint is always forceFullDetail (cells
   // are permanently visible, see file header) — the thin OHLC skeleton stays
   // on for as long as the footprint pane is mounted, same mechanism
@@ -755,17 +742,6 @@ function CryptoFootprintBody({ symbol, interval, indicators, chartStyle, onChart
               orderFlowData={orderFlowData}
             />
           </div>
-
-          {showSubPanes && klineDeltaInterval && (
-            <div className="flex-shrink-0 flex flex-col">
-              {settings.showCvd && (
-                <CvdSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={!settings.showDelta} />
-              )}
-              {settings.showDelta && (
-                <DeltaSubPane symbol={symbol} interval={klineDeltaInterval} showTimeAxis={true} />
-              )}
-            </div>
-          )}
         </div>
 
         <ResizablePaperRail>
@@ -1118,12 +1094,6 @@ function FuturesFootprintBody({ interval, root, onRootChange, indicators, isAdmi
           />
         </ResizablePaperRail>
       </div>
-
-      {/* CVD/Delta sub-panes: SKIPPED for futures, same as FuturesChartTab.tsx —
-          useKlineDelta is Binance-klines-only; TODO(futures-v2): Databento-native.
-          The CVD/Delta toggles remain reachable via the Footprint Settings
-          dialog's Panels section for parity with the crypto body, even
-          though they're inert here. */}
     </div>
   );
 }

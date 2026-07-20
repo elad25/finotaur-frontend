@@ -420,7 +420,7 @@ export function ChartTab({
 
   // ATAS-parity "synced price scale" (arenaViewState.ts) — keyed by
   // assetClass|symbol|interval so this tab agrees with FootprintTab/
-  // LiquidityTab/CvdTab on the same underlying symbol+interval selection.
+  // LiquidityTab on the same underlying symbol+interval selection.
   const viewSyncKey = useMemo(
     () => buildViewSyncKey(assetClass, symbol, interval),
     [assetClass, symbol, interval],
