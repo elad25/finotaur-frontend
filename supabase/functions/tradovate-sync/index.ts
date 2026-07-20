@@ -1576,18 +1576,46 @@ async function syncCredential(cred: {
   // ─── Step L7c (2026-07-20): broker-truth position reconcile ────────────────
   // The journal must always converge to the broker. Phantom-OPEN rows appear
   // when a user deletes a synced sibling row that had consumed close fills
-  // (incident 2026-07-20: 5 rows stuck OPEN with open_quantity=1 while the
-  // broker was flat, and the tombstone blocked any re-import path). For every
-  // discovered account with a journal-open position row, compare against
-  // Tradovate's REAL net position (/position/list):
-  //   • broker open >= journal open → journal is right, do nothing.
+  // (incident 2026-07-20: 5 rows stuck OPEN while the broker was flat, and the
+  // tombstone blocked any re-import path). Targets come from BOTH sources:
+  //   (a) tradovate_position_state rows with open_quantity > 0, and
+  //   (b) OPEN tradovate trade rows attributed to a discovered account via
+  //       portfolio_id that have NO state row at all (a prior partial heal or
+  //       manual deletion can strand a trade stateless — it must not become
+  //       invisible to reconciliation).
+  // For each target, compare with Tradovate's REAL net position (/position/list):
+  //   • broker open >= journal open → journal is right; recreate a missing
+  //     state row so future close fills can pair, otherwise do nothing.
   //   • broker open <  journal open → re-fetch the account's fills cursor-free,
-  //     find close-side fills not yet recorded on ANY surviving trade row, and
+  //     find close-side fills not recorded on ANY surviving trade row, and
   //     apply the latest ones as exit legs at their TRUE prices — closing (or
   //     shrinking) the journal row. exit_reason='broker_flat_reconciled'.
-  //   • state row pointing at a deleted trade → drop the dangling state.
+  // Every write checks its error; a failed trade update NEVER deletes state.
   // Fully isolated: any failure logs and never breaks the fills sync.
   try {
+    const reconCrumb = async (endpoint: string, payload: Record<string, unknown>) => {
+      try {
+        await supabaseAdmin.from('tradovate_api_call_log').insert({
+          endpoint,
+          http_status:   0,
+          user_id:       cred.user_id,
+          connection_id: cred.id,
+          label:         JSON.stringify(payload).slice(0, 900),
+        });
+      } catch { /* observability only */ }
+    };
+
+    type ReconTarget = {
+      accountId: number;
+      symbol:    string;
+      side:      'LONG' | 'SHORT';
+      openQty:   number;
+      tradeId:   string;
+      stateId:   string | null;
+    };
+    const targets: ReconTarget[] = [];
+    const coveredTradeIds = new Set<string>();
+
     const { data: openStates } = await supabaseAdmin
       .from('tradovate_position_state')
       .select('id, tradovate_account_id, symbol, side, open_quantity, open_trade_id')
@@ -1595,19 +1623,70 @@ async function syncCredential(cred: {
       .in('tradovate_account_id', discoveredAccountIds)
       .gt('open_quantity', 0);
 
-    await supabaseAdmin.from('tradovate_api_call_log').insert({
-      endpoint:      'recon:entry',
-      http_status:   0,
-      user_id:       cred.user_id,
-      connection_id: cred.id,
-      label:         JSON.stringify({
-        open_states:    openStates?.length ?? -1,
-        discovered:     discoveredAccountIds.length,
-        discovered_ids: discoveredAccountIds.slice(0, 12),
-      }).slice(0, 900),
+    for (const st of (openStates ?? []) as Array<{
+      id: string; tradovate_account_id: number; symbol: string;
+      side: string; open_quantity: number; open_trade_id: string | null;
+    }>) {
+      if (st.side !== 'LONG' && st.side !== 'SHORT') continue;
+      if (!st.open_trade_id) {
+        await supabaseAdmin.from('tradovate_position_state').delete().eq('id', st.id);
+        continue;
+      }
+      coveredTradeIds.add(st.open_trade_id);
+      targets.push({
+        accountId: Number(st.tradovate_account_id),
+        symbol:    st.symbol,
+        side:      st.side,
+        openQty:   Number(st.open_quantity),
+        tradeId:   st.open_trade_id,
+        stateId:   st.id,
+      });
+    }
+
+    // (b) stateless OPEN trades — attribute via portfolio_id → accountId.
+    const accountByPortfolio = new Map<string, number>();
+    for (const [acctId, pfId] of portfolioMap.entries()) {
+      if (pfId) accountByPortfolio.set(pfId, acctId);
+    }
+    if (accountByPortfolio.size > 0) {
+      const { data: statelessOpen } = await supabaseAdmin
+        .from('trades')
+        .select('id, symbol, side, quantity, partial_exits, portfolio_id')
+        .eq('user_id', cred.user_id)
+        .eq('broker', 'tradovate')
+        .is('close_at', null)
+        .in('portfolio_id', Array.from(accountByPortfolio.keys()));
+      for (const t of (statelessOpen ?? []) as Array<{
+        id: string; symbol: string; side: string; quantity: number;
+        partial_exits: Array<{ quantity?: number }> | null; portfolio_id: string;
+      }>) {
+        if (coveredTradeIds.has(t.id)) continue;
+        if (t.side !== 'LONG' && t.side !== 'SHORT') continue;
+        const acctId = accountByPortfolio.get(t.portfolio_id);
+        if (acctId === undefined) continue;
+        const exitedQty = (t.partial_exits ?? []).reduce(
+          (sum, e) => sum + Number(e?.quantity ?? 0), 0,
+        );
+        const remaining = Number(t.quantity) - exitedQty;
+        if (remaining <= 0) continue; // fully exited, just not finalized — leave to close path
+        targets.push({
+          accountId: acctId,
+          symbol:    t.symbol,
+          side:      t.side,
+          openQty:   remaining,
+          tradeId:   t.id,
+          stateId:   null,
+        });
+      }
+    }
+
+    await reconCrumb('recon:entry', {
+      state_targets:     (openStates ?? []).length,
+      stateless_targets: targets.filter(t => t.stateId === null).length,
+      discovered:        discoveredAccountIds.length,
     });
 
-    if (openStates && openStates.length > 0) {
+    if (targets.length > 0) {
       // One /position/list per credential. OAuth prop-firm tokens may need the
       // ?userId=<jwt sub> variant (mirrors the /account/list discovery quirk);
       // union both result sets by position id.
@@ -1649,58 +1728,46 @@ async function syncCredential(cred: {
         netByAccountSymbol.set(`${p.accountId}::${posSym}`, p.netPos);
       }
 
-      // Always-on summary so a silent skip is distinguishable from a silent
-      // failure in production logs (positions seen vs states checked vs healed).
-      console.log(JSON.stringify({
-        event:            'broker_truth_reconcile_scan',
-        connection_id:    cred.id,
-        open_states:      openStates.length,
-        broker_positions: Array.from(netByAccountSymbol.entries()).map(([k, v]) => `${k}=${v}`),
-      }));
-      // DB breadcrumb (console output is not queryable from MCP tooling).
-      await supabaseAdmin.from('tradovate_api_call_log').insert({
-        endpoint:      'recon:scan',
-        http_status:   0,
-        user_id:       cred.user_id,
-        connection_id: cred.id,
-        label:         JSON.stringify({
-          open_states: openStates.length,
-          positions:   Array.from(netByAccountSymbol.entries()).map(([k, v]) => `${k}=${v}`),
-        }).slice(0, 900),
-      });
-
       // Cursor-free fill history — fetched lazily, at most once per credential,
-      // only when some state row actually needs healing.
+      // only when some target actually needs healing.
       let fullFillHistory: TradovateFill[] | null = null;
 
-      for (const st of openStates as Array<{
-        id: string; tradovate_account_id: number; symbol: string;
-        side: string; open_quantity: number; open_trade_id: string | null;
-      }>) {
-        const stAcct = Number(st.tradovate_account_id);
-        const brokerNet = netByAccountSymbol.get(`${stAcct}::${st.symbol}`) ?? 0;
-        const brokerOpenForSide = st.side === 'SHORT'
+      for (const tgt of targets) {
+        const brokerNet = netByAccountSymbol.get(`${tgt.accountId}::${tgt.symbol}`) ?? 0;
+        const brokerOpenForSide = tgt.side === 'SHORT'
           ? Math.max(0, -brokerNet)
           : Math.max(0, brokerNet);
-        if (brokerOpenForSide >= Number(st.open_quantity)) continue; // journal ⊆ broker
 
-        // Journal claims more open than the broker → heal.
-        if (!st.open_trade_id) {
-          await supabaseAdmin.from('tradovate_position_state').delete().eq('id', st.id);
+        if (brokerOpenForSide >= tgt.openQty) {
+          // Journal ⊆ broker. If the trade is stateless, recreate the state row
+          // so future close fills can pair against it again.
+          if (tgt.stateId === null) {
+            await supabaseAdmin.from('tradovate_position_state').upsert({
+              user_id:              cred.user_id,
+              tradovate_account_id: tgt.accountId,
+              symbol:               tgt.symbol,
+              side:                 tgt.side,
+              open_quantity:        tgt.openQty,
+              avg_entry_price:      null,
+              open_trade_id:        tgt.tradeId,
+              last_updated_at:      new Date().toISOString(),
+            }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
+            await reconCrumb('recon:state-recreated', { trade_id: tgt.tradeId, account_id: tgt.accountId });
+          }
           continue;
         }
+
+        // Journal claims more open than the broker → heal with real exit fills.
         const { data: phantomTrade } = await supabaseAdmin
           .from('trades')
           .select('id, quantity, partial_exits, open_at, side')
-          .eq('id', st.open_trade_id)
+          .eq('id', tgt.tradeId)
           .maybeSingle();
         if (!phantomTrade) {
-          // State points at a deleted trade — dangling, drop it.
-          await supabaseAdmin.from('tradovate_position_state').delete().eq('id', st.id);
-          console.log(JSON.stringify({
-            event: 'reconcile_dangling_state_dropped',
-            state_id: st.id, account_id: stAcct, symbol: st.symbol,
-          }));
+          if (tgt.stateId !== null) {
+            await supabaseAdmin.from('tradovate_position_state').delete().eq('id', tgt.stateId);
+          }
+          await reconCrumb('recon:dangling-dropped', { trade_id: tgt.tradeId, account_id: tgt.accountId });
           continue;
         }
 
@@ -1712,14 +1779,14 @@ async function syncCredential(cred: {
         // Exclusion set: every fill id already recorded on ANY surviving trade
         // row of this user+symbol (entries, exits, and the row-creating fill).
         // Over-exclusion is safe — worst case we find nothing and leave the row
-        // open with a log, never a wrong close.
+        // open with a crumb, never a wrong close.
         const consumedFillIds = new Set<number>();
         const { data: siblingRows } = await supabaseAdmin
           .from('trades')
           .select('external_id, partial_entries, partial_exits')
           .eq('user_id', cred.user_id)
           .eq('broker', 'tradovate')
-          .eq('symbol', st.symbol);
+          .eq('symbol', tgt.symbol);
         for (const sib of (siblingRows ?? []) as Array<{
           external_id: string | null;
           partial_entries: Array<{ fill_id?: number }> | null;
@@ -1735,11 +1802,11 @@ async function syncCredential(cred: {
           }
         }
 
-        const closeAction: 'Buy' | 'Sell' = st.side === 'SHORT' ? 'Buy' : 'Sell';
+        const closeAction: 'Buy' | 'Sell' = tgt.side === 'SHORT' ? 'Buy' : 'Sell';
         const candidates: TradovateFill[] = [];
         for (const f of fullFillHistory) {
           if (f.action !== closeAction) continue;
-          if ((orderMap.get(f.orderId) ?? accountIdNum) !== stAcct) continue;
+          if ((orderMap.get(f.orderId) ?? accountIdNum) !== tgt.accountId) continue;
           if (consumedFillIds.has(f.id)) continue;
           let fSym = reconSymbolByContract.get(f.contractId);
           if (fSym === undefined) {
@@ -1748,12 +1815,12 @@ async function syncCredential(cred: {
             } catch { fSym = ''; }
             reconSymbolByContract.set(f.contractId, fSym);
           }
-          if (fSym === st.symbol) candidates.push(f);
+          if (fSym === tgt.symbol) candidates.push(f);
         }
 
         // Walk the LATEST unconsumed close fills first (the actual flattening
         // fills) and take legs until the excess open quantity is covered.
-        let excess = Number(st.open_quantity) - brokerOpenForSide;
+        let excess = tgt.openQty - brokerOpenForSide;
         const healedLegs: Array<Record<string, unknown>> = [];
         for (let ci = candidates.length - 1; ci >= 0 && excess > 0; ci--) {
           const f = candidates[ci];
@@ -1770,11 +1837,11 @@ async function syncCredential(cred: {
         }
 
         if (healedLegs.length === 0) {
-          console.warn(JSON.stringify({
-            event: 'reconcile_no_exit_fills_found',
-            trade_id: st.open_trade_id, account_id: stAcct, symbol: st.symbol,
-            journal_open: st.open_quantity, broker_open: brokerOpenForSide,
-          }));
+          await reconCrumb('recon:no-exit-fills', {
+            trade_id: tgt.tradeId, account_id: tgt.accountId,
+            journal_open: tgt.openQty, broker_open: brokerOpenForSide,
+            candidates: candidates.length,
+          });
           continue;
         }
         healedLegs.reverse(); // chronological order for the stored JSONB
@@ -1786,14 +1853,35 @@ async function syncCredential(cred: {
 
         if (brokerOpenForSide > 0 || excess > 0) {
           // Partial heal (or shortfall) — shrink the open quantity, keep OPEN.
-          await supabaseAdmin
+          const { error: partialHealErr } = await supabaseAdmin
             .from('trades')
             .update({ partial_exits: mergedExits })
-            .eq('id', st.open_trade_id);
-          await supabaseAdmin
-            .from('tradovate_position_state')
-            .update({ open_quantity: brokerOpenForSide + excess, last_updated_at: new Date().toISOString() })
-            .eq('id', st.id);
+            .eq('id', tgt.tradeId);
+          if (partialHealErr) {
+            await reconCrumb('recon:heal-update-error', {
+              trade_id: tgt.tradeId, phase: 'partial',
+              code: partialHealErr.code ?? null, msg: partialHealErr.message ?? null,
+            });
+            continue; // do NOT touch state when the trade write failed
+          }
+          const remainingOpen = brokerOpenForSide + excess;
+          if (tgt.stateId !== null) {
+            await supabaseAdmin
+              .from('tradovate_position_state')
+              .update({ open_quantity: remainingOpen, last_updated_at: new Date().toISOString() })
+              .eq('id', tgt.stateId);
+          } else {
+            await supabaseAdmin.from('tradovate_position_state').upsert({
+              user_id:              cred.user_id,
+              tradovate_account_id: tgt.accountId,
+              symbol:               tgt.symbol,
+              side:                 tgt.side,
+              open_quantity:        remainingOpen,
+              avg_entry_price:      null,
+              open_trade_id:        tgt.tradeId,
+              last_updated_at:      new Date().toISOString(),
+            }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
+          }
         } else {
           // Full heal — broker is flat: close at the weighted-avg of ALL exit
           // legs (real fill prices; pnl/outcome computed by the DB trigger).
@@ -1810,7 +1898,7 @@ async function syncCredential(cred: {
               ) / totalExitQty
             : null;
           const lastLegTs = String(healedLegs[healedLegs.length - 1].timestamp ?? new Date().toISOString());
-          await supabaseAdmin
+          const { error: fullHealErr } = await supabaseAdmin
             .from('trades')
             .update({
               exit_price:    weightedAvgExit,
@@ -1818,31 +1906,34 @@ async function syncCredential(cred: {
               partial_exits: mergedExits,
               exit_reason:   'broker_flat_reconciled',
             })
-            .eq('id', st.open_trade_id);
-          await supabaseAdmin.from('tradovate_position_state').delete().eq('id', st.id);
+            .eq('id', tgt.tradeId);
+          if (fullHealErr) {
+            await reconCrumb('recon:heal-update-error', {
+              trade_id: tgt.tradeId, phase: 'full',
+              code: fullHealErr.code ?? null, msg: fullHealErr.message ?? null,
+            });
+            continue; // do NOT delete state when the trade write failed
+          }
+          if (tgt.stateId !== null) {
+            await supabaseAdmin.from('tradovate_position_state').delete().eq('id', tgt.stateId);
+          }
         }
 
         console.log(JSON.stringify({
           event:          'broker_truth_reconciled',
-          trade_id:       st.open_trade_id,
-          account_id:     stAcct,
-          symbol:         st.symbol,
-          journal_open:   st.open_quantity,
+          trade_id:       tgt.tradeId,
+          account_id:     tgt.accountId,
+          symbol:         tgt.symbol,
+          journal_open:   tgt.openQty,
           broker_open:    brokerOpenForSide,
           healed_legs:    healedLegs.length,
           shortfall_qty:  excess,
           fully_closed:   brokerOpenForSide === 0 && excess === 0,
         }));
-        await supabaseAdmin.from('tradovate_api_call_log').insert({
-          endpoint:      'recon:heal',
-          http_status:   0,
-          user_id:       cred.user_id,
-          connection_id: cred.id,
-          label:         JSON.stringify({
-            trade_id: st.open_trade_id, account_id: stAcct,
-            journal_open: st.open_quantity, broker_open: brokerOpenForSide,
-            healed_legs: healedLegs.length, shortfall: excess,
-          }).slice(0, 900),
+        await reconCrumb('recon:heal', {
+          trade_id: tgt.tradeId, account_id: tgt.accountId,
+          journal_open: tgt.openQty, broker_open: brokerOpenForSide,
+          healed_legs: healedLegs.length, shortfall: excess,
         });
       }
     }
