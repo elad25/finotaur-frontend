@@ -1595,6 +1595,18 @@ async function syncCredential(cred: {
       .in('tradovate_account_id', discoveredAccountIds)
       .gt('open_quantity', 0);
 
+    await supabaseAdmin.from('tradovate_api_call_log').insert({
+      endpoint:      'recon:entry',
+      http_status:   0,
+      user_id:       cred.user_id,
+      connection_id: cred.id,
+      label:         JSON.stringify({
+        open_states:    openStates?.length ?? -1,
+        discovered:     discoveredAccountIds.length,
+        discovered_ids: discoveredAccountIds.slice(0, 12),
+      }).slice(0, 900),
+    });
+
     if (openStates && openStates.length > 0) {
       // One /position/list per credential. OAuth prop-firm tokens may need the
       // ?userId=<jwt sub> variant (mirrors the /account/list discovery quirk);
@@ -1648,6 +1660,7 @@ async function syncCredential(cred: {
       // DB breadcrumb (console output is not queryable from MCP tooling).
       await supabaseAdmin.from('tradovate_api_call_log').insert({
         endpoint:      'recon:scan',
+        http_status:   0,
         user_id:       cred.user_id,
         connection_id: cred.id,
         label:         JSON.stringify({
@@ -1822,6 +1835,7 @@ async function syncCredential(cred: {
         }));
         await supabaseAdmin.from('tradovate_api_call_log').insert({
           endpoint:      'recon:heal',
+          http_status:   0,
           user_id:       cred.user_id,
           connection_id: cred.id,
           label:         JSON.stringify({
@@ -1837,6 +1851,7 @@ async function syncCredential(cred: {
     try {
       await supabaseAdmin.from('tradovate_api_call_log').insert({
         endpoint:      'recon:error',
+        http_status:   0,
         user_id:       cred.user_id,
         connection_id: cred.id,
         error_msg:     String(reconcileErr).slice(0, 900),
