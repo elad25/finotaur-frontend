@@ -31,6 +31,7 @@ import {
   pruneDepthHistory,
   saveDepthHistory,
 } from '@/pages/app/trading-arena/hooks/depthHistoryStore';
+import { dustCutoffUsd } from '@/components/charting/depthSignificance';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,16 @@ export interface DepthSlicesOptions {
   candleIntervalMs: number;
   /** Stable accessor to the current live order book */
   getBook: () => { bids: Map<number, number>; asks: Map<number, number> };
-  /** Floor filter: bins with decoded USD < floorUsd are treated as q=0 */
+  /**
+   * Optional caller-supplied absolute floor (USD) — combined with (i.e. takes
+   * whichever is stricter than) the technical dust cutoff that is ALWAYS
+   * applied regardless of this value (see dustCutoffUsd in
+   * depthSignificance.ts). Default 0: with no caller floor, bins are dropped
+   * ONLY when they're below the dust cutoff — i.e. (almost) the whole book is
+   * kept. MarketScanner.tsx still passes its own absolute floor pill value
+   * here for its own (out-of-scope) coarser filtering needs; LiquidityTab.tsx
+   * no longer passes this at all (Phase 1 — manual thresholds removed).
+   */
   floorUsd?: number;
   /** True when the connection is live (enables 5s live-edge appends) */
   isLive?: boolean;
@@ -93,9 +103,50 @@ function usdToQ(usd: number): number {
   return Math.round(Math.log1p(usd) * 1000);
 }
 
+// Safety cap on bins retained per side of a single column, applied AFTER
+// dust removal. A hyperactive/fragmented book can still leave thousands of
+// small-but-not-dust bins post-aggregation; capping to the top N by notional
+// bounds per-column payload/render cost without reintroducing a manual
+// visibility threshold (this is a computational bound, not a display filter
+// — see depthSignificance.ts's header comment for the same distinction).
+const MAX_BINS_PER_SIDE = 500;
+
+/**
+ * Drops bins below the combined [dust cutoff, caller floor] threshold and
+ * caps the result to MAX_BINS_PER_SIDE by notional (top-N). `floor` is the
+ * caller-supplied floorUsd (default 0 — see useDepthSlices' own floorUsd
+ * option doc): when 0, the effective cutoff is pure dust removal; a caller
+ * that still wants a coarser absolute floor (MarketScanner.tsx's own
+ * floor pills) keeps that behavior by taking whichever cutoff is higher.
+ */
+function applySignificanceCutoff(acc: Map<number, number>, floor: number): Array<[number, number]> {
+  const dustCutoff = dustCutoffUsd(Array.from(acc.values()));
+  const cutoff = Math.max(dustCutoff, floor);
+
+  let entries: Array<[number, number]> = [];
+  for (const entry of acc) {
+    if (entry[1] >= cutoff) entries.push(entry);
+  }
+
+  if (entries.length > MAX_BINS_PER_SIDE) {
+    entries.sort((a, b) => b[1] - a[1]);
+    entries = entries.slice(0, MAX_BINS_PER_SIDE);
+  }
+
+  return entries;
+}
+
 /**
  * Re-bucket a DecodedColumn whose binSize differs from the target dominant binSize.
  * Merges bins by SUM of decoded USD, then re-quantizes back to q.
+ *
+ * Bins are aggregated FIRST (all records, unconditionally), then the
+ * technical dust cutoff (dustCutoffUsd — 0.02% of this side's total
+ * notional, clamped to [$10, $2000]) is computed from the AGGREGATED bin
+ * totals and applied — see depthSignificance.ts. This replaces the old fixed
+ * $floorUsd bin-drop: the data now carries (almost) everything, and only
+ * literal computational noise is excluded before it ever reaches the
+ * renderer's continuous significance mapping (DepthMatrixLayer.tsx).
  */
 function rebucketColumn(col: DecodedColumn, targetBinSize: number, floorUsd: number): DecodedColumn {
   if (col.binSize === targetBinSize) return col;
@@ -104,12 +155,14 @@ function rebucketColumn(col: DecodedColumn, targetBinSize: number, floorUsd: num
     const acc = new Map<number, number>(); // binFloor(price, targetBinSize) → total USD
     for (const r of records) {
       const usd = qToUsd(r.q);
-      if (usd < floorUsd) continue;
       const bucket = binFloor(r.price, targetBinSize);
       acc.set(bucket, (acc.get(bucket) ?? 0) + usd);
     }
+
+    const entries = applySignificanceCutoff(acc, floorUsd);
+
     const out: BinRecord[] = [];
-    for (const [price, totalUsd] of acc) {
+    for (const [price, totalUsd] of entries) {
       const q = usdToQ(totalUsd);
       if (q > 0) out.push({ price, q });
     }
@@ -247,7 +300,7 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     barSpacingPx,
     candleIntervalMs,
     getBook,
-    floorUsd = 1_000,
+    floorUsd = 0,
     isLive = false,
   } = opts;
 
@@ -616,16 +669,20 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       // Round down to 5s boundary
       const slotMs = Math.floor(nowMs / 5_000) * 5_000;
 
+      // Dust cutoff + caller floor + top-N safety cap AFTER bin aggregation —
+      // matches rebucketColumn's applySignificanceCutoff semantics exactly,
+      // so a live-edge column and a rebucketed historical column apply the
+      // same significance rule.
+      const bidEntries = applySignificanceCutoff(bidBins, floorUsd);
       const bidRecords: BinRecord[] = [];
-      for (const [price, usd] of bidBins) {
-        if (usd < floorUsd) continue; // floor AFTER bin aggregation — matches rebucketColumn semantics
+      for (const [price, usd] of bidEntries) {
         const q = usdToQ(usd);
         if (q > 0) bidRecords.push({ price, q });
       }
 
+      const askEntries = applySignificanceCutoff(askBins, floorUsd);
       const askRecords: BinRecord[] = [];
-      for (const [price, usd] of askBins) {
-        if (usd < floorUsd) continue; // floor AFTER bin aggregation — matches rebucketColumn semantics
+      for (const [price, usd] of askEntries) {
         const q = usdToQ(usd);
         if (q > 0) askRecords.push({ price, q });
       }

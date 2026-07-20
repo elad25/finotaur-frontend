@@ -931,9 +931,28 @@ export interface FinotaurChartProps {
   depthMatrixColumns?: DecodedColumn[];
   /** Dominant bin size for the depth matrix grid (wallRenderMode='matrix' only). */
   depthMatrixBinSize?: number;
-  /** Relative size filter for the depth matrix (matrix mode). 0=All, 1|5|10|25 = ≥N% of p99 reference. Default: 5. */
-  depthMatrixSizeFilterPct?: 0 | 1 | 5 | 10 | 25;
-  /** Absolute notional floor USD — bins below treated as q=0 (matrix mode). */
+  /**
+   * Legacy MarketScanner.tsx-compat relative size filter (matrix mode only).
+   * Phase 1 "no manual thresholds" overhaul: LiquidityTab.tsx no longer
+   * passes this at all — the continuous soft-knee alpha (see
+   * depthSignificance.ts) is its only mapping. MarketScanner.tsx still
+   * passes its own "Size" toolbar value here; DepthMatrixLayer applies that
+   * as an ADDITIONAL legacy binary dimming cap on top of the new soft-knee
+   * alpha (see DepthMatrixLayer.tsx's sizeFilterPct prop doc comment), so
+   * MarketScanner's own filter keeps working exactly as before. Default
+   * `undefined` (not 0/5) so an absent prop is a true no-op for every other
+   * caller, including LiquidityTab.tsx.
+   */
+  depthMatrixSizeFilterPct?: number;
+  /**
+   * @deprecated Phase 1 "no manual thresholds" overhaul — DepthMatrixLayer no
+   * longer accepts a floor prop (dust-only removal now happens upstream at
+   * the sampling layer — see useDepthSlices.ts / depthSignificance.ts). Kept
+   * here ONLY so MarketScanner.tsx (out of scope for this phase) continues
+   * to compile unmodified; it is accepted but NOT forwarded to
+   * DepthMatrixLayer, so it is now a no-op. LiquidityTab.tsx no longer
+   * passes this at all.
+   */
   depthMatrixFloorUsd?: number;
   /** Current candle interval in ms — used to map column→px width (matrix mode). */
   depthMatrixCandleIntervalMs?: number;
@@ -1224,7 +1243,11 @@ export function FinotaurChart({
   wallRenderMode = 'series',
   depthMatrixColumns,
   depthMatrixBinSize = 1,
-  depthMatrixSizeFilterPct = 5,
+  // Default undefined (not 5) — un-deprecated, forwarded again below, but
+  // absent-by-default so LiquidityTab.tsx (which never passes this) gets a
+  // true no-op on DepthMatrixLayer's own default (0). See this prop's doc
+  // comment above and DepthMatrixLayer.tsx's sizeFilterPct prop.
+  depthMatrixSizeFilterPct,
   depthMatrixFloorUsd = 1_000,
   depthMatrixCandleIntervalMs = 60_000,
   depthMatrixPalette = 'classic',
@@ -2919,7 +2942,14 @@ export function FinotaurChart({
           z-index 6; the chart's layout.background is transparent — see
           buildChartOptions above — so this canvas genuinely shows through
           behind the candles instead of being painted over by them).
-          Mounted once chart + series are ready so coordinate APIs are available. */}
+          Mounted once chart + series are ready so coordinate APIs are available.
+          🔴 depthMatrixFloorUsd is intentionally NOT forwarded — DepthMatrixLayer
+          no longer accepts a floor prop (Phase 1 "no manual thresholds" overhaul:
+          dust-only removal happens upstream at the sampling layer for
+          MarketScanner too — its own floorUsd still reaches useDepthSlices
+          directly). depthMatrixSizeFilterPct IS forwarded (legacy
+          MarketScanner-compat, default undefined — see its doc comment above and
+          DepthMatrixLayer.tsx's sizeFilterPct prop). */}
       {wallRenderMode === 'matrix' &&
        chartRef.current && seriesRef.current &&
        barCount > 0 && (
@@ -2930,9 +2960,8 @@ export function FinotaurChart({
           binSize={depthMatrixBinSize}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
-          sizeFilterPct={depthMatrixSizeFilterPct}
-          floorUsd={depthMatrixFloorUsd}
           candleIntervalMs={depthMatrixCandleIntervalMs}
+          sizeFilterPct={depthMatrixSizeFilterPct}
           palette={depthMatrixPalette}
           smoothing={depthMatrixSmoothing}
         />

@@ -34,30 +34,29 @@
 // Color mapping (Bookmap-style continuous field — see BookmapChart.tsx's
 // compressIntensity/HEAT_GAMMA for the reference implementation this copies):
 //   vHi  = p99 of visible q values (NOT max — one iceberg must not flatten field)
+//   vLo  = p70 of visible q values — doubles as the soft noise KNEE (below).
 //   x    = min(1, usd / vHi)                         — linear, capped at 1
 //   t    = compressIntensity(x)
-//        = pow(log1p(x * 9) / log1p(9), 2.5)          — log spread + gamma darken
-//   palette index = round(t * 255)
-//   All painted cells are fully opaque (lut already encodes alpha 0xff) — no
-//   forced-alpha games; the matrix is now BEHIND the candles (see
-//   FinotaurChart.tsx's containerRef z-index 6 / transparent layout.background)
-//   so opacity tricks to "read through" candles are unnecessary.
+//        = pow(log1p(x * 9) / log1p(9), 1.6)          — log spread + gamma darken
+//   palette index = round(t * 255)                    — COLOR only.
 //   q===0 (no data in this bin) → transparent (index 0); the black wrapper
 //   background supplies the void, Bookmap-style.
 //
-// Floor filter + size filter are HIGHLIGHT thresholds, not visibility
-// switches (Bookmap-style dimming): a bin below floorUsd, or below the
-// sizeFilterPct cut, is still PAINTED — its intensity `t` is just clamped to
-// ≤0.10 so it renders as a faint near-black/bronze shadow (the palette's low
-// stops) instead of vanishing. This keeps the book's continuous shape intact
-// across time even where individual levels don't clear the highlight bar.
-//   Floor: a bin is "weak" if its decoded USD (= expm1(q/1000)) < floorUsd.
-//   Size filter (replaces the old sensitivity slider):
-//     sizeFilterPct: 0 (All) | 1 | 5 | 10 | 25 — percent of the p99 cell.
-//     Reference = vHi (the p99 USD value of the visible window).
-//     qCut = round(log1p(sizeFilterPct/100 * expm1(qP99/1000)) * 1000)
-//     With sizeFilterPct=0 (All): no additional dimming from this rule.
-//     With sizeFilterPct>0: bins below qCut are also dimmed to t≤0.10.
+// Significance mapping (Phase 1 "no manual thresholds" overhaul — see
+// depthSignificance.ts): there is no floor/size-filter prop anymore, and no
+// binary dimming cap. Technical dust (bins below a tiny % of a column's
+// total notional) is already removed upstream at the SAMPLING layer
+// (useDepthSlices.ts) — by the time columns reach this component, the data
+// is "(almost) everything". Instead of clamping weak cells to a flat
+// intensity ceiling, EVERY cell's alpha is a continuous function of its own
+// USD size:
+//   alpha = softKneeAlpha(usd, vLo)  — smoothstep from a faint minimum
+//     (0.18) at usd→0 up to fully opaque (1.0) at usd >= vLo (the p70 soft
+//     knee). `t` (color/intensity index) is UNCHANGED by this — only the
+//     pixel's own alpha byte is scaled, so faint cells still use the correct
+//     palette color, just blended lighter against whatever is behind this
+//     (transparent) canvas. This keeps the book's continuous shape intact
+//     across the whole visible range with no visible seam at any threshold.
 //
 // Palette + smoothing (Task S2 — ATAS/Bookmap restyle):
 //   The color LUT itself now lives in depthPalettes.ts (3 palettes: 'finotaur'
@@ -79,6 +78,7 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import { qToUsd } from '@/pages/app/crypto/scanner/useDepthSlices';
 import { getPaletteLUT, type DepthPaletteId } from './depthPalettes';
+import { softKneeAlpha } from './depthSignificance';
 
 // Normalized-intensity threshold (post-compression t ∈ [0,1]) above which a
 // cell is considered "hot" for the bloom pass.
@@ -223,17 +223,20 @@ export interface DepthMatrixLayerProps {
   width: number;
   /** Container CSS height in px */
   height: number;
-  /**
-   * Relative size filter: percent of the p99 (reference) cell.
-   * 0 = All (no size cut, current behavior).
-   * 1 | 5 | 10 | 25 = only bins whose decoded USD >= pct/100 * referenceUsd are shown.
-   * Default: 5.
-   */
-  sizeFilterPct?: 0 | 1 | 5 | 10 | 25;
-  /** Absolute notional floor in USD — bins below are treated as q=0 */
-  floorUsd?: number;
   /** Current candle interval in milliseconds — used to map column→px width */
   candleIntervalMs: number;
+  /**
+   * @deprecated legacy MarketScanner.tsx-compat ONLY — do not wire this up
+   * for any new caller. LiquidityTab.tsx never passes this (undefined/0 —
+   * the new continuous soft-knee alpha, see depthSignificance.ts, is the
+   * only mapping that runs). When MarketScanner.tsx passes a value > 0, an
+   * ADDITIONAL legacy binary dimming cap (bins below a relative-to-p99 qCut
+   * get their color intensity clamped, exactly like the old
+   * WEAK_CELL_T_CAP=0.10 behavior) is applied ON TOP of the new soft-knee
+   * alpha, so MarketScanner's own "Size" filter pills keep working exactly
+   * as before. Zero cost when undefined/0 — no legacy branch even evaluated.
+   */
+  sizeFilterPct?: number;
   /**
    * Color palette for the heatmap ramp — see depthPalettes.ts.
    * Default 'classic': the ORIGINAL navy→blue→cyan→yellow→white ramp,
@@ -261,9 +264,8 @@ export function DepthMatrixLayer({
   binSize,
   width,
   height,
-  sizeFilterPct = 5,
-  floorUsd = 1_000,
   candleIntervalMs,
+  sizeFilterPct = 0,
   palette = 'classic',
   smoothing = false,
 }: DepthMatrixLayerProps) {
@@ -291,9 +293,9 @@ export function DepthMatrixLayer({
   const binSizeRef         = useRef<number>(binSize);
   const widthRef           = useRef<number>(width);
   const heightRef          = useRef<number>(height);
-  const floorUsdRef        = useRef<number>(floorUsd);
-  const sizeFilterRef      = useRef<number>(sizeFilterPct);
   const candleIntervalRef  = useRef<number>(candleIntervalMs);
+  // Legacy MarketScanner-compat only — see the prop's @deprecated doc comment.
+  const sizeFilterRef      = useRef<number>(sizeFilterPct);
   const paletteRef         = useRef<DepthPaletteId>(palette);
   const smoothingRef       = useRef<boolean>(smoothing);
 
@@ -301,9 +303,8 @@ export function DepthMatrixLayer({
   binSizeRef.current        = binSize;
   widthRef.current          = width;
   heightRef.current         = height;
-  floorUsdRef.current       = floorUsd;
-  sizeFilterRef.current     = sizeFilterPct;
   candleIntervalRef.current = candleIntervalMs;
+  sizeFilterRef.current     = sizeFilterPct;
   paletteRef.current        = palette;
   smoothingRef.current      = smoothing;
 
@@ -313,27 +314,27 @@ export function DepthMatrixLayer({
     cols: DecodedColumn[],
     chart2: IChartApi,
     curBinSize: number,
-    floor: number,
   ) {
     // Only look at visible columns.
     const vis = chart2.timeScale().getVisibleRange();
     const fromSec = vis ? (vis.from as unknown as number) : -Infinity;
     const toSec   = vis ? (vis.to   as unknown as number) : Infinity;
 
-    // Compute floor q threshold
-    const floorQ = Math.round(Math.log1p(floor) * 1000);
-
-    // Collect all q values in the visible window for both sides.
+    // Collect all q values in the visible window for both sides. No floor
+    // exclusion here anymore — technical dust is already removed upstream
+    // at the sampling layer (useDepthSlices.ts), so norm stats (p99/p70) are
+    // now computed over the full (dust-free) book, not a floor-filtered
+    // subset. See depthSignificance.ts for the dust-cutoff / soft-knee split.
     const qList: number[] = [];
     for (const col of cols) {
       const colSec = col.t / 1000;
       if (colSec < fromSec - 120 || colSec > toSec + 120) continue; // ±2 min slack
       if (col.binSize !== curBinSize) continue; // rebucketed columns may differ temporarily
       for (const r of col.bids) {
-        if (r.q >= floorQ && r.q > 0) qList.push(r.q);
+        if (r.q > 0) qList.push(r.q);
       }
       for (const r of col.asks) {
-        if (r.q >= floorQ && r.q > 0) qList.push(r.q);
+        if (r.q > 0) qList.push(r.q);
       }
     }
 
@@ -346,9 +347,9 @@ export function DepthMatrixLayer({
     const arr = new Uint16Array(qList.length);
     for (let i = 0; i < qList.length; i++) arr[i] = Math.min(65535, qList[i]);
 
-    // vHi = p99 (clamp ice-bergs) — also used as the size-filter reference.
+    // vHi = p99 (clamp ice-bergs) — the color-intensity reference.
     const rawHi = percentile65536(arr, 0.99);
-    // vLo = fixed p70 (previously driven by slider; size filter is the new user control).
+    // vLo = p70 — doubles as the soft-knee alpha reference (see qToColor below).
     const rawLo = percentile65536(arr, 0.70);
 
     // Decode to USD for the threshold comparison (actual normalization is in q-space).
@@ -367,10 +368,11 @@ export function DepthMatrixLayer({
   function repaintOffscreen(
     cols: DecodedColumn[],
     curBinSize: number,
-    floor: number,
     vLo: number,
     vHi: number,
-    sizePct: number,   // 0 | 1 | 5 | 10 | 25 — percent of vHi reference
+    // Legacy MarketScanner-compat only (0 = LiquidityTab.tsx, the new pure
+    // mapping) — see the sizeFilterPct prop's @deprecated doc comment.
+    sizePct: number,
     chartInst: IChartApi,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     seriesInst: ISeriesApi<any>,
@@ -434,30 +436,33 @@ export function DepthMatrixLayer({
     const lut = getPaletteLUT(paletteId);
 
     const dVHi = vHi;
-
-    // Weak-cell dimming cap: floor/size-filter bins render at this intensity
-    // ceiling instead of vanishing (Bookmap-style faint shadow — see the
-    // module doc comment above).
-    const WEAK_CELL_T_CAP = 0.10;
-
-    // Size filter cut: qCut is the minimum q a bin must reach to render at
-    // full intensity when sizePct > 0. Reference = vHi (the p99 USD wall in
-    // the visible window). Bins below qCut are dimmed (see WEAK_CELL_T_CAP),
-    // not hidden.
-    // Formula: qCut = round(log1p(sizePct/100 * expm1(qP99/1000)) * 1000)
-    // where expm1(qP99/1000) = vHi (already decoded).
-    // With sizePct === 0 (All): qCut = 0 → no additional dimming.
-    const qCut = sizePct > 0
-      ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
-      : 0;
+    const dVLo = vLo;
 
     // Set by qToColor on its most recent call — read immediately afterward by
     // the fill loop (single-threaded, synchronous) to populate hotMask.
     // Avoids qToColor allocating a [color, hot] tuple on every cell.
     let lastCellWasHot = false;
 
+    // Legacy MarketScanner-compat cut — see sizeFilterPct's @deprecated doc
+    // comment. Reference = vHi (the p99 USD wall in the visible window),
+    // exactly the old formula. Computed ONCE per repaint (not per-cell) since
+    // it only depends on vHi/sizePct; qToColor just compares q < qCut below.
+    // sizePct === 0 (LiquidityTab.tsx, always) → qCut stays 0 → the branch in
+    // qToColor never fires (q < 0 is never true) — zero-cost no-op.
+    const legacyQCut = sizePct > 0
+      ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
+      : 0;
+    // Legacy binary dimming ceiling (identical value to the old
+    // WEAK_CELL_T_CAP) — ONLY reachable via the deprecated sizePct path.
+    const LEGACY_WEAK_CELL_T_CAP = 0.10;
+
     // Helper: map a q value to a canvas pixel color (Bookmap-style continuous
     // intensity field — see module doc comment above for the exact formula).
+    // Color (`t` / palette index) is driven by vHi, PLUS (legacy-only) the
+    // MarketScanner-compat binary cap below. Visibility is a CONTINUOUS
+    // per-cell alpha (softKneeAlpha, vLo as the soft knee) — see
+    // depthSignificance.ts and the module doc comment above — applied
+    // UNCONDITIONALLY, in addition to (not instead of) the legacy cap.
     function qToColor(q: number): number {
       lastCellWasHot = false;
       if (q === 0) return 0; // no data in this bin — transparent (the void)
@@ -468,22 +473,28 @@ export function DepthMatrixLayer({
       if (t > 1) t = 1;
       if (t < 0) t = 0;
 
-      // Floor + size filter are HIGHLIGHT thresholds, not visibility
-      // switches: weak cells are still painted, just dimmed to a faint
-      // near-black/bronze shadow instead of disappearing.
-      const belowFloor = usd < floor;
-      const belowSizeFilter = qCut > 0 && q < qCut;
-      if (belowFloor || belowSizeFilter) {
-        t = Math.min(t, WEAK_CELL_T_CAP);
+      // Legacy MarketScanner-compat ONLY (sizePct > 0 — LiquidityTab.tsx
+      // never triggers this): bins below the relative size cut render at
+      // the old flat intensity ceiling instead of their true continuous `t`
+      // — additive to (not a replacement for) the soft-knee alpha below.
+      if (legacyQCut > 0 && q < legacyQCut) {
+        t = Math.min(t, LEGACY_WEAK_CELL_T_CAP);
       }
 
       lastCellWasHot = t >= BLOOM_HOT_THRESHOLD;
 
       const idx = Math.min(255, Math.max(0, Math.round(t * 255)));
-      // lut already encodes full 0xff alpha at every stop — cells behind the
-      // candles (see FinotaurChart.tsx) don't need opacity games to read
-      // through, so the LUT color is used as-is.
-      return lut[idx];
+      // lut already encodes full 0xff alpha at every stop (color-only ramp);
+      // overwrite just the top (alpha) byte with the continuous soft-knee
+      // value. ImageData is stored/read as STRAIGHT (non-premultiplied)
+      // alpha per the Canvas spec, so scaling only the alpha byte — without
+      // touching R/G/B — is correct; putImageData below, and the later
+      // ctx.drawImage blit (default source-over compositing), both handle
+      // straight alpha normally. No globalAlpha or premultiplication needed.
+      const alpha = softKneeAlpha(usd, dVLo);
+      const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
+      const rgb = lut[idx];
+      return (rgb & 0x00ffffff) | (a << 24);
     }
 
     // Fill cells. Historical columns render the book exactly as it WAS at
@@ -617,8 +628,8 @@ export function DepthMatrixLayer({
         dirtyRef.current = false;
 
         // Recompute the percentile norm ONLY when the offscreen will actually be
-        // repainted (data/version/floor/filter change). Its output (vLo/vHi) is
-        // consumed solely by repaintOffscreen, which is needsRepaint-gated — so
+        // repainted (data/version change). Its output (vLo/vHi) is consumed
+        // solely by repaintOffscreen, which is needsRepaint-gated — so
         // recomputing it on pure pan frames (fingerprintChanged) was wasted work
         // (2x 65536-bin histogram allocations every frame). The per-frame re-blit
         // (affine mapping + drawImage) below is unchanged.
@@ -627,7 +638,6 @@ export function DepthMatrixLayer({
             columnsRef.current,
             chartInstance,
             binSizeRef.current,
-            floorUsdRef.current,
           );
         }
 
@@ -635,7 +645,6 @@ export function DepthMatrixLayer({
           repaintOffscreen(
             columnsRef.current,
             binSizeRef.current,
-            floorUsdRef.current,
             vLoRef.current,
             vHiRef.current,
             sizeFilterRef.current,
@@ -865,7 +874,7 @@ export function DepthMatrixLayer({
       offscreenVersionRef.current++;
       dirtyRef.current = true;
     });
-  }, [columns, binSize, sizeFilterPct, floorUsd, palette, smoothing]);
+  }, [columns, binSize, sizeFilterPct, palette, smoothing]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

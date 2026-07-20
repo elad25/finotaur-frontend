@@ -51,7 +51,7 @@ export interface LiveDepthColumnsOptions {
   isLive: boolean;
   /** price × qty × notionalMultiplier = the "notional" value fed into DepthMatrixLayer's qToUsd-based pipeline. Default 1 (raw price×qty). */
   notionalMultiplier?: number;
-  /** Bins whose notional falls below this are dropped. Default 0 (no floor — LiquidityTab applies its own floor via depthMatrixFloorUsd on the render side). */
+  /** Bins whose notional falls below this are dropped. Default 0 — the futures (NT8) path has no dust/floor filtering of its own (Phase 1 "no manual thresholds" overhaul only touched the crypto sampling path, useDepthSlices.ts); DepthMatrixLayer's render-side floor/size-filter props no longer exist at all. */
   floorUsd?: number;
   /**
    * Stable per-source persistence key (e.g. "nt8|NQ") — when provided, the

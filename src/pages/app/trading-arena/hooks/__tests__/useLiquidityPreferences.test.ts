@@ -49,32 +49,20 @@ describe('sanitizeLiquidityPreferences', () => {
     expect(sanitizeLiquidityPreferences(42)).toEqual(DEFAULT_LIQUIDITY_PREFERENCES);
   });
 
-  it('accepts floorMode "auto" and any non-negative finite number', () => {
-    expect(sanitizeLiquidityPreferences({ floorMode: 'auto' }).floorMode).toBe('auto');
-    expect(sanitizeLiquidityPreferences({ floorMode: 500_000 }).floorMode).toBe(500_000);
-    expect(sanitizeLiquidityPreferences({ floorMode: 0 }).floorMode).toBe(0);
+  it('ignores stale floorMode/sizeFilterPct fields from a pre-Phase-1 record (no migration, no crash)', () => {
+    const result = sanitizeLiquidityPreferences({ floorMode: 500_000, sizeFilterPct: 10, palette: 'thermal' });
+    expect(result).not.toHaveProperty('floorMode');
+    expect(result).not.toHaveProperty('sizeFilterPct');
+    expect(result.palette).toBe('thermal');
   });
 
-  it('rejects invalid floorMode values (negative, NaN, wrong type, unknown string) — falls back', () => {
-    expect(sanitizeLiquidityPreferences({ floorMode: -5 }).floorMode).toBe(DEFAULT_LIQUIDITY_PREFERENCES.floorMode);
-    expect(sanitizeLiquidityPreferences({ floorMode: NaN }).floorMode).toBe(DEFAULT_LIQUIDITY_PREFERENCES.floorMode);
-    expect(sanitizeLiquidityPreferences({ floorMode: 'not-auto' }).floorMode).toBe(DEFAULT_LIQUIDITY_PREFERENCES.floorMode);
-    expect(sanitizeLiquidityPreferences({ floorMode: true }).floorMode).toBe(DEFAULT_LIQUIDITY_PREFERENCES.floorMode);
-  });
-
-  it('accepts only the 5 valid sizeFilterPct values, falls back otherwise', () => {
-    for (const valid of [0, 1, 5, 10, 25]) {
-      expect(sanitizeLiquidityPreferences({ sizeFilterPct: valid }).sizeFilterPct).toBe(valid);
+  it("accepts only the 3 valid sensitivity presets, falls back to 'balanced' otherwise", () => {
+    for (const valid of ['quiet', 'balanced', 'detailed'] as const) {
+      expect(sanitizeLiquidityPreferences({ sensitivity: valid }).sensitivity).toBe(valid);
     }
-    expect(sanitizeLiquidityPreferences({ sizeFilterPct: 7 }).sizeFilterPct).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sizeFilterPct);
-    expect(sanitizeLiquidityPreferences({ sizeFilterPct: '5' }).sizeFilterPct).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sizeFilterPct);
-    expect(sanitizeLiquidityPreferences({ sizeFilterPct: -1 }).sizeFilterPct).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sizeFilterPct);
-  });
-
-  it('field-by-field: one valid + one invalid field in the same object degrade independently', () => {
-    const result = sanitizeLiquidityPreferences({ floorMode: 1_000_000, sizeFilterPct: 999 });
-    expect(result.floorMode).toBe(1_000_000);
-    expect(result.sizeFilterPct).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sizeFilterPct);
+    expect(sanitizeLiquidityPreferences({ sensitivity: 'loud' }).sensitivity).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sensitivity);
+    expect(sanitizeLiquidityPreferences({ sensitivity: 1 }).sensitivity).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sensitivity);
+    expect(sanitizeLiquidityPreferences({}).sensitivity).toBe('balanced');
   });
 
   it("accepts a valid palette id, falls back to default ('finotaur') otherwise", () => {
@@ -108,6 +96,7 @@ describe('sanitizeLiquidityPreferences', () => {
     expect(result.bubbles).toBe(DEFAULT_LIQUIDITY_PREFERENCES.bubbles);
     expect(result.bubbleThreshold).toBe(DEFAULT_LIQUIDITY_PREFERENCES.bubbleThreshold);
     expect(result.sideProfile).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sideProfile);
+    expect(result.sensitivity).toBe(DEFAULT_LIQUIDITY_PREFERENCES.sensitivity);
   });
 });
 
@@ -119,11 +108,11 @@ describe('readLiquidityPreferencesForSymbol — round-trip + corrupt JSON', () =
   it('round-trips a record written directly to localStorage', () => {
     localStorageMock.setItem(
       liquiditySymbolStorageKey('BTCUSDT'),
-      JSON.stringify({ floorMode: 250_000, sizeFilterPct: 10 }),
+      JSON.stringify({ palette: 'thermal', sensitivity: 'detailed' }),
     );
     const result = readLiquidityPreferencesForSymbol('BTCUSDT');
-    expect(result.floorMode).toBe(250_000);
-    expect(result.sizeFilterPct).toBe(10);
+    expect(result.palette).toBe('thermal');
+    expect(result.sensitivity).toBe('detailed');
   });
 
   it('corrupt JSON degrades to defaults, never throws', () => {
@@ -137,12 +126,12 @@ describe('readLiquidityPreferencesForSymbol — per-symbol isolation', () => {
   it('a preference written for one symbol does not leak to another symbol', () => {
     localStorageMock.setItem(
       liquiditySymbolStorageKey('BTCUSDT'),
-      JSON.stringify({ floorMode: 5_000_000, sizeFilterPct: 25 }),
+      JSON.stringify({ palette: 'classic', sensitivity: 'quiet' }),
     );
 
     const btc = readLiquidityPreferencesForSymbol('BTCUSDT');
-    expect(btc.floorMode).toBe(5_000_000);
-    expect(btc.sizeFilterPct).toBe(25);
+    expect(btc.palette).toBe('classic');
+    expect(btc.sensitivity).toBe('quiet');
 
     const eth = readLiquidityPreferencesForSymbol('ETHUSDT');
     expect(eth).toEqual(DEFAULT_LIQUIDITY_PREFERENCES);
