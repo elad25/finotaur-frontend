@@ -31,6 +31,7 @@ import { getFinoHomeChips, resolveFinoTier } from '@/lib/fino-tiers';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { computeGreeting } from '@/pages/app/ai/copilot/hooks/useDailyBrief';
 import { domains, domainOrder, isDomainVisible } from '@/constants/nav';
+import finoBullWatermark from '@/assets/brand/fino-bull-watermark.png';
 
 // ---------------------------------------------------------------------------
 // Product card metadata — owned by this page; not imported from ProductDrawer.
@@ -167,6 +168,15 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-full overflow-hidden">
+      {/* ── FINO BULL WATERMARK — faint gold mascot on the left, behind content ── */}
+      <img
+        src={finoBullWatermark}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute z-0 select-none"
+        style={{ right: 'calc(50vw + 277px)', bottom: 0, height: '90vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
+      />
+
       {/* ── NOTIFICATION BELL — aligned to the content column's right edge ── */}
       <div className="pointer-events-none absolute inset-x-0 top-ds-6 z-20">
         <div className="mx-auto w-full max-w-5xl px-ds-5 flex justify-end">
