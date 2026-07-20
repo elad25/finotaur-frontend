@@ -45,6 +45,32 @@ function isChunkLoadError(error: Error | null): boolean {
   return CHUNK_LOAD_ERROR_PATTERNS.some((p) => msg.includes(p));
 }
 
+// Errors that originate OUTSIDE our code — injected by browser extensions,
+// in-app-browser WebViews, or bot instrumentation that walk our DOM and
+// JSON.stringify nodes. The circular path runs through React's __reactFiber$
+// back-pointer on a DOM element (SVGLinearGradient, HTMLAnchorElement, ...).
+// Our own code never serializes DOM nodes, so these are non-actionable and
+// must NOT trigger the production server alert — they were generating
+// false-positive "N errors in 5min" emails from bot/extension traffic on /.
+// Mirrors the in-app-WebView ignore list already in src/lib/sentry.ts.
+function isNonActionableInjectedError(error: Error | null): boolean {
+  if (!error) return false;
+  const msg = `${error.name ?? ''} ${error.message ?? ''}`;
+  // DOM-node serialization by an injected script (circular via __reactFiber$).
+  if (
+    msg.includes('Converting circular structure to JSON') &&
+    msg.includes('__reactFiber')
+  ) {
+    return true;
+  }
+  // In-app-browser bridge injections (iOS/Android WebViews) — same family.
+  return (
+    /Java object is gone/i.test(msg) ||
+    /Java bridge method invocation error/i.test(msg) ||
+    /window\.webkit\.messageHandlers/i.test(msg)
+  );
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -128,6 +154,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // normal deploy. Skip in dev/test so local hot-reload errors don't fire.
     const skipServerReport =
       isChunkLoadError(error) ||
+      isNonActionableInjectedError(error) ||
       (typeof import.meta !== 'undefined' &&
         (import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE !== 'production');
     if (!skipServerReport && typeof window !== 'undefined' && typeof fetch === 'function') {
