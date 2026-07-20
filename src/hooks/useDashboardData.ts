@@ -804,7 +804,7 @@ export function useDashboardStats(
       dashboardPortfolioIds && dashboardPortfolioIds.length > 0
         ? dashboardPortfolioIds.join(',')
         : (dashboardPortfolioId ?? 'all'),
-      isTraderMode ? `trader:${traderMode ?? 'per-contract'}` : 'normal',
+      isTraderMode ? `trader:${traderMode ?? 'per-account'}` : 'normal',
       excludePortfolioIds && excludePortfolioIds.length > 0 ? `excl:${excludePortfolioIds.join(',')}` : 'excl:none',
     ],
     queryFn: async () => {
@@ -846,7 +846,7 @@ export function useDashboardStats(
           : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
         devLog('🔄 TRADER all-time path: paginated fetch');
         const allRows = await fetchAllTradesForTrader(client, userId, effectivePortfolioIds, excludePortfolioIds);
-        const normalized = normalizeTraderTrades(allRows, traderMode ?? 'per-contract');
+        const normalized = normalizeTraderTrades(allRows, traderMode ?? 'per-account');
         devLog(`✅ TRADER: ${allRows.length} raw → ${normalized.length} decisions`);
         return computeStats(normalized);
       }
@@ -932,7 +932,7 @@ export function useDashboardStats(
 
       // TRADER short-lookback path: normalize before the existing pipeline.
       if (isTraderMode) {
-        rows = normalizeTraderTrades(rows, traderMode ?? 'per-contract');
+        rows = normalizeTraderTrades(rows, traderMode ?? 'per-account');
       }
 
       return computeStats(rows);
