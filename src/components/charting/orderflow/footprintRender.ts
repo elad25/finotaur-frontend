@@ -1115,11 +1115,12 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
   // never the raw candle width. A number that doesn't fit is skipped
   // entirely (fillTextIfFits) rather than painted past its cell's bounds,
   // which is what produced the reported "0.12" mashing into "9.59" overlap
-  // between adjacent bars. Two-value modes (bidAsk, volumeDelta) each get
-  // HALF the band; single-value modes get the FULL band.
+  // between adjacent bars. Every mode now gets HALF the band per number:
+  // two-value modes (bidAsk, volumeDelta) split left/right, and single-value
+  // modes (delta, trades, volume) render in the LEFT half only so the candle
+  // at the band center never crosses the digits.
   const halfCellAvailWidth = Math.max(0, width / 2 - halfGutter - FOOTPRINT_CELL_PADDING_X);
   const halfCellAvailWidthNoGutter = Math.max(0, width / 2 - FOOTPRINT_CELL_PADDING_X);
-  const fullCellAvailWidth = Math.max(0, width - FOOTPRINT_CELL_PADDING_X * 2);
 
   if (cellMode === 'bidAsk') {
     // Professional convention (ATAS/Exocharts/NinjaTrader): regular numbers
@@ -1137,17 +1138,21 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
     ctx.textAlign = 'left';
     fillTextIfFits(ctx, formatCellValue(row.buyVol, valuesDivider), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
   } else if (cellMode === 'delta') {
+    // Single-value modes anchor in the LEFT half of the band (same anchor as
+    // the bidAsk sell column) so the candle wick/body at the band center
+    // never crosses the digits (Elad, 2026-07-20 — centered numbers were
+    // unreadable through the candle).
     ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
-    ctx.textAlign = 'center';
-    fillTextIfFits(ctx, formatCellValue(delta, valuesDivider), midX, textY, fullCellAvailWidth);
+    ctx.textAlign = 'right';
+    fillTextIfFits(ctx, formatCellValue(delta, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
   } else if (cellMode === 'trades') {
     // ATAS-style "number of trades" mode — count of prints per level, neutral
     // shading + neutral text (no directional color; a print count has no sign).
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
-    ctx.textAlign = 'center';
-    fillTextIfFits(ctx, formatCellValue(row.trades, valuesDivider), midX, textY, fullCellAvailWidth);
+    ctx.textAlign = 'right';
+    fillTextIfFits(ctx, formatCellValue(row.trades, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
   } else if (cellMode === 'volumeDelta') {
     // Two values per cell: total volume (neutral) on the left half, signed
     // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
@@ -1166,8 +1171,8 @@ function drawCellText(ctx: CanvasRenderingContext2D, args: DrawCellTextArgs): vo
     // delta-bearing modes above, not to the raw volume count).
     ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
-    ctx.textAlign = 'center';
-    fillTextIfFits(ctx, formatCellValue(rowVol, valuesDivider), midX, textY, fullCellAvailWidth);
+    ctx.textAlign = 'right';
+    fillTextIfFits(ctx, formatCellValue(rowVol, valuesDivider), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY, halfCellAvailWidth);
   }
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
