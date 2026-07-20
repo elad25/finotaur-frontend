@@ -1645,6 +1645,16 @@ async function syncCredential(cred: {
         open_states:      openStates.length,
         broker_positions: Array.from(netByAccountSymbol.entries()).map(([k, v]) => `${k}=${v}`),
       }));
+      // DB breadcrumb (console output is not queryable from MCP tooling).
+      await supabaseAdmin.from('tradovate_api_call_log').insert({
+        endpoint:      'recon:scan',
+        user_id:       cred.user_id,
+        connection_id: cred.id,
+        label:         JSON.stringify({
+          open_states: openStates.length,
+          positions:   Array.from(netByAccountSymbol.entries()).map(([k, v]) => `${k}=${v}`),
+        }).slice(0, 900),
+      });
 
       // Cursor-free fill history — fetched lazily, at most once per credential,
       // only when some state row actually needs healing.
@@ -1810,10 +1820,28 @@ async function syncCredential(cred: {
           shortfall_qty:  excess,
           fully_closed:   brokerOpenForSide === 0 && excess === 0,
         }));
+        await supabaseAdmin.from('tradovate_api_call_log').insert({
+          endpoint:      'recon:heal',
+          user_id:       cred.user_id,
+          connection_id: cred.id,
+          label:         JSON.stringify({
+            trade_id: st.open_trade_id, account_id: stAcct,
+            journal_open: st.open_quantity, broker_open: brokerOpenForSide,
+            healed_legs: healedLegs.length, shortfall: excess,
+          }).slice(0, 900),
+        });
       }
     }
   } catch (reconcileErr) {
     console.warn('[tradovate-sync] broker_truth_reconcile_error (non-fatal):', String(reconcileErr));
+    try {
+      await supabaseAdmin.from('tradovate_api_call_log').insert({
+        endpoint:      'recon:error',
+        user_id:       cred.user_id,
+        connection_id: cred.id,
+        error_msg:     String(reconcileErr).slice(0, 900),
+      });
+    } catch { /* best-effort breadcrumb only */ }
   }
 
   // Step L7b: backfill stop_price for existing trades with stop_price IS NULL.
