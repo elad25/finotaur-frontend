@@ -25,6 +25,9 @@ import {
   weightedPriceExtent,
   clampExtentToMaxRows,
   clipColumnsForCellBudget,
+  computeWindowRange,
+  alphaSkipCutoffUsd,
+  classifyColumnsUpdate,
 } from '../depthSignificance';
 
 describe('dustCutoffUsd', () => {
@@ -385,5 +388,237 @@ describe('clipColumnsForCellBudget', () => {
 
   it('never returns fewer than 1 column even under an extreme budget', () => {
     expect(clipColumnsForCellBudget(5000, 1_000_000, 100)).toBe(1);
+  });
+});
+
+describe('computeWindowRange', () => {
+  // 100 columns, 5s apart, starting at t=0.
+  const times = Array.from({ length: 100 }, (_, i) => i * 5000);
+
+  it('returns an empty range for an empty column array', () => {
+    expect(computeWindowRange([], 0, 100, 0.4)).toEqual({ startIdx: 0, endIdx: -1 });
+  });
+
+  it('falls back to the whole array for a degenerate visible range', () => {
+    expect(computeWindowRange(times, NaN, NaN, 0.4)).toEqual({ startIdx: 0, endIdx: 99 });
+    expect(computeWindowRange(times, 50, 10, 0.4)).toEqual({ startIdx: 0, endIdx: 99 }); // to < from
+  });
+
+  it('covers exactly the visible range with zero margin', () => {
+    // visible [10s, 20s] -> columns at t=10000..20000 -> idx 2..4
+    const { startIdx, endIdx } = computeWindowRange(times, 10, 20, 0);
+    expect(startIdx).toBe(2);
+    expect(endIdx).toBe(4);
+  });
+
+  it('expands by the requested fraction of the visible span on each side', () => {
+    // visible [50s,60s] span=10s, margin 40% -> 4s each side -> [46s,64s]
+    // idx for t=46000 -> ceil(46000/5000)=9.2 -> lowerBound finds first t>=46000 -> t=50000 idx10? wait check exact bins
+    const { startIdx, endIdx } = computeWindowRange(times, 50, 60, 0.4);
+    // window wants [46000, 64000]; column times are multiples of 5000: 45000,50000,...,60000,65000
+    // first t>=46000 -> 50000 (idx10); last t<=64000 -> 60000 (idx12)
+    expect(startIdx).toBe(10);
+    expect(endIdx).toBe(12);
+  });
+
+  it('clamps to array bounds when the margin-expanded window overflows either edge', () => {
+    // visible [0,5] span=5s; margin fraction 100 -> margin=500s each side -> window
+    // covers everything on the left (clamped to 0) but still bounded on the right.
+    const { startIdx, endIdx } = computeWindowRange(times, 0, 5, 100); // huge margin
+    expect(startIdx).toBe(0);
+    expect(endIdx).toBe(99); // margin (500s each side) now comfortably covers the whole 495s array
+  });
+
+  it('falls back to the nearest single column when the window has no overlap with any column', () => {
+    // All columns are at t=0..495000ms; ask for a visible range far in the future with no margin.
+    const { startIdx, endIdx } = computeWindowRange(times, 10_000, 10_001, 0);
+    expect(startIdx).toBe(endIdx);
+    expect(startIdx).toBeGreaterThanOrEqual(0);
+    expect(startIdx).toBeLessThan(100);
+  });
+
+  describe('budget-aware clipping (numRowsEstimate + maxCells)', () => {
+    it('is a no-op when omitted (backward compatible with the margin/bounds-only signature)', () => {
+      const withBudget = computeWindowRange(times, 50, 60, 0.4);
+      expect(withBudget).toEqual({ startIdx: 10, endIdx: 12 });
+    });
+
+    it('is a no-op when the margin-expanded window already fits the budget', () => {
+      // window is idx 10..12 (3 cols); budget allows up to 100 cols at numRows=100.
+      const { startIdx, endIdx } = computeWindowRange(times, 50, 60, 0.4, 100, 10_000);
+      expect(startIdx).toBe(10);
+      expect(endIdx).toBe(12);
+    });
+
+    it('trims the OLDEST (left) margin first when over budget, preserving the live-edge (right) margin', () => {
+      // visible [249s,260s] span=11s, margin 40% -> [244.6s,264.4s] -> idx
+      // 49..52 (4 cols): left margin is idx49 (one column before the core's
+      // own start at idx50); there is no right margin (core end == window
+      // end already, both idx52).
+      const before = computeWindowRange(times, 249, 260, 0.4);
+      expect(before).toEqual({ startIdx: 49, endIdx: 52 });
+
+      // Budget allows exactly 3 cols (numRowsEstimate=1000, maxCells=3000) —
+      // exactly the core's size (idx50..52) — so only the 1-column left
+      // margin needs trimming; the core itself is untouched.
+      const { startIdx, endIdx } = computeWindowRange(times, 249, 260, 0.4, 1000, 3000);
+      expect(startIdx).toBe(50);
+      expect(endIdx).toBe(52);
+    });
+
+    it('trims the core itself (from its oldest/left side) only when the core alone still exceeds budget', () => {
+      // Same setup as above; core (idx50..52, 3 cols) exceeds a 2-col budget,
+      // so after the margin is exhausted the core itself must shrink.
+      const { startIdx, endIdx } = computeWindowRange(times, 249, 260, 0.4, 1000, 2000);
+      expect(endIdx - startIdx + 1).toBe(2);
+      // Live edge (right/newest) side of the core is preserved -> endIdx stays 52.
+      expect(endIdx).toBe(52);
+      expect(startIdx).toBe(51);
+    });
+
+    it('never returns fewer than 1 column even under an extreme budget', () => {
+      const { startIdx, endIdx } = computeWindowRange(times, 50, 60, 0.4, 1000, 1);
+      expect(endIdx - startIdx + 1).toBe(1);
+    });
+
+    it('applies the same budget clip on the degenerate-visible-range whole-array fallback', () => {
+      const { startIdx, endIdx } = computeWindowRange(times, NaN, NaN, 0.4, 10, 500); // maxCols = 50
+      expect(endIdx - startIdx + 1).toBe(50);
+      expect(endIdx).toBe(99); // live edge (newest/right) preserved
+    });
+  });
+});
+
+describe('alphaSkipCutoffUsd', () => {
+  it('returns 0 (skip nothing) when threshold <= minAlpha — the component default', () => {
+    // Component defaults: minAlpha=0.18, threshold=0.06 -> threshold < minAlpha always.
+    expect(alphaSkipCutoffUsd(100_000)).toBe(0);
+    expect(alphaSkipCutoffUsd(100_000, 0.06, 0.18)).toBe(0);
+    expect(alphaSkipCutoffUsd(100_000, 0.18, 0.18)).toBe(0); // equal case
+  });
+
+  it('returns 0 for a non-finite or non-positive knee', () => {
+    expect(alphaSkipCutoffUsd(0)).toBe(0);
+    expect(alphaSkipCutoffUsd(-5)).toBe(0);
+    expect(alphaSkipCutoffUsd(NaN)).toBe(0);
+  });
+
+  it('inverts softKneeAlpha correctly when threshold > minAlpha', () => {
+    const knee = 100_000;
+    const minAlpha = 0.02;
+    const threshold = 0.06;
+    const cutoff = alphaSkipCutoffUsd(knee, threshold, minAlpha);
+    expect(cutoff).toBeGreaterThan(0);
+    expect(cutoff).toBeLessThan(knee);
+    // Just below the cutoff -> alpha < threshold; just above -> alpha >= threshold.
+    expect(softKneeAlpha(cutoff * 0.99, knee, minAlpha)).toBeLessThan(threshold);
+    expect(softKneeAlpha(cutoff * 1.01, knee, minAlpha)).toBeGreaterThanOrEqual(threshold - 1e-6);
+  });
+
+  it('returns the knee itself when threshold >= 1', () => {
+    expect(alphaSkipCutoffUsd(100_000, 1, 0.02)).toBe(100_000);
+  });
+});
+
+describe('classifyColumnsUpdate', () => {
+  const IV = 5000;
+
+  /** Builds a synthetic column array of `{ t }` objects on the IV grid starting at `firstT`. */
+  function makeCols(firstT: number, len: number): { t: number }[] {
+    return Array.from({ length: len }, (_, i) => ({ t: firstT + i * IV }));
+  }
+
+  it('detects unchanged (same length + same first timestamp + same object references)', () => {
+    const cols = makeCols(1000, 50);
+    expect(classifyColumnsUpdate(cols, cols, IV)).toEqual({ kind: 'unchanged' });
+  });
+
+  it('detects a pure append (genuine splice: prev is a prefix of next, same object references)', () => {
+    const prev = makeCols(1000, 50);
+    const appended = makeCols(1000 + 50 * IV, 3);
+    const next = [...prev, ...appended]; // prev's objects are REUSED (same references)
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'append', appendedCount: 3 });
+  });
+
+  it('detects a ring rotation at the history cap (shift by exactly 1 column, length unchanged)', () => {
+    // Steady state at cap: oldest column evicted, one new column appended, length stays 2880.
+    const prev = makeCols(1_000_000, 2880);
+    const newCol = { t: prev[2880 - 1].t + IV };
+    const next = [...prev.slice(1), newCol]; // genuine splice — same object refs for survivors
+    const result = classifyColumnsUpdate(prev, next, IV);
+    expect(result).toEqual({ kind: 'rotate', shiftColumns: 1, appendedCount: 1 });
+  });
+
+  it('detects a ring rotation with multiple evicted + multiple appended columns', () => {
+    const prev = makeCols(1_000_000, 2880);
+    // shift=3 -> survivors = prev[3..2879] (2877 cols); appendedCount=5 -> nextLen=2882
+    const appended = makeCols(prev[2880 - 1].t + IV, 5);
+    const next = [...prev.slice(3), ...appended];
+    const result = classifyColumnsUpdate(prev, next, IV);
+    expect(result).toEqual({ kind: 'rotate', shiftColumns: 3, appendedCount: 5 });
+  });
+
+  it('falls back to reset when the array shrinks', () => {
+    const prev = makeCols(1000, 50);
+    const next = prev.slice(0, 40);
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('falls back to reset when either snapshot is empty', () => {
+    expect(classifyColumnsUpdate([], makeCols(1000, 10), IV)).toEqual({ kind: 'reset' });
+    expect(classifyColumnsUpdate(makeCols(1000, 10), [], IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('falls back to reset when the shift does not line up with the column interval', () => {
+    const prev = makeCols(1_000_000, 100);
+    // Same objects, but shifted by a non-grid-aligned amount.
+    const next = prev.map((c) => ({ t: c.t + 1234 }));
+    expect(classifyColumnsUpdate(prev, next, IV).kind).toBe('reset');
+  });
+
+  it('falls back to reset when time moved backward', () => {
+    const prev = makeCols(1_000_000, 100);
+    const next = prev.map((c) => ({ t: c.t - IV }));
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('falls back to reset when colIntervalMs is not positive', () => {
+    const prev = makeCols(1000, 100);
+    const next = prev.map((c) => ({ t: c.t + 1000 }));
+    expect(classifyColumnsUpdate(prev, next, 0)).toEqual({ kind: 'reset' });
+  });
+
+  // ── CRITICAL 2 (review fix) — object-identity spot checks ────────────────
+  it('falls back to reset for a disjoint dataset replacement that only LOOKS like a pure append (same grid, same first timestamp, but brand-new objects)', () => {
+    const prev = makeCols(1000, 50);
+    // Same firstT + same length pattern, but a COMPLETE resync produced
+    // entirely new column objects (e.g. reconnect resync / store clear-and-refill).
+    const next = makeCols(1000, 53);
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('falls back to reset for a disjoint dataset replacement that only LOOKS like a ring rotation (grid-aligned shift, but brand-new objects)', () => {
+    const prev = makeCols(1_000_000, 2880);
+    // nextFirstT lines up exactly with a 1-column shift, and length is
+    // unchanged — timestamp-only classification would call this 'rotate',
+    // but every object is a fresh reference (a full resync), not a genuine splice.
+    const next = makeCols(1_000_000 + IV, 2880);
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('falls back to reset when only the LAST surviving column identity mismatches (partial corruption)', () => {
+    const prev = makeCols(1_000_000, 2880);
+    const genuineNext = [...prev.slice(1), { t: prev[2880 - 1].t + IV }];
+    // Corrupt just the last surviving element's reference (simulate a partial splice bug).
+    const corruptLast = genuineNext.length - 2; // last surviving prev column, before the new tail column
+    const next = genuineNext.slice();
+    next[corruptLast] = { t: next[corruptLast].t }; // same timestamp, different object
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+
+  it('detects reset when the shift would evict the entire prev array (shiftColumns >= prevLen)', () => {
+    const prev = makeCols(1_000_000, 10);
+    const next = makeCols(1_000_000 + 10 * IV, 10); // shift == prevLen, nothing survives
+    expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
   });
 });
