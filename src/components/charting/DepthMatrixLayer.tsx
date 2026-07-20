@@ -219,6 +219,7 @@ import { getPaletteLUT, type DepthPaletteId } from './depthPalettes';
 import {
   softKneeAlpha,
   persistenceFactor,
+  sizeGatedPersistenceFactor,
   histogramPercentile,
   kneePercentileForInkBudget,
   effectiveTargetLitFraction,
@@ -230,6 +231,8 @@ import {
   alphaSkipCutoffUsd,
   classifyColumnsUpdate,
   computeRowMergeFactor,
+  requiredRowMergeFactorForCap,
+  LOD_MAX_ROW_MERGE_FACTOR,
   computeBucketFactorWithHysteresis,
   computeRowMergeFactorWithHysteresis,
   bucketColumns,
@@ -243,12 +246,15 @@ import {
 
 // ── Grid safety caps (perf fix, PR #1568 regression — see repaintOffscreen) ──
 //
-// Hard ceiling on the offscreen bitmap's row count. weightedPriceExtent
-// already keeps the p0.5/p99.5 weight window tight around the market, but
-// this is a belt-and-suspenders cap so pathological data (e.g. one enormous
-// distant wall that legitimately clears the weight percentile) can never
-// blow the grid up again — the window gets centered on the weighted median
-// and clipped instead.
+// Hard ceiling on the offscreen bitmap's PAINTED row count (far-wall fix,
+// 2026-07-20: this used to be a raw-extent clip that silently removed
+// genuine far walls). weightedPriceExtent keeps the p0.5/p99.5 weight
+// window tight around the market; when the extent (including the
+// significant-bin union) spans more raw rows than this, rows are MERGED
+// (requiredRowMergeFactorForCap) so the bitmap height stays capped while
+// far walls remain visible as coarser rows. Only past
+// MAX_GRID_ROWS × LOD_MAX_ROW_MERGE_FACTOR raw rows does the old
+// median-centered extent clip kick in as the final backstop.
 const MAX_GRID_ROWS = 4000;
 // Hard ceiling on total offscreen cells (window-cols * numRows). Phase 6
 // (visible-window painting) makes this a PER-WINDOW budget rather than a
@@ -441,9 +447,22 @@ function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: 
     // overwrite just the top (alpha) byte with the continuous soft-knee
     // value (further scaled by the persistence multiplier). ImageData is
     // stored/read as STRAIGHT (non-premultiplied) alpha per the Canvas
-    // spec, so scaling only the alpha byte is correct.
-    const alpha = softKneeAlpha(usd, vLo) * persistMult;
+    // spec, so scaling only the alpha byte is correct. The persistence
+    // multiplier is SIZE-GATED (depthSignificance.ts): at/above-knee bins
+    // bypass the anti-spoof fade-in entirely so a fresh whale wall is
+    // visible at full strength in its first column — this is the single
+    // funnel both the full repaint and the append fast path go through, so
+    // the gate applies consistently everywhere.
+    const alpha = softKneeAlpha(usd, vLo) * sizeGatedPersistenceFactor(persistMult, usd, vLo);
     const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
+    if (a === 0) {
+      // Hide floor (2026-07-20): a fully-transparent cell must be COMPLETELY
+      // absent — returning the rgb bytes with alpha 0 would still mark it in
+      // the bloom hotMask (computed from `t`, independent of alpha) and
+      // bleed its color into visible neighbors via applyBloom.
+      lastHot = false;
+      return 0;
+    }
     const rgb = lut[idx];
     return (rgb & 0x00ffffff) | (a << 24);
   };
@@ -1006,16 +1025,33 @@ export function DepthMatrixLayer({
     // weightedPriceExtent's doc comment in depthSignificance.ts.
     const extentPrices: number[] = [];
     const extentUsd: number[] = [];
+    // Far-wall fix (2026-07-20) — track the price range of SIGNIFICANT bins
+    // (usd >= vLo, i.e. anything that would render "lit") alongside the
+    // weighted-percentile pass, so a genuine wall far from the market can
+    // never be tail-cut by the p0.5/p99.5 weight window: the final extent is
+    // the UNION of the weighted window and the significant-bin range.
+    let sigMinPrice = Infinity;
+    let sigMaxPrice = -Infinity;
     for (const col of cols) {
       for (const r of col.bids) {
         if (r.q <= 0) continue;
+        const usd = qToUsd(r.q);
         extentPrices.push(r.price);
-        extentUsd.push(qToUsd(r.q));
+        extentUsd.push(usd);
+        if (usd >= vLo) {
+          if (r.price < sigMinPrice) sigMinPrice = r.price;
+          if (r.price > sigMaxPrice) sigMaxPrice = r.price;
+        }
       }
       for (const r of col.asks) {
         if (r.q <= 0) continue;
+        const usd = qToUsd(r.q);
         extentPrices.push(r.price);
-        extentUsd.push(qToUsd(r.q));
+        extentUsd.push(usd);
+        if (usd >= vLo) {
+          if (r.price < sigMinPrice) sigMinPrice = r.price;
+          if (r.price > sigMaxPrice) sigMaxPrice = r.price;
+        }
       }
     }
     if (extentPrices.length === 0) return;
@@ -1023,42 +1059,53 @@ export function DepthMatrixLayer({
     const weighted = weightedPriceExtent(extentPrices, extentUsd);
     let priceMin = weighted.min;
     let priceMax = weighted.max + curBinSize; // upper edge of the top bin
+    if (Number.isFinite(sigMinPrice) && sigMinPrice < priceMin) priceMin = sigMinPrice;
+    if (Number.isFinite(sigMaxPrice) && sigMaxPrice + curBinSize > priceMax) priceMax = sigMaxPrice + curBinSize;
     if (!isFinite(priceMin) || !isFinite(priceMax)) return;
 
-    // Hard safety cap — belt-and-suspenders on top of the weighted window
-    // above (see MAX_GRID_ROWS comment). Centers a capped window on the
-    // weighted MEDIAN price rather than ever letting numRows grow unbounded.
+    // Hard safety cap, MERGE-FIRST (far-wall fix, 2026-07-20): MAX_GRID_ROWS
+    // is a PAINTED-row cap, not a raw-extent clip. When the raw extent spans
+    // more rows than the cap, rows are MERGED (coarser painted rows — see
+    // requiredRowMergeFactorForCap) so far walls stay visible instead of
+    // being clipped out of the bitmap. Only when even the max merge factor
+    // (LOD_MAX_ROW_MERGE_FACTOR) can't absorb the span does the old
+    // median-centered `clampExtentToMaxRows` clip kick in as the backstop.
     // `numRows` here is the RAW (pre row-merge) row count — see
     // OffscreenMeta.rawNumRows's doc comment for why the raw count is kept
     // alongside the painted one.
     let numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
-    if (numRows > MAX_GRID_ROWS) {
-      const clamped = clampExtentToMaxRows(priceMin, priceMax, curBinSize, weighted.median, MAX_GRID_ROWS);
+    const absMaxRawRows = MAX_GRID_ROWS * LOD_MAX_ROW_MERGE_FACTOR;
+    if (numRows > absMaxRawRows) {
+      const clamped = clampExtentToMaxRows(priceMin, priceMax, curBinSize, weighted.median, absMaxRawRows);
       priceMin = clamped.min;
       priceMax = clamped.max;
       numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
     }
     if (numRows <= 0) return;
 
-    // Review fix (SHOULD-FIX 2) — feed the REAL (raw) numRows back for the
-    // NEXT rebuild's computeWindowRange call (its `numRowsEstimate` param),
-    // so the margin is shrunk to fit the RAW-column budget up front next
-    // time instead of relying solely on the post-hoc trim below. This stays
-    // a RAW-column budget (computeWindowRange slices `fullCols`, before any
-    // bucketing) — LOD bucketing is a further reduction applied INSIDE this
-    // function on top of whatever raw window that budget selects; see the
-    // module doc comment's "LOD design" section for why the window-margin
-    // mechanism itself is left unchanged (MAX_GRID_CELLS stays a backstop,
-    // not the primary bound, once bucketing is active).
-    lastNumRowsRef.current = numRows;
-
     // LOD point 2 — row merging. Estimate raw row px from the CSS pane
     // height (priceToCoordinate isn't available yet at rebuild time — see
-    // the module doc comment) and derive how many raw rows collapse into
-    // one painted row.
+    // the module doc comment), derive how many raw rows collapse into one
+    // painted row, and take the MAX with the factor REQUIRED by the
+    // painted-row cap (deterministic in numRows — no hysteresis needed; the
+    // same max() lives in drawFrame's rebuild-trigger check so the two
+    // never disagree and rebuild-loop).
     const rowPxEstimate = numRows > 0 ? paneHeightPxEstimate / numRows : Infinity;
-    const rowMergeFactor = computeRowMergeFactor(rowPxEstimate);
+    const rowMergeFactor = Math.max(
+      computeRowMergeFactor(rowPxEstimate),
+      requiredRowMergeFactorForCap(numRows, MAX_GRID_ROWS),
+    );
     let paintedNumRows = rowMergeFactor > 1 ? Math.ceil(numRows / rowMergeFactor) : numRows;
+
+    // Review fix (SHOULD-FIX 2) — feed the PAINTED numRows back for the
+    // NEXT rebuild's computeWindowRange call (its `numRowsEstimate` param),
+    // so the margin is shrunk to fit the cell budget up front next time
+    // instead of relying solely on the post-hoc trim below. PAINTED (not
+    // raw) because cells = columns × painted rows — with the merge-first
+    // cap above, the raw count can legitimately exceed MAX_GRID_ROWS by up
+    // to LOD_MAX_ROW_MERGE_FACTOR×, and budgeting on it would collapse the
+    // window to a sliver of columns for no real cost.
+    lastNumRowsRef.current = paintedNumRows;
 
     // Total-cell budget guard (now PER-WINDOW, against the PAINTED grid —
     // see MAX_GRID_CELLS comment). Clip the OLDEST painted columns to fit;
@@ -1326,7 +1373,14 @@ export function DepthMatrixLayer({
       // treatment as bucketFactor.
       if (meta0 && meta0.rawNumRows > 0) {
         const curRowPxEstimate = heightRef.current / meta0.rawNumRows;
-        const curRowMergeFactor = computeRowMergeFactorWithHysteresis(curRowPxEstimate, lastRowMergeFactorAppliedRef.current);
+        // Same max() as repaintOffscreen's factor derivation (far-wall fix,
+        // 2026-07-20): the painted-row-cap term is deterministic in
+        // rawNumRows (no hysteresis needed) but MUST appear on both sides
+        // or the trigger and the rebuild disagree and loop.
+        const curRowMergeFactor = Math.max(
+          computeRowMergeFactorWithHysteresis(curRowPxEstimate, lastRowMergeFactorAppliedRef.current),
+          requiredRowMergeFactorForCap(meta0.rawNumRows, MAX_GRID_ROWS),
+        );
         if (curRowMergeFactor !== lastRowMergeFactorAppliedRef.current) scheduleRebuild();
       }
 

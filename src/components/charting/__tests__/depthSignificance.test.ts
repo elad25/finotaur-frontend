@@ -11,9 +11,13 @@ import {
   DUST_PCT,
   dustCutoffUsd,
   softKneeAlpha,
+  SOFT_KNEE_MIN_ALPHA,
+  HIDE_BELOW_KNEE_FRACTION,
   PERSISTENCE_RAMP_COLUMNS_DEFAULT,
   PERSISTENCE_MIN_FACTOR,
   persistenceFactor,
+  PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION,
+  sizeGatedPersistenceFactor,
   histogramPercentile,
   kneePercentileForInkBudget,
   KNEE_MIN_PERCENTILE,
@@ -35,6 +39,7 @@ import {
   computeBucketFactor,
   computeRowMergeFactor,
   computeLodFactors,
+  requiredRowMergeFactorForCap,
   bucketStartMs,
   mergeColumnsMaxQ,
   bucketColumns,
@@ -79,9 +84,12 @@ describe('dustCutoffUsd', () => {
 
 describe('softKneeAlpha', () => {
   const KNEE = 100_000;
+  // Cells under this fraction of the knee are hidden entirely (alpha 0) —
+  // see HIDE_BELOW_KNEE_FRACTION's doc comment in depthSignificance.ts.
+  const HIDE_FLOOR = KNEE * HIDE_BELOW_KNEE_FRACTION; // 2,000
 
-  it('returns minAlpha (default 0.18) at usd = 0', () => {
-    expect(softKneeAlpha(0, KNEE)).toBeCloseTo(0.18, 6);
+  it('returns 0 (hidden) at usd = 0', () => {
+    expect(softKneeAlpha(0, KNEE)).toBe(0);
   });
 
   it('returns 1.0 at usd >= kneeUsd', () => {
@@ -89,8 +97,21 @@ describe('softKneeAlpha', () => {
     expect(softKneeAlpha(KNEE * 5, KNEE)).toBeCloseTo(1, 6);
   });
 
-  it('is monotonically non-decreasing as usd increases', () => {
-    const samples = [0, KNEE * 0.1, KNEE * 0.25, KNEE * 0.5, KNEE * 0.75, KNEE * 0.9, KNEE, KNEE * 2];
+  it('is monotonically non-decreasing as usd increases (spanning the alpha-0 hide zone and the ramp above it)', () => {
+    const samples = [
+      0,
+      HIDE_FLOOR * 0.5,
+      HIDE_FLOOR * 0.99,
+      HIDE_FLOOR,
+      HIDE_FLOOR * 1.5,
+      KNEE * 0.1,
+      KNEE * 0.25,
+      KNEE * 0.5,
+      KNEE * 0.75,
+      KNEE * 0.9,
+      KNEE,
+      KNEE * 2,
+    ];
     let prev = -Infinity;
     for (const usd of samples) {
       const a = softKneeAlpha(usd, KNEE);
@@ -99,17 +120,27 @@ describe('softKneeAlpha', () => {
     }
   });
 
-  it('stays within [minAlpha, 1] across the whole domain', () => {
-    for (const usd of [0, 1, 100, 50_000, KNEE, KNEE * 10]) {
+  it('stays within [0, 1] across the whole domain (the hide zone included)', () => {
+    for (const usd of [0, 1, 100, HIDE_FLOOR, 50_000, KNEE, KNEE * 10]) {
       const a = softKneeAlpha(usd, KNEE);
-      expect(a).toBeGreaterThanOrEqual(0.18 - 1e-9);
+      expect(a).toBeGreaterThanOrEqual(-1e-9);
       expect(a).toBeLessThanOrEqual(1 + 1e-9);
     }
   });
 
-  it('honors a custom minAlpha', () => {
-    expect(softKneeAlpha(0, KNEE, 0.05)).toBeCloseTo(0.05, 6);
-    expect(softKneeAlpha(KNEE, KNEE, 0.05)).toBeCloseTo(1, 6);
+  it('is hidden (alpha 0) for usd just below the hide floor', () => {
+    expect(softKneeAlpha(HIDE_FLOOR - 1, KNEE)).toBe(0);
+    expect(softKneeAlpha(HIDE_FLOOR * 0.99, KNEE)).toBe(0);
+  });
+
+  it('ramps to at least SOFT_KNEE_MIN_ALPHA at/just above the hide floor', () => {
+    expect(softKneeAlpha(HIDE_FLOOR, KNEE)).toBeGreaterThanOrEqual(SOFT_KNEE_MIN_ALPHA);
+    expect(softKneeAlpha(HIDE_FLOOR * 1.01, KNEE)).toBeGreaterThanOrEqual(SOFT_KNEE_MIN_ALPHA);
+  });
+
+  it('honors a custom minAlpha above the hide floor', () => {
+    expect(softKneeAlpha(HIDE_FLOOR, KNEE, 0.3)).toBeGreaterThanOrEqual(0.3);
+    expect(softKneeAlpha(KNEE, KNEE, 0.3)).toBeCloseTo(1, 6);
   });
 
   it('returns full alpha when kneeUsd is 0 or negative (no meaningful knee)', () => {
@@ -117,10 +148,54 @@ describe('softKneeAlpha', () => {
     expect(softKneeAlpha(500, -10)).toBe(1);
   });
 
-  it('returns minAlpha for non-finite or non-positive usd', () => {
-    expect(softKneeAlpha(0, KNEE)).toBeCloseTo(0.18, 6);
-    expect(softKneeAlpha(-5, KNEE)).toBeCloseTo(0.18, 6);
-    expect(softKneeAlpha(NaN, KNEE)).toBeCloseTo(0.18, 6);
+  it('returns 0 for non-finite or non-positive usd', () => {
+    expect(softKneeAlpha(0, KNEE)).toBe(0);
+    expect(softKneeAlpha(-5, KNEE)).toBe(0);
+    expect(softKneeAlpha(NaN, KNEE)).toBe(0);
+  });
+});
+
+describe('sizeGatedPersistenceFactor', () => {
+  const KNEE = 100_000;
+
+  it('fully gates (returns 1.0) at/above the knee, regardless of persistMult', () => {
+    expect(sizeGatedPersistenceFactor(0.45, KNEE, KNEE)).toBeCloseTo(1, 6);
+    expect(sizeGatedPersistenceFactor(0.45, KNEE * 2, KNEE)).toBeCloseTo(1, 6);
+    expect(sizeGatedPersistenceFactor(0.1, KNEE, KNEE)).toBeCloseTo(1, 6);
+  });
+
+  it('applies NO gate at or below the low knee fraction (returns persistMult unchanged)', () => {
+    const lo = KNEE * PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION; // 0.5 * knee
+    expect(sizeGatedPersistenceFactor(0.45, lo, KNEE)).toBeCloseTo(0.45, 6);
+    expect(sizeGatedPersistenceFactor(0.45, lo * 0.5, KNEE)).toBeCloseTo(0.45, 6);
+  });
+
+  it('is monotonically increasing between the low knee fraction and the knee itself', () => {
+    const lo = KNEE * PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION;
+    const samples = [lo, lo + (KNEE - lo) * 0.25, lo + (KNEE - lo) * 0.5, lo + (KNEE - lo) * 0.75, KNEE];
+    let prev = -Infinity;
+    for (const usd of samples) {
+      const f = sizeGatedPersistenceFactor(0.45, usd, KNEE);
+      expect(f).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = f;
+    }
+  });
+
+  it('falls back to persistMult for a degenerate (non-positive) knee', () => {
+    expect(sizeGatedPersistenceFactor(0.45, 1000, 0)).toBeCloseTo(0.45, 6);
+    expect(sizeGatedPersistenceFactor(0.45, 1000, -5)).toBeCloseTo(0.45, 6);
+  });
+
+  it('falls back to persistMult for non-finite or non-positive usd', () => {
+    expect(sizeGatedPersistenceFactor(0.45, 0, KNEE)).toBeCloseTo(0.45, 6);
+    expect(sizeGatedPersistenceFactor(0.45, -5, KNEE)).toBeCloseTo(0.45, 6);
+    expect(sizeGatedPersistenceFactor(0.45, NaN, KNEE)).toBeCloseTo(0.45, 6);
+  });
+
+  it('stays at 1 everywhere when persistMult is already 1 (nothing to gate)', () => {
+    for (const usd of [0, KNEE * 0.1, KNEE * 0.5, KNEE * 0.75, KNEE, KNEE * 2]) {
+      expect(sizeGatedPersistenceFactor(1, usd, KNEE)).toBeCloseTo(1, 6);
+    }
   });
 });
 
@@ -206,11 +281,11 @@ describe('kneePercentileForInkBudget', () => {
     expect(knee).toBeCloseTo(p50, -1);
   });
 
-  it('clamps at the p92 end for an extremely low target-lit-fraction', () => {
+  it('clamps at the KNEE_MAX_PERCENTILE (p99.5) end for an extremely low target-lit-fraction', () => {
     const { hist, total } = buildUniformHistogram(1000, 10);
-    const p92 = histogramPercentile(hist, total, KNEE_MAX_PERCENTILE);
-    const knee = kneePercentileForInkBudget(hist, total, 0.001); // pct ~= 0.999, way above p92
-    expect(knee).toBeCloseTo(p92, -1);
+    const pMax = histogramPercentile(hist, total, KNEE_MAX_PERCENTILE);
+    const knee = kneePercentileForInkBudget(hist, total, 0.001); // pct ~= 0.999, way above p99.5
+    expect(knee).toBeCloseTo(pMax, -1);
   });
 
   it('handles a degenerate all-equal histogram without throwing (knee === the single value)', () => {
@@ -236,6 +311,35 @@ describe('sensitivity target-lit-fraction constants', () => {
       expect(v).toBeGreaterThan(0);
       expect(v).toBeLessThan(0.5);
     }
+  });
+
+  /**
+   * Builds a wide-spread (exponential-ish) histogram over `bins` distinct
+   * values, with per-bin counts growing toward the tail — enough resolution
+   * in the p84..p99.5 region that the 3 sensitivity presets' percentiles
+   * land on genuinely different bin indices. This is the regression that
+   * matters: pre-2026-07-20, KNEE_MAX_PERCENTILE was 0.92, so Quiet's p98
+   * AND Balanced's p94 both got clamped down to the SAME p92 value at
+   * normal zoom, making the Sensitivity control a no-op between them.
+   */
+  function buildWideSpreadHistogram(bins = 3000): { hist: Uint32Array; total: number } {
+    const hist = new Uint32Array(bins);
+    let total = 0;
+    for (let i = 0; i < bins; i++) {
+      const count = 1 + Math.floor(i / 10); // strictly non-decreasing tail mass
+      hist[i] = count;
+      total += count;
+    }
+    return { hist, total };
+  }
+
+  it('quiet/balanced/detailed produce three DISTINCT knees on a wide-spread distribution (regression: the old p92 clamp collapsed quiet+balanced onto the same knee)', () => {
+    const { hist, total } = buildWideSpreadHistogram();
+    const kneeQuiet = kneePercentileForInkBudget(hist, total, SENSITIVITY_TARGET_LIT_FRACTION.quiet);
+    const kneeBalanced = kneePercentileForInkBudget(hist, total, SENSITIVITY_TARGET_LIT_FRACTION.balanced);
+    const kneeDetailed = kneePercentileForInkBudget(hist, total, SENSITIVITY_TARGET_LIT_FRACTION.detailed);
+    expect(kneeQuiet).toBeGreaterThan(kneeBalanced);
+    expect(kneeBalanced).toBeGreaterThan(kneeDetailed);
   });
 });
 
@@ -507,11 +611,19 @@ describe('computeWindowRange', () => {
 });
 
 describe('alphaSkipCutoffUsd', () => {
-  it('returns 0 (skip nothing) when threshold <= minAlpha — the component default', () => {
-    // Component defaults: minAlpha=0.18, threshold=0.06 -> threshold < minAlpha always.
-    expect(alphaSkipCutoffUsd(100_000)).toBe(0);
-    expect(alphaSkipCutoffUsd(100_000, 0.06, 0.18)).toBe(0);
-    expect(alphaSkipCutoffUsd(100_000, 0.18, 0.18)).toBe(0); // equal case
+  const KNEE = 100_000;
+  const HIDE_FLOOR = KNEE * HIDE_BELOW_KNEE_FRACTION; // 2,000
+
+  it('never returns less than the hide floor for a valid knee — the component default (threshold 0.06 > minAlpha 0.05) inverts the ramp above it', () => {
+    const cutoff = alphaSkipCutoffUsd(KNEE);
+    expect(cutoff).toBeGreaterThanOrEqual(HIDE_FLOOR);
+    expect(cutoff).toBeGreaterThan(0);
+    expect(cutoff).toBeLessThan(KNEE);
+  });
+
+  it('returns exactly the hide floor when threshold <= minAlpha', () => {
+    expect(alphaSkipCutoffUsd(KNEE, 0.05, 0.05)).toBeCloseTo(HIDE_FLOOR, 6); // equal case
+    expect(alphaSkipCutoffUsd(KNEE, 0.02, 0.05)).toBeCloseTo(HIDE_FLOOR, 6); // threshold < minAlpha
   });
 
   it('returns 0 for a non-finite or non-positive knee', () => {
@@ -520,16 +632,24 @@ describe('alphaSkipCutoffUsd', () => {
     expect(alphaSkipCutoffUsd(NaN)).toBe(0);
   });
 
-  it('inverts softKneeAlpha correctly when threshold > minAlpha', () => {
-    const knee = 100_000;
+  it('inverts softKneeAlpha correctly when threshold > minAlpha (cutoff sits well above the hide floor, so max() with it is a no-op)', () => {
+    const knee = KNEE;
     const minAlpha = 0.02;
-    const threshold = 0.06;
+    const threshold = 0.4; // far above both minAlpha and the 2%-of-knee hide floor
     const cutoff = alphaSkipCutoffUsd(knee, threshold, minAlpha);
+    expect(cutoff).toBeGreaterThan(knee * HIDE_BELOW_KNEE_FRACTION); // not clamped by the hide floor
     expect(cutoff).toBeGreaterThan(0);
     expect(cutoff).toBeLessThan(knee);
     // Just below the cutoff -> alpha < threshold; just above -> alpha >= threshold.
     expect(softKneeAlpha(cutoff * 0.99, knee, minAlpha)).toBeLessThan(threshold);
     expect(softKneeAlpha(cutoff * 1.01, knee, minAlpha)).toBeGreaterThanOrEqual(threshold - 1e-6);
+  });
+
+  it('the hide-floor-only case: just below a hide-floor-clamped cutoff, alpha is 0 — trivially < threshold', () => {
+    // threshold (0.03) <= minAlpha (0.05) -> cutoff clamps to the hide floor.
+    const cutoff = alphaSkipCutoffUsd(KNEE, 0.03, 0.05);
+    expect(cutoff).toBeCloseTo(HIDE_FLOOR, 6);
+    expect(softKneeAlpha(cutoff * 0.99, KNEE, 0.05)).toBe(0);
   });
 
   it('returns the knee itself when threshold >= 1', () => {
@@ -732,6 +852,34 @@ describe('computeLodFactors', () => {
     });
     expect(bucketFactor).toBe(4);
     expect(rowMergeFactor).toBe(6);
+  });
+});
+
+describe('requiredRowMergeFactorForCap', () => {
+  it('returns 1 when rawNumRows is already within maxRows', () => {
+    expect(requiredRowMergeFactorForCap(4000, 4000)).toBe(1);
+    expect(requiredRowMergeFactorForCap(1, 4000)).toBe(1);
+  });
+
+  it('returns the ceiling merge factor when rawNumRows exceeds maxRows', () => {
+    expect(requiredRowMergeFactorForCap(4001, 4000)).toBe(2);
+    expect(requiredRowMergeFactorForCap(12_000, 4000)).toBe(3);
+  });
+
+  it('caps the result at maxFactor for a pathologically large rawNumRows', () => {
+    expect(requiredRowMergeFactorForCap(4000 * 64 + 1, 4000)).toBe(64); // would need 65 uncapped
+    expect(requiredRowMergeFactorForCap(4000 * 64 + 1, 4000, 64)).toBe(64);
+  });
+
+  it('returns 1 for a non-positive rawNumRows or maxRows', () => {
+    expect(requiredRowMergeFactorForCap(0, 4000)).toBe(1);
+    expect(requiredRowMergeFactorForCap(-100, 4000)).toBe(1);
+    expect(requiredRowMergeFactorForCap(100, 0)).toBe(1);
+    expect(requiredRowMergeFactorForCap(100, -1)).toBe(1);
+  });
+
+  it('honors a custom maxFactor', () => {
+    expect(requiredRowMergeFactorForCap(4000 * 10 + 1, 4000, 8)).toBe(8); // would need 11 uncapped
   });
 });
 

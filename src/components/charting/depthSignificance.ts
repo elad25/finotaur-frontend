@@ -15,10 +15,13 @@
 //   2. softKneeAlpha — a CONTINUOUS visibility curve applied at RENDER time
 //      (DepthMatrixLayer.tsx). Replaces the old binary WEAK_CELL_T_CAP
 //      dimming (a bin either cleared a threshold and rendered at full
-//      intensity, or got clamped to a flat faint cap). Every cell above the
-//      dust cutoff is still painted — its alpha just ramps smoothly from
-//      faint (near the noise floor) to fully opaque (at/above the knee).
-//      Nothing is hidden; nothing snaps.
+//      intensity, or got clamped to a flat faint cap). A cell's alpha ramps
+//      smoothly from faint (near the noise floor) to fully opaque (at/above
+//      the knee) — EXCEPT cells under HIDE_BELOW_KNEE_FRACTION of the knee,
+//      which are hidden entirely (alpha 0). That hide floor exists because
+//      painting every above-dust cell at a visible minimum alpha filled the
+//      chart with dozens of faint bands that read as noise and drowned the
+//      genuinely significant walls (Elad, 2026-07-20).
 
 /** Fraction of a column/side's total notional used as the raw dust threshold before clamping. */
 export const DUST_PCT = 0.0002; // 0.02%
@@ -45,18 +48,24 @@ export function dustCutoffUsd(binNotionals: number[]): number {
   return Math.min(DUST_MAX_USD, Math.max(DUST_MIN_USD, raw));
 }
 
+/** Default minimum alpha at the bottom of the soft-knee ramp (just above the hide floor). Was 0.18 pre-2026-07-20 — every above-dust cell at ≥18% alpha is what filled the chart with faint noise bands. */
+export const SOFT_KNEE_MIN_ALPHA = 0.05;
+/** Cells below this fraction of the knee are HIDDEN outright (alpha 0) rather than painted faint — the balanced noise-cleanup level Elad picked (2026-07-20). */
+export const HIDE_BELOW_KNEE_FRACTION = 0.02;
+
 /**
- * Continuous per-cell alpha for the depth-matrix render: a smoothstep ramp
- * from `minAlpha` (usd → 0) up to 1.0 (usd >= kneeUsd). Replaces the old
- * binary "dim to a flat cap below a threshold" behavior — a cell just under
- * the knee is nearly-full-alpha, not snapped to a flat floor value, so the
- * book's continuous shape reads naturally with no visible seam at the knee.
+ * Continuous per-cell alpha for the depth-matrix render: 0 below the hide
+ * floor (`kneeUsd * HIDE_BELOW_KNEE_FRACTION`), then a smoothstep ramp from
+ * `minAlpha` up to 1.0 (usd >= kneeUsd). A cell just under the knee is
+ * nearly-full-alpha, not snapped to a flat floor value, so the book's
+ * continuous shape reads naturally with no visible seam at the knee.
  * `kneeUsd <= 0` (no meaningful knee — e.g. an empty/degenerate window)
  * returns full alpha rather than dividing by zero.
  */
-export function softKneeAlpha(usd: number, kneeUsd: number, minAlpha = 0.18): number {
-  if (!Number.isFinite(usd) || usd <= 0) return minAlpha;
+export function softKneeAlpha(usd: number, kneeUsd: number, minAlpha = SOFT_KNEE_MIN_ALPHA): number {
+  if (!Number.isFinite(usd) || usd <= 0) return 0;
   if (!Number.isFinite(kneeUsd) || kneeUsd <= 0) return 1;
+  if (usd < kneeUsd * HIDE_BELOW_KNEE_FRACTION) return 0; // hide floor — sub-noise cells vanish, not dim
   const x = Math.min(1, Math.max(0, usd / kneeUsd));
   const smooth = x * x * (3 - 2 * x); // smoothstep
   return minAlpha + (1 - minAlpha) * smooth;
@@ -99,6 +108,30 @@ export function persistenceFactor(
   return PERSISTENCE_MIN_FACTOR + (1 - PERSISTENCE_MIN_FACTOR) * smooth;
 }
 
+/** Knee fraction at/below which persistence damping applies at FULL strength (the anti-spoof ramp is unchanged for small orders). */
+export const PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION = 0.5;
+
+/**
+ * Size-gates the persistence damping so a genuinely LARGE fresh order is
+ * visible immediately (Elad, 2026-07-20: whale walls rendered faint for
+ * ~30s until they "proved" themselves — the anti-spoof ramp is the wrong
+ * tool for at-knee-size orders, which are exactly what the trader must see
+ * the moment they appear). Smoothstep gate on usd/kneeUsd between
+ * `PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION` (0.5×knee — full damping below)
+ * and 1.0 (at/above the knee — no damping): returns `persistMult` for small
+ * bins, 1.0 for knee-sized-and-up bins, monotone in between. A degenerate
+ * knee (`kneeUsd <= 0`) keeps the undamped-size judgement impossible —
+ * fall back to the plain `persistMult` (old behavior).
+ */
+export function sizeGatedPersistenceFactor(persistMult: number, usd: number, kneeUsd: number): number {
+  if (!Number.isFinite(kneeUsd) || kneeUsd <= 0) return persistMult;
+  if (!Number.isFinite(usd) || usd <= 0) return persistMult;
+  const lo = PERSISTENCE_SIZE_GATE_LO_KNEE_FRACTION;
+  const x = Math.min(1, Math.max(0, (usd / kneeUsd - lo) / (1 - lo)));
+  const gate = x * x * (3 - 2 * x); // smoothstep
+  return persistMult + (1 - persistMult) * gate;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 3 — zoom-aware ink budget + sensitivity control
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,18 +167,18 @@ export function histogramPercentile(histogram: ArrayLike<number>, totalCount: nu
 
 /** Lower clamp on the ink-budget knee — never look below the median (a level below the 50th percentile is genuinely thin, don't let a very high target fraction force it "lit"). */
 export const KNEE_MIN_PERCENTILE = 0.50;
-/** Upper clamp on the ink-budget knee — never require the top 8% just to render "lit" (a level above p92 is already exceptional, don't let a very low target fraction hide everything else). */
-export const KNEE_MAX_PERCENTILE = 0.92;
+/** Upper clamp on the ink-budget knee. Was 0.92 pre-2026-07-20 — that clamp pinned Quiet AND Balanced to the same p92 knee at normal zoom (both presets' target percentiles exceeded it), making the Sensitivity control a no-op between them. p99.5 leaves the presets' own percentiles in charge while still guarding against a degenerate near-p100 knee. */
+export const KNEE_MAX_PERCENTILE = 0.995;
 
 /**
  * Picks the soft-knee value (in the same domain as `histogram`'s bin index —
  * e.g. raw q-space, convert to USD via qToUsd at the call site) so that
  * approximately `targetLitFraction` of visible cells clear it — i.e. the
  * knee is the `(1 - targetLitFraction)` percentile of the distribution,
- * clamped between the p50 and p92 values of that SAME distribution (a very
+ * clamped between the p50 and p99.5 values of that SAME distribution (a very
  * aggressive target can't push the knee below the median; a very
- * conservative target can't push it above the 92nd percentile). Replaces
- * Phase 1's hardcoded p70 in recomputeNorm.
+ * conservative target can't push it into the degenerate near-p100 tail).
+ * Replaces Phase 1's hardcoded p70 in recomputeNorm.
  */
 export function kneePercentileForInkBudget(
   histogram: ArrayLike<number>,
@@ -155,10 +188,10 @@ export function kneePercentileForInkBudget(
   if (totalCount <= 0) return 0;
   const pct = 1 - Math.min(1, Math.max(0, targetLitFraction));
   const raw = histogramPercentile(histogram, totalCount, pct);
-  const p50 = histogramPercentile(histogram, totalCount, KNEE_MIN_PERCENTILE);
-  const p92 = histogramPercentile(histogram, totalCount, KNEE_MAX_PERCENTILE);
-  const lo = Math.min(p50, p92);
-  const hi = Math.max(p50, p92);
+  const loVal = histogramPercentile(histogram, totalCount, KNEE_MIN_PERCENTILE);
+  const hiVal = histogramPercentile(histogram, totalCount, KNEE_MAX_PERCENTILE);
+  const lo = Math.min(loVal, hiVal);
+  const hi = Math.max(loVal, hiVal);
   return Math.min(hi, Math.max(lo, raw));
 }
 
@@ -172,8 +205,8 @@ export type DepthSensitivity = 'quiet' | 'balanced' | 'detailed';
  * Multiplied by `zoomDensityMultiplier` below before use.
  */
 export const SENSITIVITY_TARGET_LIT_FRACTION: Record<DepthSensitivity, number> = {
-  quiet: 0.04,
-  balanced: 0.08,
+  quiet: 0.02,
+  balanced: 0.06,
   detailed: 0.16,
 };
 
@@ -611,15 +644,17 @@ export function computeWindowRange(
 
 /**
  * Inverts softKneeAlpha: returns the USD value below which
- * `softKneeAlpha(usd, kneeUsd, minAlpha) < threshold`. With the component's
- * defaults (minAlpha=0.18, threshold=0.06), `threshold <= minAlpha` so this
- * correctly returns 0 (skip nothing) — softKneeAlpha never drops below
- * minAlpha for any usd > 0. The optimization only engages if minAlpha is
- * ever tuned below the threshold.
+ * `softKneeAlpha(usd, kneeUsd, minAlpha) < threshold`. Never returns less
+ * than the hide floor (`kneeUsd * HIDE_BELOW_KNEE_FRACTION`) — cells under
+ * it render at alpha 0, so they are always skippable regardless of
+ * `threshold`. Above the hide floor, alpha starts at `minAlpha`, so when
+ * `threshold <= minAlpha` only the hide floor applies; otherwise the
+ * smoothstep ramp is inverted to find where alpha crosses `threshold`.
  */
-export function alphaSkipCutoffUsd(kneeUsd: number, threshold = 0.06, minAlpha = 0.18): number {
+export function alphaSkipCutoffUsd(kneeUsd: number, threshold = 0.06, minAlpha = SOFT_KNEE_MIN_ALPHA): number {
   if (!Number.isFinite(kneeUsd) || kneeUsd <= 0) return 0;
-  if (threshold <= minAlpha) return 0; // alpha for any usd > 0 is already >= minAlpha >= threshold
+  const hideFloorUsd = kneeUsd * HIDE_BELOW_KNEE_FRACTION;
+  if (threshold <= minAlpha) return hideFloorUsd; // above the hide floor, alpha >= minAlpha >= threshold
   if (threshold >= 1) return kneeUsd; // asking to skip everything below the knee itself
 
   const target = (threshold - minAlpha) / (1 - minAlpha); // target smoothstep value in [0,1]
@@ -632,7 +667,7 @@ export function alphaSkipCutoffUsd(kneeUsd: number, threshold = 0.06, minAlpha =
     if (y < target) lo = mid; else hi = mid;
   }
   const x = (lo + hi) / 2;
-  return x * kneeUsd;
+  return Math.max(hideFloorUsd, x * kneeUsd);
 }
 
 export type ColumnsUpdateKind =
@@ -727,6 +762,29 @@ export function computeRowMergeFactor(
 ): number {
   if (!Number.isFinite(rowPx) || rowPx <= 0 || rowPx >= TARGET_MIN_ROW_PX) return 1;
   return Math.min(maxRowMergeFactor, Math.ceil(TARGET_MIN_ROW_PX / rowPx));
+}
+
+/**
+ * Row-merge factor REQUIRED so `rawNumRows` raw price rows fit into at most
+ * `maxRows` painted rows — the merge-instead-of-clip half of the far-wall
+ * fix (Elad, 2026-07-20: a genuine wall further than ~MAX_GRID_ROWS/2 bins
+ * from the weight-median price used to be clipped out of the bitmap
+ * entirely by `clampExtentToMaxRows`; merging rows keeps it visible as a
+ * coarser row instead). Deterministic in `rawNumRows` (which only changes
+ * on a rebuild), so unlike the px-driven factor it needs NO hysteresis —
+ * but it MUST be applied identically in BOTH repaintOffscreen's factor
+ * derivation AND drawFrame's rebuild-trigger check, or the two disagree and
+ * schedule rebuilds forever. Capped at `maxFactor` (LOD_MAX_ROW_MERGE_FACTOR)
+ * — beyond that, callers fall back to `clampExtentToMaxRows` as the backstop.
+ */
+export function requiredRowMergeFactorForCap(
+  rawNumRows: number,
+  maxRows: number,
+  maxFactor: number = LOD_MAX_ROW_MERGE_FACTOR,
+): number {
+  if (!(rawNumRows > 0) || !(maxRows > 0)) return 1;
+  if (rawNumRows <= maxRows) return 1;
+  return Math.min(maxFactor, Math.ceil(rawNumRows / maxRows));
 }
 
 export interface LodFactors {
