@@ -496,6 +496,7 @@ export default function TradingArena() {
               assetClass={assetClass}
               isAdmin={isAdmin}
               indicators={indicators}
+              volumeProfileEnabled={volumeProfileEnabled}
               onSelectSymbol={handleSymbolSelect}
             />
           )}

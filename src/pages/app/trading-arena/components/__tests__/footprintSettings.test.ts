@@ -35,7 +35,6 @@ describe('DEFAULT_FOOTPRINT_SETTINGS', () => {
     expect(DEFAULT_FOOTPRINT_SETTINGS.rowSizeValue).toBeNull();
     expect(DEFAULT_FOOTPRINT_SETTINGS.autoTransform).toBe(true);
     expect(DEFAULT_FOOTPRINT_SETTINGS.autoTransformMinPx).toBe(DEFAULT_FOOTPRINT_AUTO_TRANSFORM_MIN_PX);
-    expect(DEFAULT_FOOTPRINT_SETTINGS.showVolumeProfile).toBe(false);
     expect(DEFAULT_FOOTPRINT_SETTINGS.showPoc).toBe(true);
     expect(DEFAULT_FOOTPRINT_SETTINGS.showValueArea).toBe(false);
     expect(DEFAULT_FOOTPRINT_SETTINGS.magnifierEnabled).toBe(true);

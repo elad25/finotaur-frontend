@@ -2,15 +2,12 @@
 // Pure aggregation for the ATAS-style Volume Profile overlay. No React, no
 // canvas — VolumeProfileLayer.tsx consumes this to know what to draw.
 //
-// v1 scope: VISIBLE-RANGE profile only (aggregates whatever FlowCandleView[]
-// window the caller passes in — typically the chart's current visible time
-// range). Session-anchored profiles (reset at a fixed session boundary, e.g.
-// 00:00 UTC or exchange open) are a common ATAS/Bookmap mode too, but need a
-// session-boundary policy decision (which timezone? which session?) that is
-// out of scope here.
-// TODO(session-mode): add a `mode: 'visible' | 'session'` param once a
-// session-boundary convention is chosen for crypto (24/7 market — "session"
-// would need to be an arbitrary UTC-day or exchange-funding-window cut).
+// Range-agnostic by design: this module only aggregates whatever
+// FlowCandleView[] window the caller passes in — it has no opinion on
+// whether that window is the chart's current visible time range or a
+// session-anchored range. VolumeProfileLayer.tsx picks the window (visible
+// range, or [sessionStartSec, +Inf) in SESSION mode — see its
+// `sessionStartSec` prop) and passes the resulting candles here.
 
 import type { FlowBin, FlowCandleView } from './types';
 import { computeValueArea } from './valueArea';

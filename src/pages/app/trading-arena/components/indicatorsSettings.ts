@@ -131,10 +131,16 @@ export function getArenaIndicatorDefinition(key: ArenaIndicatorKey): ArenaIndica
   return ARENA_INDICATOR_DEFINITIONS.find((definition) => definition.key === key)!;
 }
 
-/** Session Volume Profile defaults ON (matches the prior chartStyle.volumeProfile.enabled default). */
+/**
+ * Session Volume Profile now defaults OFF — it's a normal opt-in indicator
+ * like every other one here, not something that self-appears on every chart.
+ * (Pre-2026-07-20 it defaulted ON, matching the old chartStyle.volumeProfile.enabled
+ * default; existing users with an auto-seeded instance are cleaned up by the
+ * one-time v4->v5 migration — see useArenaIndicatorPreferences.ts's migrateV4ToV5.)
+ */
 export const ARENA_INDICATOR_ENABLED_DEFAULTS: ArenaIndicatorEnabled = {
   ...INDICATOR_DEFAULTS,
-  volumeProfile: true,
+  volumeProfile: false,
   cvd: false,
   delta: false,
 };
@@ -892,7 +898,7 @@ export interface ArenaIndicatorPreferencesV4 {
   visibility: ArenaIndicatorVisibility;
 }
 
-/** Same default SET as today's `ARENA_INDICATOR_ENABLED_DEFAULTS` (Volume Profile only, on by default). */
+/** Same default SET as today's `ARENA_INDICATOR_ENABLED_DEFAULTS` — every field defaults false, so this is an empty array (no indicator self-appears on a fresh chart; the user opts in via the Indicators popup). */
 export const DEFAULT_ARENA_INDICATOR_INSTANCES: ArenaIndicatorInstance[] = ARENA_INDICATOR_DEFINITIONS
   .filter((definition) => ARENA_INDICATOR_ENABLED_DEFAULTS[definition.key])
   .map((definition) => createIndicatorInstance(definition.key, definition.key));

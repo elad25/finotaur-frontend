@@ -1,11 +1,18 @@
 // src/components/charting/orderflow/VolumeProfileLayer.tsx
 //
 // Canvas overlay that renders an ATAS-style Volume Profile histogram,
-// right-anchored inside the chart pane, fed by a FlowBinStore (see
+// left-anchored inside the chart pane, fed by a FlowBinStore (see
 // flowBinStore.ts / volumeProfile.ts for the pure aggregation).
 //
-// v1 scope: VISIBLE-RANGE profile only (recomputed from whatever candles are
-// currently on screen — see volumeProfile.ts's session-mode TODO).
+// Two modes, selected by whether the `sessionStartSec` prop is provided:
+//   - SESSION mode (sessionStartSec set — the default since FootprintTab
+//     passes the current trading day's start): the profile is computed over
+//     [sessionStartSec, +Inf) from the store and does NOT change while
+//     panning/zooming — only when the store's data changes or
+//     `sessionStartSec` itself changes (e.g. the calendar day rolls over).
+//   - VISIBLE-RANGE mode (sessionStartSec undefined — the fallback): the
+//     profile is recomputed from whatever candles are currently on screen,
+//     same as this overlay's original v1 behavior.
 //
 // Structure mirrors FootprintLayer.tsx / DepthMatrixLayer.tsx:
 //   - Absolutely-positioned, DPR-aware, pointer-events:none canvas.
@@ -13,7 +20,8 @@
 //     per-frame coordinate fingerprint (price-axis rescale has no lw-charts
 //     v4 event).
 //   - The EXPENSIVE step (recomputing the profile from the store) is
-//     debounced 150ms after the visible range stops changing — never run on
+//     debounced 150ms after the visible range stops changing (visible-range
+//     mode) or after the store's data changes (session mode) — never run on
 //     every pan/zoom frame. The already-computed profile is cached and only
 //     RE-PROJECTED (row width → px, price → y) on pan/zoom frames.
 //   - try/finally with ctx.setTransform(1,0,0,1,0,0) restoration.
@@ -44,6 +52,14 @@ export interface VolumeProfileLayerProps {
   series: ISeriesApi<any>;
   store: FlowBinStore;
   visible: boolean;
+  /**
+   * When provided (Unix seconds), the profile is computed over
+   * [sessionStartSec, +Inf) from the store (SESSION mode) instead of the
+   * visible chart range, and does NOT recompute on pan/zoom — only when the
+   * store's data changes or this value itself changes. Undefined (the
+   * default) keeps the original VISIBLE-RANGE mode.
+   */
+  sessionStartSec?: number;
   /** Container CSS width in px. */
   width: number;
   /** Container CSS height in px. */
@@ -52,7 +68,7 @@ export interface VolumeProfileLayerProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function VolumeProfileLayer({ chart, series, store, visible, width, height }: VolumeProfileLayerProps) {
+export function VolumeProfileLayer({ chart, series, store, visible, sessionStartSec, width, height }: VolumeProfileLayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const dirtyRef = useRef<boolean>(true);
@@ -63,13 +79,16 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
   const widthRef = useRef<number>(width);
   const heightRef = useRef<number>(height);
   const storeRef = useRef<FlowBinStore>(store);
+  const sessionStartSecRef = useRef<number | undefined>(sessionStartSec);
   visibleRef.current = visible;
   widthRef.current = width;
   heightRef.current = height;
   storeRef.current = store;
+  sessionStartSecRef.current = sessionStartSec;
 
   // Debounced, cached profile — recomputed 150ms after the visible range
-  // settles or the store changes, NEVER per pan/zoom frame.
+  // settles (visible-range mode) or the store changes (either mode), NEVER
+  // per pan/zoom frame.
   const profileRef = useRef<VolumeProfile>({ rows: [], poc: null, vah: null, val: null, maxRowVol: 0 });
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Last [fromSec, toSec] the profile was computed for — recompute gate.
@@ -79,10 +98,21 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
     if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       debounceTimerRef.current = null;
-      const visRange = chart.timeScale().getVisibleRange();
-      if (!visRange) return;
-      const fromSec = Math.floor(visRange.from as unknown as number);
-      const toSec = Math.ceil(visRange.to as unknown as number);
+      const anchorSec = sessionStartSecRef.current;
+      let fromSec: number;
+      let toSec: number;
+      if (anchorSec !== undefined) {
+        // SESSION mode — the whole session-to-date, regardless of what's
+        // currently panned/zoomed into view.
+        fromSec = anchorSec;
+        toSec = Number.MAX_SAFE_INTEGER;
+      } else {
+        // VISIBLE-RANGE mode (fallback) — original v1 behavior.
+        const visRange = chart.timeScale().getVisibleRange();
+        if (!visRange) return;
+        fromSec = Math.floor(visRange.from as unknown as number);
+        toSec = Math.ceil(visRange.to as unknown as number);
+      }
       const rangeKey = `${fromSec}|${toSec}`;
       lastRangeKeyRef.current = rangeKey;
       const candles = storeRef.current.getRange(fromSec, toSec);
@@ -104,16 +134,29 @@ export function VolumeProfileLayer({ chart, series, store, visible, width, heigh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
-  // ── Recompute on visible-range change (debounced) ────────────────────────
+  // ── Recompute on visible-range change (debounced) — VISIBLE-RANGE mode
+  //    only. In SESSION mode the profile is anchored to sessionStartSec and
+  //    must NOT recompute just because the user panned/zoomed. ────────────
   useEffect(() => {
     const timeScale = chart.timeScale();
-    const onRangeChange = () => scheduleRecompute();
+    const onRangeChange = () => {
+      if (sessionStartSecRef.current !== undefined) return; // session mode — no-op
+      scheduleRecompute();
+    };
     timeScale.subscribeVisibleTimeRangeChange(onRangeChange);
     return () => {
       try { timeScale.unsubscribeVisibleTimeRangeChange(onRangeChange); } catch { /* chart gone */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart]);
+
+  // ── Recompute when the session boundary itself changes (e.g. the
+  //    calendar day rolls over, or the caller switches session anchors) ───
+  useEffect(() => {
+    if (sessionStartSec === undefined) return;
+    scheduleRecompute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionStartSec]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
   useEffect(() => {

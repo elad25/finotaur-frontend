@@ -9,8 +9,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   ARENA_INDICATORS_STORAGE_KEY_V1,
   ARENA_INDICATORS_STORAGE_KEY_V2,
+  ARENA_INDICATORS_STORAGE_KEY_V4,
+  ARENA_INDICATORS_STORAGE_KEY_V5,
   migrateV1ToV2,
+  migrateV4ToV5,
   readArenaIndicatorPreferences,
+  readArenaIndicatorPreferencesV5,
 } from '../useArenaIndicatorPreferences';
 import {
   ARENA_INDICATOR_ENABLED_DEFAULTS,
@@ -28,6 +32,7 @@ import {
   sanitizeArenaIndicatorPreferences,
   buildIndicatorsFromArenaSettings,
   type ArenaIndicatorPreferencesV3,
+  type ArenaIndicatorPreferencesV4,
 } from '../../components/indicatorsSettings';
 
 function makeMemoryLocalStorage(): Storage {
@@ -132,11 +137,11 @@ describe('sanitizeArenaIndicatorPreferences', () => {
 });
 
 describe('countActiveIndicators + MAX_ACTIVE_INDICATORS', () => {
-  it('counts every true boolean, including volumeProfile', () => {
-    expect(countActiveIndicators(ARENA_INDICATOR_ENABLED_DEFAULTS)).toBe(1); // only volumeProfile defaults true
+  it('counts every true boolean (volumeProfile counts too, but defaults false)', () => {
+    expect(countActiveIndicators(ARENA_INDICATOR_ENABLED_DEFAULTS)).toBe(0); // every indicator (incl. volumeProfile) defaults false
     expect(
       countActiveIndicators({ ...ARENA_INDICATOR_ENABLED_DEFAULTS, sma: true, ema: true, rsi: true, atr: true }),
-    ).toBe(5);
+    ).toBe(4);
   });
 
   it('MAX_ACTIVE_INDICATORS is 5', () => {
@@ -231,8 +236,8 @@ describe('migrateV3ToV4', () => {
     };
     const v4 = migrateV3ToV4(v3);
 
-    // volumeProfile (default true) + ema + macd = 3 instances
-    expect(v4.instances).toHaveLength(3);
+    // volumeProfile now defaults false — only ema + macd = 2 instances
+    expect(v4.instances).toHaveLength(2);
     const ema = v4.instances.find((i) => i.type === 'ema');
     expect(ema?.params).toEqual({ period: 21 });
     const macd = v4.instances.find((i) => i.type === 'macd');
@@ -241,10 +246,9 @@ describe('migrateV3ToV4', () => {
     expect(v4.visibility).toBe(v3.visibility);
   });
 
-  it('produces only the Volume Profile instance for an untouched v3 default record', () => {
+  it('produces no instances for an untouched v3 default record (every field, incl. volumeProfile, defaults false)', () => {
     const v4 = migrateV3ToV4(DEFAULT_ARENA_INDICATOR_PREFERENCES_V3);
-    expect(v4.instances).toHaveLength(1);
-    expect(v4.instances[0].type).toBe('volumeProfile');
+    expect(v4.instances).toHaveLength(0);
   });
 
   it('every instance gets a unique id', () => {
@@ -259,23 +263,23 @@ describe('migrateV3ToV4', () => {
 });
 
 describe('migrateV1ToV2', () => {
-  it('converts a legacy flat-boolean record into the v2 shape, volumeProfile defaults true', () => {
+  it('converts a legacy flat-boolean record into the v2 shape, volumeProfile defaults false', () => {
     const v1 = { sma: true, ema: false, rsi: true, vwap: false, macd: false, bbands: false, atr: false };
     const result = migrateV1ToV2(v1);
     expect(result.enabled.sma).toBe(true);
     expect(result.enabled.rsi).toBe(true);
     expect(result.enabled.ema).toBe(false);
-    expect(result.enabled.volumeProfile).toBe(true);
+    expect(result.enabled.volumeProfile).toBe(false);
     expect(result.params).toEqual(ARENA_INDICATOR_PARAM_DEFAULTS);
     // The research-based EMA-period-9 default applies even to migrated users.
     expect(result.params.ema.period).toBe(9);
   });
 
-  it('handles a garbage/non-object input safely (all-false enabled, volumeProfile still true)', () => {
+  it('handles a garbage/non-object input safely (all-false enabled, incl. volumeProfile)', () => {
     const result = migrateV1ToV2('not-an-object');
     expect(result.enabled.sma).toBe(false);
     expect(result.enabled.ema).toBe(false);
-    expect(result.enabled.volumeProfile).toBe(true);
+    expect(result.enabled.volumeProfile).toBe(false);
   });
 });
 
@@ -302,7 +306,7 @@ describe('readArenaIndicatorPreferences — round-trip + migration + corrupt JSO
     const result = readArenaIndicatorPreferences();
     expect(result.enabled.sma).toBe(true);
     expect(result.enabled.rsi).toBe(true);
-    expect(result.enabled.volumeProfile).toBe(true);
+    expect(result.enabled.volumeProfile).toBe(false);
     expect(result.params.ema.period).toBe(9);
   });
 
@@ -328,5 +332,96 @@ describe('readArenaIndicatorPreferences — round-trip + migration + corrupt JSO
     localStorageMock.setItem(ARENA_INDICATORS_STORAGE_KEY_V1, '{{{garbage');
     expect(() => readArenaIndicatorPreferences()).not.toThrow();
     expect(readArenaIndicatorPreferences()).toEqual(DEFAULT_ARENA_INDICATOR_PREFERENCES);
+  });
+});
+
+describe('migrateV4ToV5 — one-time Volume Profile default-OFF cleanup', () => {
+  it('drops every volumeProfile instance, keeps every other instance untouched', () => {
+    const vp = createIndicatorInstance('volumeProfile');
+    const ema = createIndicatorInstance('ema');
+    const v4: ArenaIndicatorPreferencesV4 = {
+      instances: [vp, ema],
+      visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility,
+    };
+
+    const v5 = migrateV4ToV5(v4);
+    expect(v5.instances).toHaveLength(1);
+    expect(v5.instances[0].id).toBe(ema.id);
+    expect(v5.instances.some((i) => i.type === 'volumeProfile')).toBe(false);
+    expect(v5.visibility).toBe(v4.visibility);
+  });
+
+  it('is a no-op when no volumeProfile instance is present', () => {
+    const sma = createIndicatorInstance('sma');
+    const rsi = createIndicatorInstance('rsi');
+    const v4: ArenaIndicatorPreferencesV4 = {
+      instances: [sma, rsi],
+      visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility,
+    };
+
+    const v5 = migrateV4ToV5(v4);
+    expect(v5.instances).toHaveLength(2);
+  });
+
+  it('produces an empty array when every instance is volumeProfile', () => {
+    const v4: ArenaIndicatorPreferencesV4 = {
+      instances: [createIndicatorInstance('volumeProfile')],
+      visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility,
+    };
+
+    expect(migrateV4ToV5(v4).instances).toEqual([]);
+  });
+});
+
+describe('readArenaIndicatorPreferencesV5 — round-trip + v4 cleanup migration', () => {
+  it('returns an empty-instances default when nothing is stored', () => {
+    const result = readArenaIndicatorPreferencesV5();
+    expect(result.instances).toEqual([]);
+  });
+
+  it('v5 record wins when present (round-trip) — even a persisted volumeProfile instance survives once explicitly re-added', () => {
+    const vp = createIndicatorInstance('volumeProfile');
+    localStorageMock.setItem(
+      ARENA_INDICATORS_STORAGE_KEY_V5,
+      JSON.stringify({ instances: [vp], visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility }),
+    );
+
+    const result = readArenaIndicatorPreferencesV5();
+    expect(result.instances).toHaveLength(1);
+    expect(result.instances[0].type).toBe('volumeProfile');
+  });
+
+  it('cleans up a legacy v4-only record: drops its auto-seeded volumeProfile instance but keeps every other instance', () => {
+    const vp = createIndicatorInstance('volumeProfile');
+    const ema = createIndicatorInstance('ema');
+    localStorageMock.setItem(
+      ARENA_INDICATORS_STORAGE_KEY_V4,
+      JSON.stringify({ instances: [vp, ema], visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility }),
+    );
+
+    const result = readArenaIndicatorPreferencesV5();
+    expect(result.instances).toHaveLength(1);
+    expect(result.instances[0].type).toBe('ema');
+  });
+
+  it('v5 wins over v4 when both are present', () => {
+    localStorageMock.setItem(
+      ARENA_INDICATORS_STORAGE_KEY_V4,
+      JSON.stringify({ instances: [createIndicatorInstance('volumeProfile')], visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility }),
+    );
+    localStorageMock.setItem(
+      ARENA_INDICATORS_STORAGE_KEY_V5,
+      JSON.stringify({ instances: [createIndicatorInstance('sma')], visibility: DEFAULT_ARENA_INDICATOR_PREFERENCES_V3.visibility }),
+    );
+
+    const result = readArenaIndicatorPreferencesV5();
+    expect(result.instances).toHaveLength(1);
+    expect(result.instances[0].type).toBe('sma');
+  });
+
+  it('corrupt JSON in v5 (with no usable v4) degrades to an empty-instances default, never throws', () => {
+    localStorageMock.setItem(ARENA_INDICATORS_STORAGE_KEY_V5, '{not valid json');
+    expect(() => readArenaIndicatorPreferencesV5()).not.toThrow();
+    expect(readArenaIndicatorPreferencesV5().instances).toEqual([]);
   });
 });

@@ -24,8 +24,19 @@
  * are UNCHANGED (still exercised directly by
  * useArenaIndicatorPreferences.test.ts) — v4 reads through them via
  * `readArenaIndicatorPreferencesV3` and migrates via `migrateV3ToV4` when no
- * v4 record exists yet. The hook itself now holds v4 state; v3/v2/v1 are
- * kept only as the read-only migration chain + their own pure-function tests.
+ * v4 record exists yet.
+ *
+ * v5 (Volume Profile default-OFF cleanup): Volume Profile stopped
+ * self-appearing on every chart (2026-07-20) — `ARENA_INDICATOR_ENABLED_DEFAULTS.volumeProfile`
+ * flipped from `true` to `false` (indicatorsSettings.ts). Every v4 record
+ * written before that date has an auto-seeded `volumeProfile` instance the
+ * user never explicitly chose, so v5 is a ONE-TIME CLEANUP migration, not a
+ * shape change (`{ instances, visibility }` is identical to v4's) —
+ * `migrateV4ToV5` simply drops every instance of type `'volumeProfile'` from
+ * an existing v4 record. Users who want Volume Profile re-add it from the
+ * Indicators popup, same as any other indicator. The hook itself now holds
+ * v5 state; v4/v3/v2/v1 are kept only as the read-only migration chain +
+ * their own pure-function tests.
  *
  * Deliberately a SEPARATE hook from `useIndicatorPreferences`
  * (src/components/charting/useIndicatorPreferences.ts), which backs
@@ -73,8 +84,10 @@ export const ARENA_INDICATORS_STORAGE_KEY_V1 = 'finotaur:arena:indicators:v1';
 export const ARENA_INDICATORS_STORAGE_KEY_V2 = 'finotaur:arena:indicators:v2';
 /** `{ enabled, params, styles, visibility }` key (pre-instances-model). Read-only — migrated into v4, never written to again. */
 export const ARENA_INDICATORS_STORAGE_KEY_V3 = 'finotaur:arena:indicators:v3';
-/** Current `{ instances, visibility }` key — see indicatorsSettings.ts's ArenaIndicatorPreferencesV4. */
+/** `{ instances, visibility }` key (pre-Volume-Profile-default-OFF cleanup). Read-only — migrated into v5, never written to again. */
 export const ARENA_INDICATORS_STORAGE_KEY_V4 = 'finotaur:arena:indicators:v4';
+/** Current `{ instances, visibility }` key — same shape as v4, see indicatorsSettings.ts's ArenaIndicatorPreferencesV4 + migrateV4ToV5 below. */
+export const ARENA_INDICATORS_STORAGE_KEY_V5 = 'finotaur:arena:indicators:v5';
 
 function readRawKey(key: string): unknown {
   if (typeof window === 'undefined') return null;
@@ -99,12 +112,13 @@ function writeRawKey(key: string, value: unknown): void {
 
 /**
  * Migrates a legacy v1 record (flat booleans, no `volumeProfile`, no
- * `params`) into the v2 shape. `volumeProfile` defaults to `true` (Session
- * Volume Profile was on-by-default pre-migration, via
- * chartStyle.volumeProfile.enabled) and every numeric param falls back to
- * ARENA_INDICATOR_PARAM_DEFAULTS — including EMA's new period-9 default,
- * which applies even to migrated users (there is no prior EMA-period
- * preference to preserve, since v1 had no params at all).
+ * `params`) into the v2 shape. `volumeProfile` defaults to `false` — matching
+ * `ARENA_INDICATOR_ENABLED_DEFAULTS.volumeProfile` (Volume Profile is a
+ * normal opt-in indicator, not on-by-default; see indicatorsSettings.ts) —
+ * and every numeric param falls back to ARENA_INDICATOR_PARAM_DEFAULTS,
+ * including EMA's new period-9 default, which applies even to migrated users
+ * (there is no prior EMA-period preference to preserve, since v1 had no
+ * params at all).
  */
 export function migrateV1ToV2(v1Raw: unknown): ArenaIndicatorPreferences {
   const p = (v1Raw && typeof v1Raw === 'object' ? v1Raw : {}) as Partial<Record<string, unknown>>;
@@ -117,7 +131,7 @@ export function migrateV1ToV2(v1Raw: unknown): ArenaIndicatorPreferences {
     macd: p.macd === true,
     bbands: p.bbands === true,
     atr: p.atr === true,
-    volumeProfile: true,
+    volumeProfile: false,
     // CVD/DELTA didn't exist when v1 was written — always false for a
     // migrated user, same as every other field that had no v1 counterpart.
     cvd: false,
@@ -188,6 +202,46 @@ function writeArenaIndicatorPreferencesV4(prefs: ArenaIndicatorPreferencesV4): v
   writeRawKey(ARENA_INDICATORS_STORAGE_KEY_V4, prefs);
 }
 
+/**
+ * One-time cleanup migration: drops every instance of type `'volumeProfile'`
+ * from a v4 record. Volume Profile used to be seeded by default (see
+ * indicatorsSettings.ts's old `ARENA_INDICATOR_ENABLED_DEFAULTS.volumeProfile`
+ * true default + `migrateV3ToV4`), so every pre-existing v4 record carries an
+ * auto-seeded instance the user never explicitly added. Now that Volume
+ * Profile defaults OFF (a normal opt-in indicator), that auto-seeded
+ * instance must not silently survive into v5 — users who want it re-add it
+ * from the Indicators popup. Every OTHER instance (and `visibility`) passes
+ * through unchanged. Pure — not persisted until the next write, same
+ * lazy-migration pattern as migrateV3ToV4.
+ */
+export function migrateV4ToV5(v4: ArenaIndicatorPreferencesV4): ArenaIndicatorPreferencesV4 {
+  return {
+    instances: v4.instances.filter((instance) => instance.type !== 'volumeProfile'),
+    visibility: v4.visibility,
+  };
+}
+
+/**
+ * Reads + sanitizes the current v5 `{ instances, visibility }` shape (same
+ * shape as v4 — see migrateV4ToV5's doc comment for why this is a data
+ * cleanup, not a shape migration). v5 wins if present. Otherwise falls back
+ * through the existing v4/v3/v2/v1 chain (`readArenaIndicatorPreferencesV4`,
+ * unchanged — still the single source of truth for the instances migration)
+ * via `migrateV4ToV5`. Pure — not persisted until the next write, same
+ * lazy-migration pattern as the v3→v4 reader.
+ */
+export function readArenaIndicatorPreferencesV5(): ArenaIndicatorPreferencesV4 {
+  const v5Raw = readRawKey(ARENA_INDICATORS_STORAGE_KEY_V5);
+  if (v5Raw) return sanitizeArenaIndicatorPreferencesV4(v5Raw);
+
+  const v4Chain = readArenaIndicatorPreferencesV4(); // handles v4-wins / v3/v2/v1-migrate / defaults internally
+  return migrateV4ToV5(v4Chain);
+}
+
+function writeArenaIndicatorPreferencesV5(prefs: ArenaIndicatorPreferencesV4): void {
+  writeRawKey(ARENA_INDICATORS_STORAGE_KEY_V5, prefs);
+}
+
 export interface UseArenaIndicatorPreferencesResult {
   instances: ArenaIndicatorInstance[];
   visibility: ArenaIndicatorVisibility;
@@ -215,7 +269,7 @@ export interface UseArenaIndicatorPreferencesResult {
 
 export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResult {
   // Lazy initializer — only touches localStorage on first render.
-  const [prefs, setPrefs] = useState<ArenaIndicatorPreferencesV4>(readArenaIndicatorPreferencesV4);
+  const [prefs, setPrefs] = useState<ArenaIndicatorPreferencesV4>(readArenaIndicatorPreferencesV5);
 
   // Track the most recent prefs so updaters don't depend on a stale closure.
   const prefsRef = useRef(prefs);
@@ -233,7 +287,7 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
     const instance = createIndicatorInstance(type);
     const next: ArenaIndicatorPreferencesV4 = { ...current, instances: [...current.instances, instance] };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
     return instance.id;
   }, []);
 
@@ -244,7 +298,7 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
       instances: current.instances.filter((instance) => instance.id !== id),
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
   }, []);
 
   const updateInstanceParams = useCallback((id: string, patch: Record<string, unknown>) => {
@@ -258,7 +312,7 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
       ),
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
   }, []);
 
   const updateInstanceStyles = useCallback((id: string, patch: Record<string, unknown>) => {
@@ -285,7 +339,7 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
       }),
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
   }, []);
 
   const updateVisibility = useCallback((patch: Partial<ArenaIndicatorVisibility>) => {
@@ -294,7 +348,7 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
       visibility: { ...prefsRef.current.visibility, ...patch },
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
   }, []);
 
   const resetInstance = useCallback((id: string) => {
@@ -308,12 +362,12 @@ export function useArenaIndicatorPreferences(): UseArenaIndicatorPreferencesResu
       ),
     };
     setPrefs(next);
-    writeArenaIndicatorPreferencesV4(next);
+    writeArenaIndicatorPreferencesV5(next);
   }, []);
 
   const reset = useCallback(() => {
     setPrefs(DEFAULT_ARENA_INDICATOR_PREFERENCES_V4);
-    writeArenaIndicatorPreferencesV4(DEFAULT_ARENA_INDICATOR_PREFERENCES_V4);
+    writeArenaIndicatorPreferencesV5(DEFAULT_ARENA_INDICATOR_PREFERENCES_V4);
   }, []);
 
   return {
