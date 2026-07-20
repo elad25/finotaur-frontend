@@ -12,7 +12,15 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolbarTrigger } from './ToolbarTrigger';
 import { DEPTH_PALETTE_IDS, DEPTH_PALETTE_LABELS, type DepthPaletteId } from '@/components/charting/depthPalettes';
+import type { DepthSensitivity } from '@/components/charting/depthSignificance';
 import type { LiquidityPreferences, LiquidityBubbleThreshold } from '../hooks/useLiquidityPreferences';
+
+const SENSITIVITY_IDS: readonly DepthSensitivity[] = ['quiet', 'balanced', 'detailed'];
+const SENSITIVITY_LABELS: Record<DepthSensitivity, string> = {
+  quiet: 'Quiet',
+  balanced: 'Balanced',
+  detailed: 'Detailed',
+};
 
 export interface LiquiditySettingsMenuProps {
   preferences: LiquidityPreferences;
@@ -82,6 +90,27 @@ export function LiquiditySettingsMenu({ preferences, onChange }: LiquiditySettin
                   className={pillClass(preferences.palette === id)}
                 >
                   {DEPTH_PALETTE_LABELS[id]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SectionDivider />
+
+          {/* SENSITIVITY */}
+          <div>
+            <SectionLabel>Sensitivity</SectionLabel>
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Heatmap ink-budget sensitivity">
+              {SENSITIVITY_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onChange({ sensitivity: id })}
+                  aria-pressed={preferences.sensitivity === id}
+                  className={pillClass(preferences.sensitivity === id)}
+                  title="How much of the book reads as significant — Quiet shows only the clearest majors, Detailed shows more"
+                >
+                  {SENSITIVITY_LABELS[id]}
                 </button>
               ))}
             </div>

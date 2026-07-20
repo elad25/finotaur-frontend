@@ -410,6 +410,7 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
               depthMatrixCandleIntervalMs={intervalSec * 1000}
               depthMatrixPalette={preferences.palette}
               depthMatrixSmoothing={preferences.smoothing}
+              depthMatrixSensitivity={preferences.sensitivity}
               volumeBubbles={{
                 store,
                 visible: preferences.bubbles,
@@ -767,6 +768,7 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
               depthMatrixCandleIntervalMs={intervalMs(interval)}
               depthMatrixPalette={preferences.palette}
               depthMatrixSmoothing={preferences.smoothing}
+              depthMatrixSensitivity={preferences.sensitivity}
               volumeBubbles={{
                 store: flowStoreRef.current,
                 visible: preferences.bubbles,

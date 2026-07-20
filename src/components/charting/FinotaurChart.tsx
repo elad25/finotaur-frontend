@@ -35,6 +35,7 @@ import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
 import type { DepthPaletteId } from '@/components/charting/depthPalettes';
+import type { DepthSensitivity } from '@/components/charting/depthSignificance';
 import { FootprintLayer } from '@/components/charting/orderflow/FootprintLayer';
 import { VolumeBubblesLayer } from '@/components/charting/orderflow/VolumeBubblesLayer';
 import type { BubbleThresholdSetting } from '@/components/charting/orderflow/volumeBubbles';
@@ -971,6 +972,13 @@ export interface FinotaurChartProps {
    */
   depthMatrixSmoothing?: boolean;
   /**
+   * Ink-budget sensitivity preset (Phase 3 — matrix mode only, see
+   * DepthMatrixLayer.tsx's `sensitivity` prop / depthSignificance.ts).
+   * Default 'balanced' when omitted — safe no-op for MarketScanner.tsx and
+   * every other caller that doesn't pass this prop.
+   */
+  depthMatrixSensitivity?: DepthSensitivity;
+  /**
    * Optional "executed aggression" volume bubbles overlay (ATAS/Bookmap-
    * style sized circles at (time, price) for trade prints whose dominant-
    * side volume clears a threshold — see volumeBubbles.ts). Mounts
@@ -1252,6 +1260,7 @@ export function FinotaurChart({
   depthMatrixCandleIntervalMs = 60_000,
   depthMatrixPalette = 'classic',
   depthMatrixSmoothing = false,
+  depthMatrixSensitivity = 'balanced',
   liquidityBand = null,
   onManualPriceScale,
   onBarsLoad,
@@ -2964,6 +2973,7 @@ export function FinotaurChart({
           sizeFilterPct={depthMatrixSizeFilterPct}
           palette={depthMatrixPalette}
           smoothing={depthMatrixSmoothing}
+          sensitivity={depthMatrixSensitivity}
         />
       )}
 
