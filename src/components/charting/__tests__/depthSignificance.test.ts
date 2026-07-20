@@ -22,6 +22,9 @@ import {
   zoomDensityMultiplier,
   ZOOM_MULT_MIN,
   ZOOM_MULT_MAX,
+  weightedPriceExtent,
+  clampExtentToMaxRows,
+  clipColumnsForCellBudget,
 } from '../depthSignificance';
 
 describe('dustCutoffUsd', () => {
@@ -244,5 +247,143 @@ describe('zoomDensityMultiplier', () => {
     expect(zoomDensityMultiplier(0)).toBe(1);
     expect(zoomDensityMultiplier(-5)).toBe(1);
     expect(zoomDensityMultiplier(NaN)).toBe(1);
+  });
+});
+
+// ── weightedPriceExtent / clampExtentToMaxRows / clipColumnsForCellBudget ───
+// Perf-fix regression tests (PR #1568 follow-up) — see the "Phase 4" doc
+// comment in depthSignificance.ts for the full rationale.
+
+describe('weightedPriceExtent', () => {
+  it('excludes dust resting at an extreme price (negligible USD weight)', () => {
+    // A tight cluster of real book depth around 64,500 plus a single $20
+    // dust bid sitting all the way down at 30,000 (roughly half the price).
+    const prices: number[] = [];
+    const usd: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      prices.push(64_000 + i * 5); // 64,000..64,995
+      usd.push(1_000 + Math.random() * 500); // real-sized levels
+    }
+    prices.push(30_000);
+    usd.push(20); // dust
+
+    const { min, max } = weightedPriceExtent(prices, usd);
+    expect(min).toBeGreaterThan(60_000); // dust at 30,000 excluded
+    expect(max).toBeLessThanOrEqual(64_995);
+  });
+
+  it('includes a big distant wall (large USD far from the cluster)', () => {
+    const prices: number[] = [];
+    const usd: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      prices.push(64_000 + i * 5);
+      usd.push(1_000);
+    }
+    // A genuinely large resting wall far below the cluster — should NOT be
+    // excluded the way the dust order above was.
+    prices.push(50_000);
+    usd.push(5_000_000);
+
+    const { min } = weightedPriceExtent(prices, usd);
+    expect(min).toBeLessThanOrEqual(50_000);
+  });
+
+  it('handles a degenerate single-price input (min === max === that price)', () => {
+    const { min, max, median } = weightedPriceExtent([100], [500]);
+    expect(min).toBe(100);
+    expect(max).toBe(100);
+    expect(median).toBe(100);
+  });
+
+  it('returns a zero-width degenerate result for empty input', () => {
+    const { min, max, median } = weightedPriceExtent([], []);
+    expect(min).toBe(0);
+    expect(max).toBe(0);
+    expect(median).toBe(0);
+  });
+
+  it('falls back to raw min/max when every weight is zero/non-finite', () => {
+    const { min, max } = weightedPriceExtent([10, 20, 30], [0, NaN, -5]);
+    expect(min).toBe(10);
+    expect(max).toBe(30);
+  });
+
+  it('respects custom loPct/hiPct bounds (narrower window -> narrower or equal extent)', () => {
+    const prices = Array.from({ length: 100 }, (_, i) => i);
+    const usd = new Array(100).fill(10);
+    const wide = weightedPriceExtent(prices, usd, 0.0, 1.0);
+    const narrow = weightedPriceExtent(prices, usd, 0.25, 0.75);
+    expect(narrow.min).toBeGreaterThanOrEqual(wide.min);
+    expect(narrow.max).toBeLessThanOrEqual(wide.max);
+  });
+
+  it('median sits between min and max for a uniform-weight distribution', () => {
+    const prices = Array.from({ length: 100 }, (_, i) => i);
+    const usd = new Array(100).fill(10);
+    const { min, max, median } = weightedPriceExtent(prices, usd);
+    expect(median).toBeGreaterThanOrEqual(min);
+    expect(median).toBeLessThanOrEqual(max);
+  });
+
+  it('is order-independent (unsorted input price array still resolves correctly)', () => {
+    const prices = [500, 100, 300, 200, 400];
+    const usd = [10, 10, 10, 10, 10];
+    const { min, max } = weightedPriceExtent(prices, usd, 0, 1);
+    expect(min).toBe(100);
+    expect(max).toBe(500);
+  });
+});
+
+describe('clampExtentToMaxRows', () => {
+  it('returns the input unchanged when already within the row budget', () => {
+    const result = clampExtentToMaxRows(100, 200, 1, 150, 4000);
+    expect(result).toEqual({ min: 100, max: 200 });
+  });
+
+  it('caps a pathologically wide span to maxRows, centered on the median', () => {
+    // binSize=$25, span from 30,000 to 64,500 -> raw numRows ~ 1,381 (within
+    // the worked example in the task) — use a smaller binSize to force a
+    // clamp: 0.5 -> numRows would be ~69,000.
+    const min = 30_000;
+    const max = 64_500;
+    const binSize = 0.5;
+    const median = 64_000; // near the real cluster
+    const result = clampExtentToMaxRows(min, max, binSize, median, 4000);
+    const rows = Math.round((result.max - result.min) / binSize) + 1;
+    expect(rows).toBeLessThanOrEqual(4000);
+    expect(result.min).toBeGreaterThanOrEqual(min);
+    expect(result.max).toBeLessThanOrEqual(max);
+    // Clamped window should still surround (or sit adjacent to) the median.
+    expect(result.min).toBeLessThanOrEqual(median);
+  });
+
+  it('never produces a window wider than the original [min, max] bounds', () => {
+    const result = clampExtentToMaxRows(0, 1000, 1, 999, 100); // median near the top edge
+    expect(result.min).toBeGreaterThanOrEqual(0);
+    expect(result.max).toBeLessThanOrEqual(1000);
+  });
+
+  it('is a no-op for a non-positive binSize or maxRows', () => {
+    expect(clampExtentToMaxRows(0, 100, 0, 50, 10)).toEqual({ min: 0, max: 100 });
+    expect(clampExtentToMaxRows(0, 100, 1, 50, 0)).toEqual({ min: 0, max: 100 });
+  });
+});
+
+describe('clipColumnsForCellBudget', () => {
+  it('returns numColsAvailable unchanged when already within the cell budget', () => {
+    expect(clipColumnsForCellBudget(100, 100, 1_000_000)).toBe(100);
+  });
+
+  it('trims columns to fit when numCols*numRows exceeds the budget', () => {
+    // 2880 cols * 4000 rows = 11,520,000 — within a 12M budget.
+    expect(clipColumnsForCellBudget(2880, 4000, 12_000_000)).toBe(2880);
+    // 5000 cols * 4000 rows = 20,000,000 — over budget, must trim.
+    const kept = clipColumnsForCellBudget(5000, 4000, 12_000_000);
+    expect(kept).toBeLessThan(5000);
+    expect(kept * 4000).toBeLessThanOrEqual(12_000_000);
+  });
+
+  it('never returns fewer than 1 column even under an extreme budget', () => {
+    expect(clipColumnsForCellBudget(5000, 1_000_000, 100)).toBe(1);
   });
 });
