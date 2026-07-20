@@ -1898,13 +1898,17 @@ async function syncCredential(cred: {
               ) / totalExitQty
             : null;
           const lastLegTs = String(healedLegs[healedLegs.length - 1].timestamp ?? new Date().toISOString());
+          // NOTE: trades_exit_reason_chk only allows trailing/manual/signal/
+          // target/stop — so the reconcile marker lives in updated_via (no
+          // constraint; same convention as reconcile_open_trades_vs_broker)
+          // plus `reconciled: true` on each healed leg in partial_exits.
           const { error: fullHealErr } = await supabaseAdmin
             .from('trades')
             .update({
               exit_price:    weightedAvgExit,
               close_at:      lastLegTs,
               partial_exits: mergedExits,
-              exit_reason:   'broker_flat_reconciled',
+              updated_via:   'reconciler',
             })
             .eq('id', tgt.tradeId);
           if (fullHealErr) {
