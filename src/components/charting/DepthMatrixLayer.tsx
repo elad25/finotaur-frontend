@@ -103,8 +103,27 @@ import {
   kneePercentileForInkBudget,
   effectiveTargetLitFraction,
   zoomDensityMultiplier,
+  weightedPriceExtent,
+  clampExtentToMaxRows,
+  clipColumnsForCellBudget,
   type DepthSensitivity,
 } from './depthSignificance';
+
+// ── Grid safety caps (perf fix, PR #1568 regression — see repaintOffscreen) ──
+//
+// Hard ceiling on the offscreen bitmap's row count. weightedPriceExtent
+// already keeps the p0.5/p99.5 weight window tight around the market, but
+// this is a belt-and-suspenders cap so pathological data (e.g. one enormous
+// distant wall that legitimately clears the weight percentile) can never
+// blow the grid up again — the window gets centered on the weighted median
+// and clipped instead.
+const MAX_GRID_ROWS = 4000;
+// Hard ceiling on total offscreen cells (numCols * numRows). createImageData
+// + the per-cell paint loop + applyVerticalSmoothing + applyBloom are all
+// O(cells), so this bounds worst-case repaint cost even when numCols alone
+// (already capped at ~2880 by the visible time range) combines with a wide
+// MAX_GRID_ROWS-sized window.
+const MAX_GRID_CELLS = 12_000_000;
 
 // Normalized-intensity threshold (post-compression t ∈ [0,1]) above which a
 // cell is considered "hot" for the bloom pass.
@@ -464,7 +483,7 @@ export function DepthMatrixLayer({
   // Called only when columns change or normalization changes.
 
   function repaintOffscreen(
-    cols: DecodedColumn[],
+    colsIn: DecodedColumn[],
     curBinSize: number,
     vLo: number,
     vHi: number,
@@ -477,28 +496,81 @@ export function DepthMatrixLayer({
     paletteId: DepthPaletteId,
     smoothingEnabled: boolean,
   ) {
-    if (cols.length === 0) return;
+    if (colsIn.length === 0) return;
 
     // ── Determine grid extents ────────────────────────────────────────────
-    // Price range: min/max bin price across all columns.
-    let priceMin = Infinity;
-    let priceMax = -Infinity;
-    for (const col of cols) {
+    // Notional-WEIGHTED price extent (perf fix — see MAX_GRID_ROWS/MAX_GRID_
+    // CELLS comments above and weightedPriceExtent's doc comment in
+    // depthSignificance.ts). PR #1568 removed the $1K sampling floor in favor
+    // of a dust-only-by-notional cutoff, so a raw min/max across every bin
+    // let a single far-away dust order (small $, big price distance) blow
+    // the grid extent up to tens of thousands of rows — numCols(<=2880) *
+    // numRows then exploded createImageData + the per-cell paint loop +
+    // applyVerticalSmoothing + applyBloom (all O(cells)) into a multi-second
+    // freeze. Weighting each bin's contribution by its own USD notional (p0.5
+    // /p99.5 cut) means dust falls outside the window while a real distant
+    // WALL (big USD) is preserved.
+    const extentPrices: number[] = [];
+    const extentUsd: number[] = [];
+    for (const col of colsIn) {
       for (const r of col.bids) {
-        if (r.price < priceMin) priceMin = r.price;
-        if (r.price + curBinSize > priceMax) priceMax = r.price + curBinSize;
+        if (r.q <= 0) continue;
+        extentPrices.push(r.price);
+        extentUsd.push(qToUsd(r.q));
       }
       for (const r of col.asks) {
-        if (r.price < priceMin) priceMin = r.price;
-        if (r.price + curBinSize > priceMax) priceMax = r.price + curBinSize;
+        if (r.q <= 0) continue;
+        extentPrices.push(r.price);
+        extentUsd.push(qToUsd(r.q));
       }
     }
+    if (extentPrices.length === 0) return;
+
+    const weighted = weightedPriceExtent(extentPrices, extentUsd);
+    let priceMin = weighted.min;
+    let priceMax = weighted.max + curBinSize; // upper edge of the top bin
     if (!isFinite(priceMin) || !isFinite(priceMax)) return;
 
+    // Hard safety cap — belt-and-suspenders on top of the weighted window
+    // above (see MAX_GRID_ROWS comment). Centers a capped window on the
+    // weighted MEDIAN price rather than ever letting numRows grow unbounded.
+    let numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
+    if (numRows > MAX_GRID_ROWS) {
+      const clamped = clampExtentToMaxRows(priceMin, priceMax, curBinSize, weighted.median, MAX_GRID_ROWS);
+      priceMin = clamped.min;
+      priceMax = clamped.max;
+      numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
+    }
+    if (numRows <= 0) return;
+
+    // Total-cell budget guard — even a MAX_GRID_ROWS-capped grid can still
+    // exceed a sane cell count on a very wide chart (many columns). Clip the
+    // OLDEST columns (not the price window already computed above) to fit;
+    // the newest columns are what's actually visible at the live edge of the
+    // chart. The extent above was computed over the full (pre-clip) column
+    // set — clipping only trims which columns get PAINTED, it never widens
+    // the already-narrowed price window.
+    let cols = colsIn;
+    if (cols.length * numRows > MAX_GRID_CELLS) {
+      const keepCols = clipColumnsForCellBudget(cols.length, numRows, MAX_GRID_CELLS);
+      if (keepCols < cols.length) {
+        cols = cols.slice(cols.length - keepCols);
+      }
+    }
+    if (cols.length === 0) return;
+
     const numCols = cols.length;
-    // Number of price rows
-    const numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
     if (numCols <= 0 || numRows <= 0) return;
+
+    // Precise upper price bound for the row-membership filter below —
+    // bins outside [priceMin, rowMaxPrice] fall outside the clipped grid and
+    // must be excluded BEFORE persistMap bookkeeping (not just skipped at
+    // paint time), otherwise a far-away price key still occupies a slot in
+    // persistMap and gets tracked for persistence purely to be discarded a
+    // few lines later. Treating an out-of-window bin as ABSENT (never added)
+    // is both cheaper and correct: it's outside the plotted window either way.
+    const rowMaxPrice = priceMin + (numRows - 1) * curBinSize;
+    const rowEpsilon = curBinSize * 0.001;
 
     // Resize offscreen if needed
     const needed_w = numCols;
@@ -625,11 +697,21 @@ export function DepthMatrixLayer({
       // them all together by price level (Bookmap style).
       const cellMap = new Map<number, number>(); // price → q
 
+      // Row-window membership filter — applied HERE, before the bin ever
+      // reaches cellMap/persistMap, not just at paint time below. A bin
+      // outside [priceMin, rowMaxPrice] (clipped by weightedPriceExtent/
+      // MAX_GRID_ROWS/MAX_GRID_CELLS above) is treated as ABSENT — it's
+      // outside the plotted window regardless, so this is both cheaper
+      // (persistMap never grows for far-away dust) and correct (an absent
+      // bin's persistence count naturally resets via the prune step below,
+      // same as a bin that genuinely isn't in this column).
       for (const r of col.bids) {
+        if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
         const existing = cellMap.get(r.price) ?? 0;
         cellMap.set(r.price, Math.max(existing, r.q));
       }
       for (const r of col.asks) {
+        if (r.price < priceMin - rowEpsilon || r.price > rowMaxPrice + rowEpsilon) continue;
         const existing = cellMap.get(r.price) ?? 0;
         cellMap.set(r.price, Math.max(existing, r.q));
       }
@@ -654,6 +736,10 @@ export function DepthMatrixLayer({
         const priceRow = Math.round((price - priceMin) / curBinSize);
         // Canvas row 0 = highest price (numRows - 1 - priceRow)
         const canvasRow = numRows - 1 - priceRow;
+        // Defensive only — the row-window filter above already excludes any
+        // bin outside [priceMin, rowMaxPrice] before it reaches cellMap, so
+        // this should never fire; kept as a cheap bounds guard against
+        // floating-point rounding at the exact window edge.
         if (canvasRow < 0 || canvasRow >= numRows) continue;
 
         const pixelIdx = canvasRow * numCols + ci;
