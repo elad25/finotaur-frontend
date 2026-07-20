@@ -9,8 +9,9 @@
 // positionGrouping.ts, so the two views can never disagree on which fills form a
 // decision or on R.
 //
-// R is INITIAL-1R: actual_r = Σpnl / Σ(initial-entry risk to one unified stop) —
-// credits the scale-in, consistent across copier copies and micro+mini.
+// R is stop-based: actual_r = Σpnl / Σ(every entry leg's risk to one unified
+// stop) — the full position's exposure, consistent across copier copies and
+// micro+mini (2026-07-20: was first-leg-only "initial-1R"; see positionGrouping).
 // ════════════════════════════════════════════════════════
 
 import { computeActualR } from '@/utils/rResolver';

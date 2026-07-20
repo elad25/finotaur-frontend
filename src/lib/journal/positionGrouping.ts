@@ -80,15 +80,17 @@ function partitionKey(trade: Record<string, any>): string {
   return `${contractRoot(trade.symbol)}|${trade.side ?? ''}`;
 }
 
-/** First entry leg of a row: partial_entries[0], falling back to entry_price/quantity. */
+/** Every entry leg of a row: partial_entries[], falling back to entry_price/quantity. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function firstLeg(trade: Record<string, any>): { price: number; qty: number } {
+function entryLegs(trade: Record<string, any>): Array<{ price: number; qty: number }> {
   const legs = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
-  const first = legs.length > 0 ? legs[0] : undefined;
-  return {
-    price: Number(first?.price ?? trade.entry_price),
-    qty: Number(first?.quantity ?? trade.quantity ?? 0),
-  };
+  if (legs.length > 0) {
+    return legs.map((l: { price?: number | null; quantity?: number | null }) => ({
+      price: Number(l?.price),
+      qty: Number(l?.quantity ?? 0),
+    }));
+  }
+  return [{ price: Number(trade.entry_price), qty: Number(trade.quantity ?? 0) }];
 }
 
 /**
@@ -109,10 +111,18 @@ export function unifiedStop(cluster: Record<string, any>[]): number | null {
 }
 
 /**
- * INITIAL-1R risk in $ for a whole decision: Σ over legs of
- * |firstEntry − unifiedStop| × firstQty × mult. Credits scale-in (P&L is earned
- * on the grown size, risk stays anchored to the initial entry). Returns null when
- * there's no usable stop (UI then falls back to user-1R from settings).
+ * Stop-based risk in $ for a whole decision: Σ over EVERY entry leg of
+ * |legEntry − unifiedStop| × legQty × mult — the full position's exposure to
+ * the protective stop, matching the trades.risk_usd / actual_r semantics the
+ * DB stores per row. Returns null when there's no usable stop (UI then falls
+ * back to user-1R from settings).
+ *
+ * 2026-07-20 (Elad): previously anchored to the FIRST leg only ("initial-1R",
+ * crediting scale-in). That produced absurd R when the first fill sat next to
+ * the matched stop (entry 29176.75 vs stop 29177 → $5 risk → +829R on a real
+ * ~2R trade, because the stop order's stored price reflects its final/trailed
+ * state, not the original placement). R must follow the original stop SIZE of
+ * the position — every entry leg counts.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function summedInitialRisk(cluster: Record<string, any>[]): number | null {
@@ -120,12 +130,13 @@ export function summedInitialRisk(cluster: Record<string, any>[]): number | null
   if (stop == null) return null;
   let sum = 0;
   for (const t of cluster) {
-    const { price, qty } = firstLeg(t);
     const mult =
       Number(t.multiplier) > 0 ? Number(t.multiplier) : getAssetMultiplier(t.symbol || '');
-    const dist = Math.abs(price - stop);
-    if (Number.isFinite(price) && Number.isFinite(qty) && dist > 0 && qty > 0 && mult > 0) {
-      sum += dist * qty * mult;
+    for (const { price, qty } of entryLegs(t)) {
+      const dist = Math.abs(price - stop);
+      if (Number.isFinite(price) && Number.isFinite(qty) && dist > 0 && qty > 0 && mult > 0) {
+        sum += dist * qty * mult;
+      }
     }
   }
   return sum > 0 ? sum : null;
