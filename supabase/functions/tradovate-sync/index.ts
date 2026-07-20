@@ -2145,6 +2145,17 @@ Deno.serve(async (req: Request) => {
       // B5 perf fix (2026-05-21): broker_connections.created_at is now in the
       // primary SELECT (line ~873), so the grace check uses the in-scope value
       // and the secondary `ageRows` round-trip is removed entirely.
+      //
+      // Hourly fallback sweep (2026-07-20): the activity signal is journal
+      // trades, which is circular — a user whose synced trades aged out (or
+      // were bulk-deleted) can never become "active" again because their new
+      // fills are exactly what this filter blocks (incident 2026-07-16:
+      // connected+auto_sync connections silently starved for 4 days after a
+      // journal cleanup). On one cron tick per hour (the first tick of the
+      // hour — schedule is 4-59/10, so minute < 10) inactive connections are
+      // swept too. Worst case a returning trader's fills land within an hour,
+      // which re-adds them to the fast 10-minute path for the next 7 days.
+      const isHourlySweepTick = new Date().getUTCMinutes() < 10;
       const skipped: string[] = [];
       const kept: typeof allConnections = [];
       for (const bc of allConnections as Array<{ id: string; user_id: string; created_at?: string }>) {
@@ -2155,6 +2166,8 @@ Deno.serve(async (req: Request) => {
         // New-connection grace: keep if < 7 days old, even with no trade activity yet.
         const createdAtMs = bc.created_at ? Date.parse(bc.created_at) : NaN;
         if (!Number.isNaN(createdAtMs) && createdAtMs >= sevenDaysAgoMs) {
+          kept.push(bc);
+        } else if (isHourlySweepTick) {
           kept.push(bc);
         } else {
           skipped.push(bc.id);
@@ -2167,6 +2180,7 @@ Deno.serve(async (req: Request) => {
         skipped_inactive: skipped.length,
         total: allConnections.length,
         rpc_used: !rpcErr,
+        hourly_sweep: isHourlySweepTick,
       }));
     }
     const runStart = Date.now();
