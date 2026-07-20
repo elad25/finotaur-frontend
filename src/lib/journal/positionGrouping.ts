@@ -111,35 +111,64 @@ export function unifiedStop(cluster: Record<string, any>[]): number | null {
 }
 
 /**
- * Stop-based risk in $ for a whole decision: Σ over EVERY entry leg of
- * |legEntry − unifiedStop| × legQty × mult — the full position's exposure to
- * the protective stop, matching the trades.risk_usd / actual_r semantics the
- * DB stores per row. Returns null when there's no usable stop (UI then falls
- * back to user-1R from settings).
+ * HYBRID risk basis in $ for a whole decision (Elad, 2026-07-20):
  *
- * 2026-07-20 (Elad): previously anchored to the FIRST leg only ("initial-1R",
- * crediting scale-in). That produced absurd R when the first fill sat next to
- * the matched stop (entry 29176.75 vs stop 29177 → $5 risk → +829R on a real
- * ~2R trade, because the stop order's stored price reflects its final/trailed
- * state, not the original placement). R must follow the original stop SIZE of
- * the position — every entry leg counts.
+ * Primary — INITIAL-1R (the model Elad settled on 2026-06-29, PR #1169):
+ * Σ over rows of |firstEntryLeg − unifiedStop| × firstQty × mult. Credits
+ * scale-in: risk is 1R at the initial entry, P&L is earned on the grown size
+ * ("entered 1 with a 20pt stop = 1R, exited 3 at +70pt → big R" → 6.58R).
+ *
+ * Fallback — FULL-position risk (Σ over EVERY entry leg vs the unified stop)
+ * when the initial-leg risk is DEGENERATE: Tradovate stop orders are modified
+ * in place, so the stored stopPrice is the final/trailed state, not the
+ * original placement. When the trailed stop sits next to the first fill
+ * (2026-07-20: entry 29176.75 vs stop 29177 → $5 "initial risk" → +829R on a
+ * real ~2R trade), initial-1R is meaningless — fall back to the whole
+ * position's exposure. Degenerate = the first-leg avg distance-to-stop is
+ * under 10% of the all-legs avg distance; for single-leg positions both
+ * bases coincide, so the fallback never fires there.
+ *
+ * Returns null when there's no usable stop (UI then falls back to user-1R).
  */
+const DEGENERATE_INITIAL_DIST_RATIO = 0.1;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function summedInitialRisk(cluster: Record<string, any>[]): number | null {
   const stop = unifiedStop(cluster);
   if (stop == null) return null;
-  let sum = 0;
+
+  let initialRisk = 0;      // first leg per row
+  let initialWeight = 0;    // Σ firstQty × mult
+  let fullRisk = 0;         // every leg
+  let fullWeight = 0;       // Σ qty × mult over all legs
+
   for (const t of cluster) {
     const mult =
       Number(t.multiplier) > 0 ? Number(t.multiplier) : getAssetMultiplier(t.symbol || '');
-    for (const { price, qty } of entryLegs(t)) {
+    const legs = entryLegs(t);
+    for (let i = 0; i < legs.length; i++) {
+      const { price, qty } = legs[i];
       const dist = Math.abs(price - stop);
-      if (Number.isFinite(price) && Number.isFinite(qty) && dist > 0 && qty > 0 && mult > 0) {
-        sum += dist * qty * mult;
+      if (!Number.isFinite(price) || !Number.isFinite(qty) || dist <= 0 || qty <= 0 || mult <= 0) {
+        continue;
+      }
+      fullRisk += dist * qty * mult;
+      fullWeight += qty * mult;
+      if (i === 0) {
+        initialRisk += dist * qty * mult;
+        initialWeight += qty * mult;
       }
     }
   }
-  return sum > 0 ? sum : null;
+
+  if (fullRisk <= 0) return null;
+  if (initialRisk <= 0) return fullRisk;
+
+  const initialAvgDist = initialRisk / initialWeight;
+  const fullAvgDist = fullRisk / fullWeight;
+  const degenerate = initialAvgDist < DEGENERATE_INITIAL_DIST_RATIO * fullAvgDist;
+
+  return degenerate ? fullRisk : initialRisk;
 }
 
 /**
