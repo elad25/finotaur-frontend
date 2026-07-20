@@ -13,7 +13,7 @@
 // covering positionGrouping / tradeAggregation / traderNormalization).
 
 import { describe, it, expect } from 'vitest';
-import { contractRoot, clusterByOverlap, displaySymbol } from '@/lib/journal/positionGrouping';
+import { contractRoot, clusterByOverlap, displaySymbol, summedInitialRisk } from '@/lib/journal/positionGrouping';
 import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
 import { normalizeTraderTrades } from '@/lib/journal/traderNormalization';
 
@@ -140,6 +140,70 @@ describe('normalizeTraderTrades — TRADER shows one row per decision', () => {
     const rows = normalizeTraderTrades(withOpen, 'per-account');
     expect(rows).toHaveLength(1);
     expect(rows[0].outcome).toBe('OPEN');
+  });
+});
+
+describe('summedInitialRisk — hybrid INITIAL-1R with degenerate-stop fallback', () => {
+  // Normal scale-in (Elad's settled 2026-06-29 model, PR #1169): risk anchors
+  // to the FIRST leg's distance to the unified stop — crediting the scale-in.
+  it('uses INITIAL-1R for a normal scale-in (first leg carries a real stop distance)', () => {
+    const scaleIn: Row[] = [{
+      id: 'scale-in', symbol: 'NQU6', side: 'LONG',
+      open_at: '2026-06-29T14:00:00.000Z', close_at: '2026-06-29T15:00:00.000Z',
+      pnl: 4200, quantity: 3, entry_price: 30040, stop_price: 30000, multiplier: 20,
+      // First leg 20pts from the stop; later adds are further away.
+      partial_entries: [
+        { price: 30020, quantity: 1 },
+        { price: 30040, quantity: 1 },
+        { price: 30060, quantity: 1 },
+      ],
+      portfolio_id: 'acct-A',
+    }];
+    // INITIAL-1R: |30020 - 30000| × 1 × 20 = $400 (NOT the all-legs $2,400).
+    expect(summedInitialRisk(scaleIn)).toBeCloseTo(400, 6);
+  });
+
+  // Regression (2026-07-20): Tradovate stop orders store their FINAL/trailed
+  // price. Elad's first fill sat 0.25pt from the trailed stop → $5 "initial
+  // risk" → +829R on a real ~2R trade. When the first-leg distance is
+  // degenerate vs the position's overall distance, fall back to full risk.
+  it('falls back to FULL-position risk when the first leg sits on the (trailed) stop', () => {
+    const trailedStop: Row[] = [{
+      id: 'trailed', symbol: 'NQU6', side: 'SHORT',
+      open_at: '2026-07-20T13:44:00.000Z', close_at: '2026-07-20T13:52:00.000Z',
+      pnl: 4145, quantity: 3, entry_price: 29143.83, stop_price: 29177, multiplier: 20,
+      // Mirrors the real 2026-07-20 rows: first fill 0.25pt from the stop.
+      partial_entries: [
+        { price: 29176.75, quantity: 1 },
+        { price: 29148.25, quantity: 1 },
+        { price: 29106.5,  quantity: 1 },
+      ],
+      portfolio_id: 'acct-A',
+    }];
+    // Full risk: (0.25 + 28.75 + 70.5) × 20 = $1,990 → R ≈ 2.08, not 829.
+    expect(summedInitialRisk(trailedStop)).toBeCloseTo(1990, 6);
+  });
+
+  it('single-leg positions are unaffected (both bases coincide)', () => {
+    const single: Row[] = [{
+      id: 'single', symbol: 'NQU6', side: 'SHORT',
+      open_at: '2026-07-20T14:00:00.000Z', close_at: '2026-07-20T14:10:00.000Z',
+      pnl: 600, quantity: 1, entry_price: 29150, stop_price: 29180, multiplier: 20,
+      partial_entries: [{ price: 29150, quantity: 1 }],
+      portfolio_id: 'acct-A',
+    }];
+    expect(summedInitialRisk(single)).toBeCloseTo(600, 6); // 30pts × 1 × 20
+  });
+
+  it('returns null when no leg has a usable stop', () => {
+    const stopless: Row[] = [{
+      id: 'stopless', symbol: 'NQU6', side: 'SHORT',
+      open_at: '2026-07-20T14:00:00.000Z', close_at: '2026-07-20T14:10:00.000Z',
+      pnl: 100, quantity: 1, entry_price: 29150, stop_price: null, multiplier: 20,
+      partial_entries: [{ price: 29150, quantity: 1 }],
+      portfolio_id: 'acct-A',
+    }];
+    expect(summedInitialRisk(stopless)).toBeNull();
   });
 });
 
