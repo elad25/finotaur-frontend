@@ -6,9 +6,8 @@
  * Renders:
  *   (a) Order Flow on/off toggle
  *   (b) cell-mode segmented control (Bid×Ask | Delta | Volume)
- *   (c) CVD / Delta sub-pane toggles
- *   (d) row-density segmented control (Auto | ×2 | ×4)
- *   (e) Heatmap toggle — Bookmap-style liquidity heatmap (DepthMatrixLayer,
+ *   (c) row-density segmented control (Auto | ×2 | ×4)
+ *   (d) Heatmap toggle — Bookmap-style liquidity heatmap (DepthMatrixLayer,
  *       reused as-is from the Market Scanner)
  *
  * Disabled (dimmed, non-interactive) as a single unit when the active symbol
@@ -23,8 +22,6 @@ export type RowDensity = 'auto' | 'x2' | 'x4';
 export interface OrderFlowControlsState {
   enabled: boolean;
   cellMode: FootprintCellMode;
-  showCvd: boolean;
-  showDelta: boolean;
   rowDensity: RowDensity;
   /** Volume Profile overlay (ATAS-style visible-range histogram + POC/VA). Default OFF. */
   showVolumeProfile: boolean;
@@ -41,8 +38,6 @@ export interface OrderFlowControlsState {
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   enabled: true,
   cellMode: 'bidAsk',
-  showCvd: false,
-  showDelta: false,
   rowDensity: 'auto',
   showVolumeProfile: false,
   showHeatmap: false,
@@ -150,30 +145,6 @@ export function OrderFlowControls({
             {opt.label}
           </button>
         ))}
-      </div>
-
-      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
-
-      {/* CVD / Delta sub-pane toggles */}
-      <div className="flex items-center gap-1" role="group" aria-label="Sub-panes">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange({ ...state, showCvd: !state.showCvd })}
-          className={pillClass(state.showCvd, disabled)}
-          aria-pressed={state.showCvd}
-        >
-          CVD
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange({ ...state, showDelta: !state.showDelta })}
-          className={pillClass(state.showDelta, disabled)}
-          aria-pressed={state.showDelta}
-        >
-          Delta
-        </button>
       </div>
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />

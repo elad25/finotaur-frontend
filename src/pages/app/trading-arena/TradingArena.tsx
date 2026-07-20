@@ -1,14 +1,17 @@
 /**
  * Trading Arena — full-screen trading workstation (admin + beta only).
  *
- * Tab restructure (2026-07): the tab bar is 5 tabs — Chart, Order Flow, CVD,
+ * Tab restructure (2026-07): the tab bar is 4 tabs — Chart, Order Flow,
  * Liquidity, DOM. The former Tape / Options / Futures / Forex tabs were
  * removed from navigation (files kept on disk, just unrouted — see
- * tabs/TapeTab.tsx, tabs/LockedTab.tsx, tabs/FuturesChartTab.tsx). CVD
- * (tabs/CvdTab.tsx) was restored to the tab bar on 2026-07-19 — crypto-only
- * (Binance klines via useKlineDelta), same TickDataRequiredState gating as
- * Liquidity/DOM for non-crypto symbols. Chart is a PLAIN candlestick chart —
- * no order flow overlay. The Order Flow tab (slug 'order-flow', component
+ * tabs/TapeTab.tsx, tabs/LockedTab.tsx, tabs/FuturesChartTab.tsx). The
+ * standalone CVD tab (tabs/CvdTab.tsx, briefly restored 2026-07-19) was
+ * removed again the same day — CVD/Delta are now first-class Arena
+ * indicators (see components/indicatorsSettings.ts's 'cvd'/'delta' keys),
+ * not a separate tab; 'cvd' deep links redirect to 'chart' (see types.ts's
+ * toTabId). Chart is a PLAIN candlestick chart — no order flow overlay
+ * unless a CVD/Delta indicator instance is active. The Order Flow tab
+ * (slug 'order-flow', component
  * tabs/FootprintTab.tsx — renamed from "Footprint" in the tab bar/nav, file
  * kept as-is) is the dedicated full-detail footprint chart; legacy
  * 'footprint' / 'orderflow' deep links still resolve there — see
@@ -26,7 +29,6 @@
  *   - Tabs (URL-driven via :section param):
  *       Chart       → FinotaurChart + BinanceSource, plain candlesticks
  *       Order Flow  → dedicated full-detail order-flow footprint (crypto + futures)
- *       CVD         → Cumulative Volume Delta (crypto only)
  *       Liquidity   → Bookmap-style liquidity heatmap (DepthMatrixLayer, crypto only)
  *       DOM         → clickable price ladder (crypto + futures via NT8 bridge)
  *
@@ -48,7 +50,6 @@ import { toTabId } from './types';
 import { getIntervalCapability, type ArenaInterval } from './utils/intervals';
 import { ChartTab }    from './tabs/ChartTab';
 import { FootprintTab }  from './tabs/FootprintTab';
-import { CvdTab }        from './tabs/CvdTab';
 import { LiquidityTab }  from './tabs/LiquidityTab';
 import { DomTab }        from './tabs/DomTab';
 import { ArenaToolbar } from './components/ArenaToolbar';
@@ -495,14 +496,6 @@ export default function TradingArena() {
               assetClass={assetClass}
               isAdmin={isAdmin}
               indicators={indicators}
-              onSelectSymbol={handleSymbolSelect}
-            />
-          )}
-          {activeTab === 'cvd' && (
-            <CvdTab
-              symbol={symbol}
-              interval={interval}
-              assetClass={assetClass}
               onSelectSymbol={handleSymbolSelect}
             />
           )}

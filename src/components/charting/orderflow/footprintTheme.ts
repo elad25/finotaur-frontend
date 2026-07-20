@@ -3,9 +3,10 @@
 // thresholds that drive the zoom-dependent collapse in footprintRender.ts.
 //
 // Palette is deliberately aligned with the rest of the order-flow suite
-// (CvdTab.tsx deltaPos/deltaNeg, TapeTab.tsx buy/sell coloring) so a trader
-// switching between the Tape/CVD tabs and the footprint overlay sees the
-// same green = buy pressure / red = sell pressure convention everywhere.
+// (the CVD/Delta Arena indicators' deltaPos/deltaNeg, TapeTab.tsx buy/sell
+// coloring) so a trader switching between Tape and the footprint overlay
+// sees the same green = buy pressure / red = sell pressure convention
+// everywhere.
 // Gold matches FINOTAUR_DARK_THEME.brandGold family in FinotaurChart.tsx.
 
 /** Aggressive-buy family — matches TapeTab's buy green (#22c55e / #34d399). */

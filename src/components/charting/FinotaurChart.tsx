@@ -180,6 +180,8 @@ const INDICATOR_COLORS: Record<IndicatorType, string> = {
   MACD: '#fcd34d',    // amber-300 — MACD line (paired with signal amber-400)
   BBANDS: '#a78bfa',  // violet-400 — middle band (distinct from VWAP violet-300)
   ATR: '#94a3b8',     // slate-400 — sits in its own pane (distinct from RSI zinc)
+  CVD: '#38bdf8',     // sky-400 — cumulative volume delta line (pane or hidden overlay scale)
+  DELTA: '#fb923c',   // orange-400 — per-bar histogram base (actual bars colored per-sign, see data-apply switch)
 };
 
 // Companion colors for the multi-series indicators
@@ -312,18 +314,26 @@ function applyIndicatorLineStyles(
 
 // Subpane price-scale IDs. Each unknown id creates a new overlay scale in
 // lightweight-charts. The candle pane uses the built-in `right` scale.
-// RSI/MACD/ATR get a UNIQUE id PER INSTANCE (`pane-<key>`, where `key` is
-// `indicator.instanceId ?? indicator.type`) so the Trading Arena can add the
-// same type more than once (e.g. RSI 14 + RSI 21) with independent panes;
-// every non-Arena caller has no `instanceId`, so `key === type` and the id
-// is stable/identical across renders — same effective behavior as the old
-// fixed 'rsi'/'macd'/'atr' constants.
-function resolvePaneScaleId(type: IndicatorType, key: string): string {
+// RSI/MACD/ATR/DELTA (and CVD in 'pane' mode) get a UNIQUE id PER INSTANCE
+// (`pane-<key>`, where `key` is `indicator.instanceId ?? indicator.type`) so
+// the Trading Arena can add the same type more than once (e.g. RSI 14 + RSI
+// 21) with independent panes; every non-Arena caller has no `instanceId`, so
+// `key === type` and the id is stable/identical across renders — same
+// effective behavior as the old fixed 'rsi'/'macd'/'atr' constants.
+//
+// CVD is special: in `'overlay'` displayMode it returns the shared
+// `'cvd-overlay'` id (a single hidden price scale reused across every CVD
+// instance in overlay mode — see the indicators-apply effect's scale
+// configuration below) instead of a per-instance pane id.
+function resolvePaneScaleId(type: IndicatorType, key: string, displayMode?: 'pane' | 'overlay'): string {
   switch (type) {
     case 'RSI':
     case 'MACD':
     case 'ATR':
+    case 'DELTA':
       return `pane-${key}`;
+    case 'CVD':
+      return displayMode === 'overlay' ? 'cvd-overlay' : `pane-${key}`;
     default:
       return 'right';
   }
@@ -524,6 +534,43 @@ function createSeriesForType(
         crosshairMarkerVisible: true,
       });
       return [line];
+    }
+    case 'CVD': {
+      const line = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: paneScaleId,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      // Zero reference line only in 'pane' mode (paneScaleId is a dedicated
+      // 'pane-<key>' scale there) — 'overlay' mode shares the hidden
+      // 'cvd-overlay' scale with the candle area, where a zero-anchor line
+      // would just be a stray horizontal line crossing candles.
+      if (paneScaleId !== 'cvd-overlay') {
+        line.createPriceLine({
+          price: 0,
+          color: themeTokens.textAxis,
+          lineWidth: 1,
+          lineStyle: 1,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
+      return [line];
+    }
+    case 'DELTA': {
+      // Per-bar histogram — bars are colored per-point by sign (green up /
+      // red down) in the data-apply switch below, same pattern as MACD's
+      // histogram series.
+      const histogram = chart.addHistogramSeries({
+        priceScaleId: paneScaleId,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        base: 0,
+      });
+      return [histogram];
     }
     case 'SMA':
     case 'EMA':
@@ -787,6 +834,19 @@ export interface FinotaurChartProps {
    * no extra network calls.
    */
   indicators?: Indicator[];
+  /**
+   * Optional precomputed order-flow series feeding the `'CVD'` / `'DELTA'`
+   * indicator types (see `Indicator.type`/`Indicator.displayMode`) — one
+   * point per bar, `time` matching a loaded `Bar.time`. `cvd` = cumulative
+   * volume delta running total; `delta` = that single bar's own volume
+   * delta (buy volume minus sell volume). Callers wire this from their own
+   * order-flow aggregation (e.g. FlowBinStore-derived data) — FinotaurChart
+   * does no aggregation of its own, it only plots what's given.
+   * 🔴 Undefined/empty is a COMPLETE no-op: CVD/DELTA series render empty
+   * and are excluded from subpane layout (`paneKeys`) so no blank pane is
+   * reserved when this prop isn't wired (e.g. stock symbols).
+   */
+  orderFlowData?: { time: UTCTimestamp; cvd: number; delta: number }[];
   /** Phase 0 = dark only; light reserved for Phase 1+. */
   theme?: ChartTheme;
   /** Container height. Number = pixels; string = CSS (e.g. '100%', '600px'). */
@@ -1138,6 +1198,7 @@ export function FinotaurChart({
   markers,
   markerIcons,
   indicators,
+  orderFlowData,
   theme: themeProp = 'dark',
   height = 600,
   hideCursor = false,
@@ -1231,6 +1292,15 @@ export function FinotaurChart({
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line' | 'Histogram'>[]>>(
     new Map(),
   );
+  /**
+   * The `resolvePaneScaleId` result last used to create each key's series —
+   * lets the indicators-apply effect detect when an indicator's pane-shape
+   * changed (currently only possible via CVD's `displayMode` toggling
+   * 'pane' <-> 'overlay') even though its `instanceId ?? type` key stayed
+   * the same, so it can tear down and recreate the series on the new scale
+   * instead of silently leaving it on the stale one.
+   */
+  const indicatorScaleIdRef = useRef<Map<string, string>>(new Map());
   /** Which subpane price scales have been styled (borderColor etc.) at least once. */
   const scalesConfiguredRef = useRef<Set<string>>(new Set());
   /**
@@ -1429,6 +1499,7 @@ export function FinotaurChart({
       // Indicator series belonged to the destroyed chart — drop refs so the
       // next mount re-creates them from scratch.
       indicatorSeriesRef.current.clear();
+      indicatorScaleIdRef.current.clear();
       scalesConfiguredRef.current.clear();
       // Overlay price lines are destroyed with the chart — clear the map so
       // the next mount does not try to remove already-gone line handles.
@@ -2287,20 +2358,40 @@ export function FinotaurChart({
           }
         }
         current.delete(key);
+        indicatorScaleIdRef.current.delete(key);
       }
     }
+
+    const hasOrderFlowData = !!(orderFlowData && orderFlowData.length > 0);
 
     // ─── Add / update series for each desired indicator ─────
     for (const [key, ind] of desired.entries()) {
       const type = ind.type;
       const color = ind.color ?? INDICATOR_COLORS[type];
+      const paneScaleId = resolvePaneScaleId(type, key, ind.displayMode);
 
       // ── Create on first sight, or fetch existing ──────────
       let seriesList = current.get(key);
+      // A previously-created series whose resolved scale id changed (only
+      // reachable via CVD's displayMode toggling 'pane' <-> 'overlay' while
+      // keeping the same instanceId) must be torn down and recreated on the
+      // new scale — reusing the old series would leave it stuck on its
+      // original pane/overlay scale forever.
+      if (seriesList && indicatorScaleIdRef.current.get(key) !== paneScaleId) {
+        for (const s of seriesList) {
+          try {
+            chart.removeSeries(s);
+          } catch {
+            // Series may already be gone if chart was torn down mid-flight.
+          }
+        }
+        current.delete(key);
+        seriesList = undefined;
+      }
       if (!seriesList) {
-        const paneScaleId = resolvePaneScaleId(type, key);
         seriesList = createSeriesForType(chart, type, color, pickTheme(theme), paneScaleId);
         current.set(key, seriesList);
+        indicatorScaleIdRef.current.set(key, paneScaleId);
       }
       // Re-applies color/thickness/line-style/visibility from `ind.lineStyles`
       // every run (idempotent right after creation too) — this is what makes
@@ -2378,18 +2469,51 @@ export function FinotaurChart({
             computeATR(bars, ind.period),
           );
           break;
+        case 'CVD':
+          // Precomputed by the caller — see `orderFlowData` prop doc.
+          // Empty when the caller hasn't wired order-flow data yet (e.g.
+          // stock symbols) — series renders as a no-op line.
+          (seriesList[0] as ISeriesApi<'Line'>).setData(
+            (orderFlowData ?? []).map((p) => ({ time: p.time, value: p.cvd })),
+          );
+          break;
+        case 'DELTA': {
+          // Per-bar sign coloring (green up / red down), same pattern as
+          // MACD's histogram — no user override slot for this v1 pass (see
+          // indicatorsSettings.ts's defaultStylesForType('delta') doc).
+          const t = pickTheme(theme);
+          (seriesList[0] as ISeriesApi<'Histogram'>).setData(
+            (orderFlowData ?? []).map((p) => ({
+              time: p.time,
+              value: p.delta,
+              color: p.delta >= 0 ? t.candleUp : t.candleDown,
+            })),
+          );
+          break;
+        }
       }
     }
 
-    // ─── Paned instances (RSI/MACD/ATR), in `indicators` array order ───
+    // ─── Paned instances (RSI/MACD/ATR/DELTA, + CVD in 'pane' mode), in
+    // `indicators` array order. DELTA and CVD are excluded when there's no
+    // `orderFlowData` yet so no blank pane is reserved (e.g. stock symbols
+    // that haven't wired order-flow data) — same reasoning as the data-apply
+    // switch's empty-array fallback above, but here it also affects the
+    // candle pane's compression via computeDynamicPaneMargins.
     const paneKeys: string[] = [];
     for (const [key, ind] of desired.entries()) {
-      if (ind.type === 'RSI' || ind.type === 'MACD' || ind.type === 'ATR') paneKeys.push(key);
+      if (ind.type === 'RSI' || ind.type === 'MACD' || ind.type === 'ATR') {
+        paneKeys.push(key);
+      } else if (ind.type === 'DELTA' && hasOrderFlowData) {
+        paneKeys.push(key);
+      } else if (ind.type === 'CVD' && ind.displayMode !== 'overlay' && hasOrderFlowData) {
+        paneKeys.push(key);
+      }
     }
 
     // ─── Subpane scale styling (one-time per scale) ─────────
     for (const key of paneKeys) {
-      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key);
+      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key, desired.get(key)!.displayMode);
       if (scalesConfiguredRef.current.has(scaleId)) continue;
       chart.priceScale(scaleId).applyOptions({
         borderColor: pickTheme(theme).border,
@@ -2401,11 +2525,27 @@ export function FinotaurChart({
     const { candle, panes } = computeDynamicPaneMargins(paneKeys);
     candleSeries.priceScale().applyOptions({ scaleMargins: candle });
     for (const key of paneKeys) {
-      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key);
+      const scaleId = resolvePaneScaleId(desired.get(key)!.type, key, desired.get(key)!.displayMode);
       const margins = panes.get(key);
       if (margins) chart.priceScale(scaleId).applyOptions({ scaleMargins: margins });
     }
-  }, [indicators, barCount, theme]); // barCount → recompute after fresh data load; theme → re-style scales on switch
+
+    // ─── CVD 'overlay' mode — shared hidden scale on the candle area ───
+    // Not part of `paneKeys` (it doesn't reserve subpane space), so it needs
+    // its own scaleMargins application here: match the candle's own margins
+    // so it autoscales independently over the same vertical span without
+    // distorting the visible price axis (kept hidden via `visible: false`).
+    const cvdOverlayActive = Array.from(desired.values()).some(
+      (ind) => ind.type === 'CVD' && ind.displayMode === 'overlay',
+    );
+    if (cvdOverlayActive) {
+      chart.priceScale('cvd-overlay').applyOptions({
+        visible: false,
+        borderVisible: false,
+        scaleMargins: candle,
+      });
+    }
+  }, [indicators, barCount, theme, orderFlowData]); // barCount → recompute after fresh data load; theme → re-style scales on switch; orderFlowData → feed CVD/DELTA
 
   // ─── Apply overlay price lines (order-book walls etc.) ─────
   // Diffed by id: remove lines not in the new set, create lines not yet tracked.

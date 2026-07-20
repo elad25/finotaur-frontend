@@ -98,6 +98,26 @@ export function renderIndicatorInputsFields(
       const p = params as { period: number };
       return <NumberField label="Period" value={p.period} min={ATR_PERIOD_RANGE.min} max={ATR_PERIOD_RANGE.max} step={1} onCommit={(v) => onPatch({ period: v })} />;
     }
+    case 'cvd': {
+      const p = params as { displayMode: 'pane' | 'overlay' };
+      return (
+        <div className="flex w-full flex-col gap-1">
+          <div className="mb-1 text-[10px] text-[#707070]">Display</div>
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="CVD display mode">
+            {(['pane', 'overlay'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onPatch({ displayMode: mode })}
+                className={pillClass(p.displayMode === mode)}
+              >
+                {mode === 'pane' ? 'Pane' : 'Overlay'}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
     case 'volumeProfile':
       return (
         <div className="flex w-full flex-col gap-2">

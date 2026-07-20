@@ -135,7 +135,9 @@ export type IndicatorType =
   | 'VWAP'
   | 'MACD'
   | 'BBANDS'
-  | 'ATR';
+  | 'ATR'
+  | 'CVD'
+  | 'DELTA';
 
 /**
  * Optional per-line visual style override for one series line of an
@@ -190,6 +192,9 @@ export interface IndicatorLineStyles {
  *  - SMA / EMA / RSI / BBANDS / ATR: the lookback window (bars).
  *  - VWAP: ignored (always cumulative from the first visible bar).
  *  - MACD: ignored (fast / slow / signal are fixed at 12 / 26 / 9 in Phase 2.5).
+ *  - CVD / DELTA: ignored, same as VWAP — these are fed pre-computed
+ *    per-bar values via the `orderFlowData` prop (FinotaurChart.tsx), not
+ *    derived from `bars` with a lookback window.
  *
  * `color` is optional — when omitted, FinotaurChart picks from its palette.
  *
@@ -225,6 +230,14 @@ export interface Indicator {
    * this field existed (one series per type, as always).
    */
   instanceId?: string;
+  /**
+   * CVD-only display mode. `'pane'` (default) renders CVD in its own
+   * subpane, same as RSI/MACD/ATR. `'overlay'` renders it directly on the
+   * candle pane using a dedicated hidden price scale (`'cvd-overlay'` in
+   * FinotaurChart.tsx) so it doesn't distort the candle price axis. Ignored
+   * by every other indicator type.
+   */
+  displayMode?: 'pane' | 'overlay';
 }
 
 /**

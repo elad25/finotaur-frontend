@@ -3,7 +3,7 @@
  */
 
 /** Active tab identifiers for the Trading Arena. */
-export type TabId = 'chart' | 'order-flow' | 'cvd' | 'liquidity' | 'dom';
+export type TabId = 'chart' | 'order-flow' | 'liquidity' | 'dom';
 
 export interface TradingArenaTab {
   id: TabId;
@@ -14,7 +14,6 @@ export interface TradingArenaTab {
 export const TRADING_ARENA_TABS: TradingArenaTab[] = [
   { id: 'chart',      label: 'Chart',      locked: false },
   { id: 'order-flow', label: 'Footprint Chart', locked: false },
-  { id: 'cvd',        label: 'CVD',        locked: false },
   { id: 'liquidity',  label: 'Liquidity',  locked: false },
   { id: 'dom',        label: 'DOM',        locked: false },
 ];
@@ -28,11 +27,13 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
  *     slugified — accepted forward-compat in case a caller ever links by it)
  *     → 'order-flow', the dedicated footprint chart tab.
  *   - 'tape' / 'options' / 'futures' / 'forex' (still removed from the tab
- *     bar) → 'chart', the safe default. 'cvd' was restored to the tab bar
- *     (2026-07-19) — see tabs/CvdTab.tsx.
+ *     bar) / 'cvd' (briefly restored 2026-07-19, removed again the same day
+ *     now that CVD/Delta are first-class Arena indicators rather than a
+ *     standalone tab — see components/indicatorsSettings.ts) → 'chart', the
+ *     safe default.
  */
 export function toTabId(raw: string | undefined): TabId {
-  const valid: TabId[] = ['chart', 'order-flow', 'cvd', 'liquidity', 'dom'];
+  const valid: TabId[] = ['chart', 'order-flow', 'liquidity', 'dom'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
   if (raw === 'orderflow' || raw === 'footprint' || raw === 'footprint-chart') return 'order-flow';
   return 'chart';

@@ -1,10 +1,12 @@
 /**
  * Trading Arena — shared kline-delta data hook
  *
- * Extracted from CvdTab.tsx (Phase 3): fetches Binance klines, reads
- * taker-buy volume (index 9), and derives per-bar delta + cumulative CVD.
- * Both CvdTab (full-page CVD view) and ChartTab's compact CVD/Delta
- * sub-panes consume this hook — one fetch/compute path, no duplicated logic.
+ * Originally extracted from the now-removed standalone CvdTab.tsx (Phase 3):
+ * fetches Binance klines, reads taker-buy volume (index 9), and derives
+ * per-bar delta + cumulative CVD. CVD/Delta are now first-class Arena
+ * indicators (see components/indicatorsSettings.ts) rather than a
+ * standalone tab or sub-pane — ChartTab.tsx's CVD/DELTA indicator overlay
+ * is this hook's sole consumer today.
  *
  *   per-bar delta  = takerBuyVolume − takerSellVolume
  *                  = 2 × takerBuyVolume − totalVolume
@@ -46,6 +48,16 @@ const INTERVAL_MAP: Record<Interval, string | null> = {
   '1wk': '1w',
   '1mo': '1M',
 };
+
+/**
+ * Whether `useKlineDelta` can serve a given interval (see INTERVAL_MAP
+ * above). Exported so callers (e.g. ChartTab.tsx's CVD/DELTA indicator gate)
+ * can decide whether to even mount the hook's fetch without duplicating this
+ * interval list.
+ */
+export function isKlineDeltaInterval(interval: Interval): boolean {
+  return INTERVAL_MAP[interval] != null;
+}
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -169,8 +181,13 @@ function computeCvdSeries(bars: KlineBar[]): { cvd: CvdPoint[]; delta: DeltaPoin
  * cumulative CVD, and refreshes every 20s. Behavior mirrors the original
  * CvdTab fetch effect exactly (same fetch limit, same refresh cadence, same
  * computation) — this is a pure extraction, not a behavior change.
+ *
+ * `enabled` (default `true`, added for ChartTab.tsx's CVD/DELTA indicator
+ * gate) lets a caller mount this hook unconditionally (rules of hooks) while
+ * skipping the fetch/refresh effect entirely when the data isn't needed —
+ * e.g. no CVD/DELTA indicator active, or a non-crypto symbol.
  */
-export function useKlineDelta(symbol: string, interval: Interval): UseKlineDeltaResult {
+export function useKlineDelta(symbol: string, interval: Interval, enabled: boolean = true): UseKlineDeltaResult {
   const [cvd, setCvd] = useState<CvdPoint[]>([]);
   const [delta, setDelta] = useState<DeltaPoint[]>([]);
   const [latestCvd, setLatestCvd] = useState<number | null>(null);
@@ -204,6 +221,8 @@ export function useKlineDelta(symbol: string, interval: Interval): UseKlineDelta
   const cancelledRef = useRef({ v: false });
 
   useEffect(() => {
+    if (!enabled) return; // caller doesn't need this data — skip the fetch/refresh cycle entirely
+
     const cancelled = { v: false };
     cancelledRef.current = cancelled;
     setLoadState('loading');
@@ -219,7 +238,7 @@ export function useKlineDelta(symbol: string, interval: Interval): UseKlineDelta
       cancelled.v = true;
       clearInterval(timer);
     };
-  }, [loadData]);
+  }, [loadData, enabled]);
 
   return { cvd, delta, latestCvd, latestDelta, loadState, errorMsg };
 }

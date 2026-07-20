@@ -60,7 +60,7 @@ describe('sanitizeFootprintSettings', () => {
       imbalanceStackedOnly: 'yes', // wrong type -> fallback
       rowSizeMode: 'ticks',
       rowSizeValue: 4,
-      showCvd: true,
+      showPoc: false,
       statsRows: { volume: false, delta: 'nope' },
     };
     const result = sanitizeFootprintSettings(raw, DEFAULT_FOOTPRINT_SETTINGS);
@@ -72,7 +72,7 @@ describe('sanitizeFootprintSettings', () => {
     expect(result.imbalanceStackedOnly).toBe(DEFAULT_FOOTPRINT_SETTINGS.imbalanceStackedOnly);
     expect(result.rowSizeMode).toBe('ticks');
     expect(result.rowSizeValue).toBe(4);
-    expect(result.showCvd).toBe(true);
+    expect(result.showPoc).toBe(false);
     expect(result.statsRows.volume).toBe(false);
     expect(result.statsRows.delta).toBe(DEFAULT_FOOTPRINT_SETTINGS.statsRows.delta); // wrong type -> fallback
     expect(result.statsRows.deltaPct).toBe(DEFAULT_FOOTPRINT_SETTINGS.statsRows.deltaPct); // missing -> fallback
@@ -182,7 +182,7 @@ describe('readFootprintSettingsForSymbol — per-symbol merge', () => {
   it('a shared visual preference in __default applies to every symbol, including ones with a rowSize override', () => {
     localStorageMock.setItem(
       FOOTPRINT_DEFAULT_STORAGE_KEY,
-      JSON.stringify({ ...DEFAULT_FOOTPRINT_SETTINGS, content: 'volume', showCvd: true }),
+      JSON.stringify({ ...DEFAULT_FOOTPRINT_SETTINGS, content: 'volume', showValueArea: true }),
     );
     localStorageMock.setItem(
       footprintSymbolStorageKey('BTCUSDT'),
@@ -191,7 +191,7 @@ describe('readFootprintSettingsForSymbol — per-symbol merge', () => {
 
     const btc = readFootprintSettingsForSymbol('BTCUSDT');
     expect(btc.content).toBe('volume');
-    expect(btc.showCvd).toBe(true);
+    expect(btc.showValueArea).toBe(true);
     expect(btc.rowSizeMode).toBe('ticks');
     expect(btc.rowSizeValue).toBe(10);
   });

@@ -23,7 +23,12 @@ const RAW_TRADE_RING_CAP = 250_000;
 // exceed a few hundred rows even on 'full' detail).
 const MAX_PRICE_BINS = 2000;
 
-type ChangeListener = () => void;
+// `changedTimes` — a defined Set means "only these candle times changed",
+// letting a consumer (e.g. FootprintLayer's per-candle render caches) evict
+// JUST those entries instead of a full clear on every live tick. `undefined`
+// means "anything may have changed" (clear/hydrate/setConfig re-bin, etc.) —
+// treat all cached data as stale and clear it wholesale.
+type ChangeListener = (changedTimes?: ReadonlySet<number>) => void;
 // Raw-trade-batch listener — see FlowBinStore.onTrades' doc comment below for
 // why this exists separately from ChangeListener.
 type TradeBatchListener = (trades: FlowTrade[]) => void;
@@ -181,9 +186,16 @@ export class FlowBinStore {
   applyTrades(trades: FlowTrade[], recordRaw = true): void {
     if (trades.length === 0) return;
 
+    // Candle bucket times actually touched by this batch — passed to
+    // notify() so listeners (e.g. FootprintLayer's per-candle render caches)
+    // can evict just these entries instead of clearing everything on every
+    // live tick. Deliberately a fresh local Set, NOT this.dirtyCandles —
+    // that field is consumed/cleared by toView()'s sorted-bins cache and
+    // racing it here would corrupt that cache.
+    const changedTimes = new Set<number>();
     for (const trade of trades) {
       if (recordRaw) this.pushRaw(trade);
-      this.applySingleTrade(trade);
+      changedTimes.add(this.applySingleTrade(trade));
     }
     if (!this.isReplaying) {
       this.tradesIngested += trades.length;
@@ -193,7 +205,12 @@ export class FlowBinStore {
       // subscribers (see onTrades()' doc comment).
       this.notifyTrades(trades);
     }
-    this.notify();
+    // During setConfig()'s internal re-bin replay (isReplaying), every
+    // candle is being reconstructed from scratch — signal "anything may
+    // have changed" (undefined) rather than the specific times touched, so
+    // consumers treat it the same as clear()/hydrate() and fully invalidate
+    // their caches instead of relying on a partial evict list.
+    this.notify(this.isReplaying ? undefined : changedTimes);
   }
 
   /**
@@ -405,7 +422,8 @@ export class FlowBinStore {
     return [...this.rawRing.slice(oldest), ...this.rawRing.slice(0, oldest)];
   }
 
-  private applySingleTrade(trade: FlowTrade): void {
+  /** Applies one trade to its candle/bin and returns the candle bucket time it landed in — callers (applyTrades) collect these to report exactly which candles changed. */
+  private applySingleTrade(trade: FlowTrade): number {
     const { intervalSec, rowSize } = this.config;
     const candleTime = Math.floor(trade.time / 1000 / intervalSec) * intervalSec;
     const binPrice = Math.floor(trade.price / rowSize) * rowSize;
@@ -461,6 +479,7 @@ export class FlowBinStore {
     }
 
     this.dirtyCandles.add(candleTime);
+    return candleTime;
   }
 
   private toView(candle: FlowCandle): FlowCandleView {
@@ -481,8 +500,8 @@ export class FlowBinStore {
     };
   }
 
-  private notify(): void {
-    for (const cb of this.listeners) cb();
+  private notify(changedTimes?: ReadonlySet<number>): void {
+    for (const cb of this.listeners) cb(changedTimes);
   }
 
   private notifyTrades(trades: FlowTrade[]): void {
