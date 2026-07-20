@@ -1,13 +1,22 @@
 /**
  * useLiquidityPreferences — persist the Trading Arena Liquidity tab's
- * floor-filter mode + size-filter percentage per symbol, in localStorage
- * (PR 3, task K.1).
+ * render preferences (palette, smoothing, volume bubbles, side profile, and
+ * — forward-compat, Phase 1 — a `sensitivity` preset) per symbol, in
+ * localStorage (PR 3, task K.1).
+ *
+ * Phase 1 "no manual thresholds" overhaul: `floorMode` and `sizeFilterPct`
+ * (the old manual floor/size-filter toolbar) have been REMOVED from this
+ * shape — the heatmap no longer has a manual threshold toolbar (see
+ * LiquidityTab.tsx / DepthMatrixLayer.tsx / depthSignificance.ts). Any
+ * stale `floorMode`/`sizeFilterPct` fields already sitting in a user's
+ * localStorage under the same `v1` key are simply ignored by
+ * sanitizeLiquidityPreferences (field-by-field — ignores unknown/extra
+ * keys), so no storage migration is needed.
  *
  * Clones the lazy-init / write-through / corrupt-JSON-safe / field-by-field
  * validation pattern of useFootprintPreferences.ts, but simpler: a single
- * per-symbol key, no __default/per-symbol split. Both fields here are
- * inherently symbol-scoped (a $500K floor makes sense for BTCUSDT, not for
- * a low-notional altcoin) — there's no shared "visual preference" concern
+ * per-symbol key, no __default/per-symbol split. These fields are
+ * inherently symbol-scoped — there's no shared "visual preference" concern
  * the way footprint's content/layout/colorScheme are, so a two-key split
  * would just be unnecessary complexity.
  */
@@ -21,15 +30,19 @@ export function liquiditySymbolStorageKey(symbol: string): string {
   return `${LIQUIDITY_STORAGE_PREFIX}:${symbol}`;
 }
 
-/** 'auto' = adaptive per-symbol floor; a number = one of LiquidityTab.tsx's FLOOR_OPTIONS values (or any custom $ floor). */
-export type LiquidityFloorMode = 'auto' | number;
-export type LiquiditySizeFilterPct = 0 | 1 | 5 | 10 | 25;
 /** 'auto' = top ~2% of visible dominant-side trade volumes; a number = absolute volume floor. */
 export type LiquidityBubbleThreshold = 'auto' | number;
 
+/**
+ * Forward-compat field (Phase 1 of the "no manual thresholds" overhaul) —
+ * not wired to any render behavior yet. Phase 3 will use this preset to
+ * bias the significance mapping (e.g. a stricter/looser soft-knee reference)
+ * without reintroducing a raw floor/size-filter toolbar. Persisted now so a
+ * user's choice, once Phase 3 ships, doesn't reset silently.
+ */
+export type LiquiditySensitivity = 'quiet' | 'balanced' | 'detailed';
+
 export interface LiquidityPreferences {
-  floorMode: LiquidityFloorMode;
-  sizeFilterPct: LiquiditySizeFilterPct;
   /** Depth matrix heatmap color palette (Task S2 — ATAS/Bookmap restyle). Default 'finotaur'. */
   palette: DepthPaletteId;
   /** Vertical band-smoothing + hot-wall bloom on the depth matrix. Default true. */
@@ -40,30 +53,21 @@ export interface LiquidityPreferences {
   bubbleThreshold: LiquidityBubbleThreshold;
   /** Right-edge "what's waiting" resting-book gutter. Default true. */
   sideProfile: boolean;
+  /** Forward-compat — see LiquiditySensitivity doc comment. Default 'balanced'. */
+  sensitivity: LiquiditySensitivity;
 }
 
 export const DEFAULT_LIQUIDITY_PREFERENCES: LiquidityPreferences = {
-  floorMode: 'auto',
-  sizeFilterPct: 0,
   palette: 'finotaur',
   smoothing: true,
   bubbles: true,
   bubbleThreshold: 'auto',
   sideProfile: true,
+  sensitivity: 'balanced',
 };
 
-const SIZE_FILTER_VALUES: readonly LiquiditySizeFilterPct[] = [0, 1, 5, 10, 25];
-
-function asFloorMode(v: unknown, fallback: LiquidityFloorMode): LiquidityFloorMode {
-  if (v === 'auto') return 'auto';
-  if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return v;
-  return fallback;
-}
-
-function asSizeFilterPct(v: unknown, fallback: LiquiditySizeFilterPct): LiquiditySizeFilterPct {
-  return typeof v === 'number' && (SIZE_FILTER_VALUES as readonly number[]).includes(v)
-    ? (v as LiquiditySizeFilterPct)
-    : fallback;
+function asSensitivity(v: unknown, fallback: LiquiditySensitivity): LiquiditySensitivity {
+  return v === 'quiet' || v === 'balanced' || v === 'detailed' ? v : fallback;
 }
 
 function asPalette(v: unknown, fallback: DepthPaletteId): DepthPaletteId {
@@ -92,15 +96,18 @@ export function sanitizeLiquidityPreferences(
   fallback: LiquidityPreferences = DEFAULT_LIQUIDITY_PREFERENCES,
 ): LiquidityPreferences {
   if (!raw || typeof raw !== 'object') return fallback;
+  // `raw` may still carry a stale floorMode/sizeFilterPct from a pre-Phase-1
+  // localStorage record — Partial<LiquidityPreferences> intentionally no
+  // longer has those keys, so they're simply never read here (ignored, not
+  // migrated — see this file's header comment).
   const p = raw as Partial<LiquidityPreferences>;
   return {
-    floorMode: asFloorMode(p.floorMode, fallback.floorMode),
-    sizeFilterPct: asSizeFilterPct(p.sizeFilterPct, fallback.sizeFilterPct),
     palette: asPalette(p.palette, fallback.palette),
     smoothing: asBoolean(p.smoothing, fallback.smoothing),
     bubbles: asBoolean(p.bubbles, fallback.bubbles),
     bubbleThreshold: asBubbleThreshold(p.bubbleThreshold, fallback.bubbleThreshold),
     sideProfile: asBoolean(p.sideProfile, fallback.sideProfile),
+    sensitivity: asSensitivity(p.sensitivity, fallback.sensitivity),
   };
 }
 

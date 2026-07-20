@@ -7,10 +7,15 @@
  * (src/pages/app/crypto/scanner/MarketScanner.tsx): FinotaurChart with
  * `wallRenderMode="matrix"` (DepthMatrixLayer, painted behind candles),
  * fed by `useDepthSlices` (the scanner's own depth-slice client — historical
- * backfill + 5s live-edge appends), with an adaptive ("Auto") floor derived
- * from the symbol's own 72h wall history via the scanner's
- * `fetchWallsHistory` endpoint, plus a manual floor override and a relative
- * size-filter control, matching the scanner's own toolbar.
+ * backfill + 5s live-edge appends).
+ *
+ * Phase 1 "no manual thresholds" overhaul: this tab no longer has a manual
+ * floor/size-filter toolbar. The data now carries (almost) every resting
+ * order — only technical dust is removed at the sampling layer
+ * (useDepthSlices.ts) — and DepthMatrixLayer's continuous significance
+ * mapping (soft-knee alpha, see depthSignificance.ts) replaces the old
+ * binary floor/size dimming. There is no adaptive-floor seeding from wall
+ * history anymore either.
  *
  * Deliberately NOT reused from MarketScanner.tsx (do not modify that file —
  * task constraint): the wall-lifecycle tracking (tracked/dead WallSegment
@@ -18,12 +23,9 @@
  * MarketScanner.tsx that exists to also drive the scanner's alive/dead wall
  * *lines*, on top of the depth matrix. This tab only needs the matrix
  * heatmap itself (the "Bookmap-style liquidity chart" the task asks for), so
- * that subsystem is intentionally NOT duplicated here — the wall-history
- * fetch below is used ONLY to seed the adaptive floor, exactly like the
- * scanner's own `computeAutoFloor` step. This is a v1 scope decision (the
- * task explicitly allows duplicating vs. extracting the scanner's wiring —
- * see FLOOR_OPTIONS / computeAutoFloor / intervalMs below, copied not
- * imported, so MarketScanner.tsx itself is completely untouched).
+ * that subsystem is intentionally NOT duplicated here (intervalMs below is
+ * copied, not imported, so MarketScanner.tsx itself is completely
+ * untouched).
  *
  * Crypto layout mirrors ChartTab.tsx's right rail: a resizable (280-560px,
  * persisted to localStorage under its own key) PaperTradeRail, fed by this
@@ -35,7 +37,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
 import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
-import { fetchWallsHistory } from '@/pages/app/crypto/_shared/api';
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import { AggregatingSource } from '@/components/charting/dataSources/AggregatingSource';
@@ -75,37 +76,6 @@ interface LiquidityTabProps {
 // One module-level singleton per file — BinanceSource is stateless (same
 // pattern ChartTab.tsx / FootprintTab.tsx each follow independently).
 const binanceSource = new BinanceSource();
-
-// ── Floor filter options — copied from MarketScanner.tsx (kept in sync
-// manually; MarketScanner.tsx itself is never imported from here). ─────────
-const FLOOR_OPTIONS = [
-  { label: 'All',   value: 1_000 },
-  { label: '$150K', value: 150_000 },
-  { label: '$500K', value: 500_000 },
-  { label: '$1M',   value: 1_000_000 },
-  { label: '$5M',   value: 5_000_000 },
-] as const;
-const FLOOR_DEFAULT = 500_000; // fallback floor before wall history loads
-
-// Adaptive ("Auto") floor: per-symbol threshold derived from the symbol's own
-// 72h wall-history notionals — see MarketScanner.tsx's computeAutoFloor for
-// the full rationale (fixed floors hide real walls on low-notional coins).
-const AUTO_FLOOR_PCTL = 0.60;
-const AUTO_FLOOR_MIN = 50_000;
-const AUTO_FLOOR_MAX = 5_000_000;
-
-function percentile(values: number[], p: number): number {
-  if (values.length === 0) return NaN;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * p)));
-  return sorted[idx];
-}
-
-function computeAutoFloor(notionals: number[]): number {
-  const p = percentile(notionals, AUTO_FLOOR_PCTL);
-  if (!Number.isFinite(p)) return FLOOR_DEFAULT;
-  return Math.min(AUTO_FLOOR_MAX, Math.max(AUTO_FLOOR_MIN, Math.round(p)));
-}
 
 // Bar-interval helpers — `intervalSeconds`/`intervalMs` now delegate to the
 // arbitrary-interval-capable `intervalToSeconds` (utils/intervals.ts) instead
@@ -437,11 +407,10 @@ function FuturesLiquidityBody({ interval }: { interval: ArenaInterval }) {
               wallRenderMode="matrix"
               depthMatrixColumns={depth.columns}
               depthMatrixBinSize={depth.binSize}
-              depthMatrixSizeFilterPct={5}
-              depthMatrixFloorUsd={0}
               depthMatrixCandleIntervalMs={intervalSec * 1000}
               depthMatrixPalette={preferences.palette}
               depthMatrixSmoothing={preferences.smoothing}
+              depthMatrixSensitivity={preferences.sensitivity}
               volumeBubbles={{
                 store,
                 visible: preferences.bubbles,
@@ -552,17 +521,11 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
     };
   }, [isDraggingRail]);
 
-  // Persisted per-symbol (PR 3, task K.1) — floorMode/sizeFilterPct survive
-  // a tab-switch or reload for THIS symbol; a different symbol starts back
-  // at 'auto'/0 (see useLiquidityPreferences.ts's header comment for why a
-  // shared __default split isn't appropriate here, unlike footprint's
-  // settings). This component is already remounted per-symbol (see the
-  // `key={symbol}` in LiquidityTab above), so the hook's lazy initializer
-  // alone is enough to pick up the right record — no extra resync needed.
+  // Persisted per-symbol (PR 3, task K.1) — this component is already
+  // remounted per-symbol (see the `key={symbol}` in LiquidityTab above), so
+  // the hook's lazy initializer alone is enough to pick up the right record
+  // — no extra resync needed.
   const { preferences, update: updateLiquidityPreferences } = useLiquidityPreferences(symbol);
-  const { floorMode, sizeFilterPct } = preferences;
-  const [autoFloorUsd, setAutoFloorUsd] = useState<number>(FLOOR_DEFAULT);
-  const floorUsd = floorMode === 'auto' ? autoFloorUsd : floorMode;
 
   // Executed-aggression trade feed (Task S2 — "Arena WOW" volume bubbles).
   // 🔴 Deliberately NOT useOrderFlow/BinanceTradeSource here — that would open
@@ -597,24 +560,6 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
     // `key={symbol}` in LiquidityTab above) — `[]` is correct, not stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Seed the adaptive floor from server-side 72h wall history on mount
-  // (component is keyed by symbol, so this naturally reruns per symbol).
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchWallsHistory(symbol, 72, controller.signal)
-      .then((resp) => {
-        const notionals = resp.episodes
-          .map((ep) => ep.maxNotionalUsd)
-          .filter((n): n is number => Number.isFinite(n));
-        if (notionals.length > 0) setAutoFloorUsd(computeAutoFloor(notionals));
-      })
-      .catch(() => {
-        // History is enhancement-only — swallow errors silently (matches
-        // MarketScanner.tsx's own handling).
-      });
-    return () => controller.abort();
-  }, [symbol]);
 
   // Sliding candle window — recomputed every 30s so the chart keeps pace
   // with "now" (matches MarketScanner.tsx's timeTick pattern).
@@ -693,7 +638,8 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
     barSpacingPx: APPROX_BAR_SPACING_PX,
     candleIntervalMs: intervalMs(interval),
     getBook: book.getBook,
-    floorUsd,
+    // No floorUsd — dust-only removal now happens unconditionally inside
+    // useDepthSlices.ts (its own default). See depthSignificance.ts.
     isLive: book.status === 'live',
   });
 
@@ -760,13 +706,6 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
     setTimeFitToken((t) => t + 1);
   }, [depthMatrix.columns, to, interval, depthHistoryLoading]);
 
-  const handleFloorSelect = useCallback(
-    (mode: 'auto' | number) => {
-      updateLiquidityPreferences({ floorMode: mode });
-    },
-    [updateLiquidityPreferences],
-  );
-
   if (book.status === 'error') {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
@@ -780,70 +719,11 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
 
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
-      {/* Floor + size-filter controls — same segmented-control language as
-          MarketScanner.tsx's sub-header. */}
+      {/* Phase 1 "no manual thresholds" overhaul: the floor + size-filter
+          segmented controls are gone — the heatmap now shows (almost) the
+          whole book with a continuous significance mapping (see
+          depthSignificance.ts). Only the settings menu + status chips remain. */}
       <div className="flex items-center gap-3 px-3 py-1.5 border-b flex-shrink-0" style={{ borderColor: 'rgba(201,166,70,0.10)' }}>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => handleFloorSelect('auto')}
-            title={`Adaptive floor — significant walls for this symbol (~$${Math.round(autoFloorUsd / 1000)}K)`}
-            className={cn(
-              'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
-              floorMode === 'auto' ? 'text-[#C9A646]' : 'text-white/40 hover:text-white/60',
-            )}
-          >
-            {`Auto · $${Math.round(autoFloorUsd / 1000)}K`}
-          </button>
-          {FLOOR_OPTIONS.map((opt) => {
-            const isActive = floorMode !== 'auto' && opt.value === floorMode;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleFloorSelect(opt.value)}
-                className={cn(
-                  'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
-                  isActive ? 'text-[#C9A646]' : 'text-white/40 hover:text-white/60',
-                )}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
-
-        <div className="flex items-center gap-1 select-none">
-          <span className="text-[10px] text-white/30 mr-0.5">Size</span>
-          {([
-            { label: 'All',  value: 0 as const },
-            { label: '≥1%',  value: 1 as const },
-            { label: '≥5%',  value: 5 as const },
-            { label: '≥10%', value: 10 as const },
-            { label: '≥25%', value: 25 as const },
-          ] as const).map((opt) => {
-            const isActive = opt.value === sizeFilterPct;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => updateLiquidityPreferences({ sizeFilterPct: opt.value })}
-                className={cn(
-                  'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
-                  isActive ? 'text-[#C9A646]' : 'text-white/40 hover:text-white/60',
-                )}
-                title={opt.value === 0 ? 'Show all orders' : `Show orders ≥ ${opt.value}% of the largest visible wall`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
-
         <LiquiditySettingsMenu preferences={preferences} onChange={updateLiquidityPreferences} />
 
         {depthHistoryLoading && (
@@ -885,11 +765,10 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
               wallRenderMode="matrix"
               depthMatrixColumns={depthMatrix.columns}
               depthMatrixBinSize={depthMatrix.binSize}
-              depthMatrixSizeFilterPct={sizeFilterPct}
-              depthMatrixFloorUsd={floorUsd}
               depthMatrixCandleIntervalMs={intervalMs(interval)}
               depthMatrixPalette={preferences.palette}
               depthMatrixSmoothing={preferences.smoothing}
+              depthMatrixSensitivity={preferences.sensitivity}
               volumeBubbles={{
                 store: flowStoreRef.current,
                 visible: preferences.bubbles,
