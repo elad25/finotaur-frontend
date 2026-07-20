@@ -28,6 +28,23 @@ import {
   computeWindowRange,
   alphaSkipCutoffUsd,
   classifyColumnsUpdate,
+  TARGET_MIN_COL_PX,
+  TARGET_MIN_ROW_PX,
+  LOD_MAX_BUCKET_FACTOR,
+  LOD_MAX_ROW_MERGE_FACTOR,
+  computeBucketFactor,
+  computeRowMergeFactor,
+  computeLodFactors,
+  bucketStartMs,
+  mergeColumnsMaxQ,
+  bucketColumns,
+  LOD_HYSTERESIS_LOW_RATIO,
+  LOD_HYSTERESIS_HIGH_RATIO,
+  computeBucketFactorWithHysteresis,
+  computeRowMergeFactorWithHysteresis,
+  paintedWindowEndMs,
+  bumpPersistMapForColumn,
+  type DecodedColumnLike,
 } from '../depthSignificance';
 
 describe('dustCutoffUsd', () => {
@@ -620,5 +637,454 @@ describe('classifyColumnsUpdate', () => {
     const prev = makeCols(1_000_000, 10);
     const next = makeCols(1_000_000 + 10 * IV, 10); // shift == prevLen, nothing survives
     expect(classifyColumnsUpdate(prev, next, IV)).toEqual({ kind: 'reset' });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 7 — LOD downsampling helpers (see DepthMatrixLayer.tsx's "LOD design"
+// doc comment for the full rationale).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('computeBucketFactor', () => {
+  it('returns 1 (no bucketing) at/above the target column width', () => {
+    expect(computeBucketFactor(TARGET_MIN_COL_PX)).toBe(1);
+    expect(computeBucketFactor(TARGET_MIN_COL_PX * 2)).toBe(1);
+    expect(computeBucketFactor(10)).toBe(1);
+  });
+
+  it('returns 1 for non-finite or non-positive input', () => {
+    expect(computeBucketFactor(0)).toBe(1);
+    expect(computeBucketFactor(-1)).toBe(1);
+    expect(computeBucketFactor(NaN)).toBe(1);
+  });
+
+  it('merges columns when narrower than the target width', () => {
+    // 15m view spanning 4 days: pane 1800px, 2880 raw 5s columns visible ->
+    // pxPerRawColumn = 1800 / 2880 = 0.625px.
+    const pxPerRawColumn = 1800 / 2880;
+    const factor = computeBucketFactor(pxPerRawColumn);
+    expect(factor).toBeGreaterThan(1);
+    // The resulting painted column width must clear the target.
+    expect(pxPerRawColumn * factor).toBeGreaterThanOrEqual(TARGET_MIN_COL_PX);
+  });
+
+  it('is monotonically non-increasing as pxPerRawColumn grows (fewer columns need merging when already wider)', () => {
+    let prev = Infinity;
+    for (const px of [0.1, 0.2, 0.4, 0.8, 1.0, 1.4]) {
+      const factor = computeBucketFactor(px);
+      expect(factor).toBeLessThanOrEqual(prev);
+      prev = factor;
+    }
+  });
+
+  it('clamps to the provided (or default) max bucket factor for a near-zero column width', () => {
+    expect(computeBucketFactor(0.0001)).toBe(LOD_MAX_BUCKET_FACTOR);
+    expect(computeBucketFactor(0.0001, 8)).toBe(8);
+  });
+});
+
+describe('computeRowMergeFactor', () => {
+  it('returns 1 (no merging) at/above the target row height', () => {
+    expect(computeRowMergeFactor(TARGET_MIN_ROW_PX)).toBe(1);
+    expect(computeRowMergeFactor(5)).toBe(1);
+  });
+
+  it('returns 1 for non-finite or non-positive input', () => {
+    expect(computeRowMergeFactor(0)).toBe(1);
+    expect(computeRowMergeFactor(-3)).toBe(1);
+    expect(computeRowMergeFactor(NaN)).toBe(1);
+  });
+
+  it('merges rows when shorter than the target height', () => {
+    // 4000-row grid painted into a 900px pane -> rowPx = 0.225px.
+    const rowPx = 900 / 4000;
+    const factor = computeRowMergeFactor(rowPx);
+    expect(factor).toBeGreaterThan(1);
+    expect(rowPx * factor).toBeGreaterThanOrEqual(TARGET_MIN_ROW_PX);
+  });
+
+  it('clamps to the provided (or default) max row-merge factor', () => {
+    expect(computeRowMergeFactor(0.0001)).toBe(LOD_MAX_ROW_MERGE_FACTOR);
+    expect(computeRowMergeFactor(0.0001, 8)).toBe(8);
+  });
+});
+
+describe('computeLodFactors', () => {
+  it('composes computeBucketFactor + computeRowMergeFactor', () => {
+    const pxPerRawColumn = 1800 / 2880;
+    const rowPx = 900 / 4000;
+    const { bucketFactor, rowMergeFactor } = computeLodFactors(pxPerRawColumn, rowPx);
+    expect(bucketFactor).toBe(computeBucketFactor(pxPerRawColumn));
+    expect(rowMergeFactor).toBe(computeRowMergeFactor(rowPx));
+  });
+
+  it('returns {1,1} when both axes are already at/above target (zoomed-in, live-edge case)', () => {
+    // 1m view at the live edge: columns ~3px wide, rows comfortably tall.
+    const { bucketFactor, rowMergeFactor } = computeLodFactors(3, 10);
+    expect(bucketFactor).toBe(1);
+    expect(rowMergeFactor).toBe(1);
+  });
+
+  it('honors custom caps for both axes', () => {
+    const { bucketFactor, rowMergeFactor } = computeLodFactors(0.0001, 0.0001, {
+      maxBucketFactor: 4,
+      maxRowMergeFactor: 6,
+    });
+    expect(bucketFactor).toBe(4);
+    expect(rowMergeFactor).toBe(6);
+  });
+});
+
+describe('bucketStartMs', () => {
+  it('aligns to fixed epoch boundaries (not to an arbitrary window start)', () => {
+    // interval=5000ms, factor=4 -> bucket span = 20000ms.
+    expect(bucketStartMs(0, 5000, 4)).toBe(0);
+    expect(bucketStartMs(19999, 5000, 4)).toBe(0);
+    expect(bucketStartMs(20000, 5000, 4)).toBe(20000);
+    expect(bucketStartMs(35000, 5000, 4)).toBe(20000);
+  });
+
+  it('is stable regardless of which raw column is queried within the same bucket', () => {
+    const bucketSpan = 5000 * 8;
+    const start = bucketStartMs(1_000_000, 5000, 8);
+    for (let t = start; t < start + bucketSpan; t += 5000) {
+      expect(bucketStartMs(t, 5000, 8)).toBe(start);
+    }
+  });
+
+  it('returns t unchanged for a non-positive interval or factor', () => {
+    expect(bucketStartMs(12345, 0, 4)).toBe(12345);
+    expect(bucketStartMs(12345, 5000, 0)).toBe(12345);
+  });
+});
+
+describe('mergeColumnsMaxQ', () => {
+  function col(t: number, bids: Array<[number, number]>, asks: Array<[number, number]>, flags = 0): DecodedColumnLike {
+    return {
+      t,
+      binSize: 1,
+      flags,
+      bids: bids.map(([price, q]) => ({ price, q })),
+      asks: asks.map(([price, q]) => ({ price, q })),
+    };
+  }
+
+  it('takes the MAX q per price across columns (a wall visible at any point stays visible)', () => {
+    const cols = [
+      col(0, [[100, 50]], [[110, 20]]),
+      col(5000, [[100, 200]], [[110, 5]]),
+      col(10000, [[100, 10]], [[110, 300]]),
+    ];
+    const { bids, asks } = mergeColumnsMaxQ(cols);
+    expect(bids).toEqual([{ price: 100, q: 200 }]);
+    expect(asks).toEqual([{ price: 110, q: 300 }]);
+  });
+
+  it('never sums — merged q equals the single largest raw q, not a total', () => {
+    const cols = [col(0, [[100, 50]], []), col(5000, [[100, 50]], [])];
+    const { bids } = mergeColumnsMaxQ(cols);
+    expect(bids).toEqual([{ price: 100, q: 50 }]); // NOT 100
+  });
+
+  it('gap columns (flags bit0) contribute nothing', () => {
+    const cols = [col(0, [[100, 999]], [], 1), col(5000, [[100, 40]], [])];
+    const { bids } = mergeColumnsMaxQ(cols);
+    expect(bids).toEqual([{ price: 100, q: 40 }]);
+  });
+
+  it('q<=0 entries contribute nothing', () => {
+    const cols = [col(0, [[100, 0]], []), col(5000, [[100, -5]], [])];
+    const { bids } = mergeColumnsMaxQ(cols);
+    expect(bids).toEqual([]);
+  });
+
+  it('returns empty bids/asks for an all-gap or empty input', () => {
+    expect(mergeColumnsMaxQ([])).toEqual({ bids: [], asks: [] });
+    expect(mergeColumnsMaxQ([col(0, [[100, 50]], [], 1)])).toEqual({ bids: [], asks: [] });
+  });
+});
+
+describe('bucketColumns', () => {
+  const IV = 5000;
+
+  function makeRawCols(n: number, firstT = 0): DecodedColumnLike[] {
+    return Array.from({ length: n }, (_, i) => ({
+      t: firstT + i * IV,
+      binSize: 1,
+      flags: 0,
+      bids: [{ price: 100, q: i + 1 }], // increasing q so the winner is identifiable
+      asks: [],
+    }));
+  }
+
+  it('is a no-op passthrough for bucketFactor <= 1 (rawCounts all 1, columns unchanged)', () => {
+    const raw = makeRawCols(5);
+    const { columns, rawCounts } = bucketColumns(raw, IV, 1);
+    expect(columns).toEqual(raw);
+    expect(rawCounts).toEqual([1, 1, 1, 1, 1]);
+
+    const zeroFactor = bucketColumns(raw, IV, 0);
+    expect(zeroFactor.columns).toEqual(raw);
+  });
+
+  it('groups raw columns into fixed-size buckets and merges via max-q', () => {
+    const raw = makeRawCols(8); // q = 1..8
+    const { columns, rawCounts } = bucketColumns(raw, IV, 4);
+    expect(columns.length).toBe(2);
+    expect(rawCounts).toEqual([4, 4]);
+    // bucket 0 = raw[0..3] (q 1..4) -> winner q=4; bucket 1 = raw[4..7] (q 5..8) -> winner q=8.
+    expect(columns[0].bids[0].q).toBe(4);
+    expect(columns[1].bids[0].q).toBe(8);
+  });
+
+  it('handles a partial LAST bucket (window length not a multiple of bucketFactor)', () => {
+    const raw = makeRawCols(10); // q = 1..10, bucketFactor=4 -> buckets of 4,4,2
+    const { columns, rawCounts } = bucketColumns(raw, IV, 4);
+    expect(rawCounts).toEqual([4, 4, 2]);
+    expect(columns[2].bids[0].q).toBe(10); // last (partial) bucket's winner
+  });
+
+  it('produces epoch-aligned bucket start times stable across different window starts', () => {
+    // Window A starts exactly at t=0; window B starts one raw column later.
+    const rawA = makeRawCols(8, 0);
+    const rawB = makeRawCols(7, IV); // same underlying timeline, shifted start
+    const bucketedA = bucketColumns(rawA, IV, 4);
+    const bucketedB = bucketColumns(rawB, IV, 4);
+    // The SECOND bucket of A (raw[4..7], t=20000..35000) should align with
+    // window B's buckets at the same epoch boundary (20000).
+    expect(bucketedA.columns[1].t).toBe(20000);
+    expect(bucketedB.columns.some((c) => c.t === 20000)).toBe(true);
+  });
+
+  it('flags a bucket as a gap ONLY when every raw column in it is a gap', () => {
+    const raw = makeRawCols(4).map((c, i) => ({ ...c, flags: i < 3 ? 1 : 0 })); // 3 gaps + 1 real
+    const allGapRaw = makeRawCols(4).map((c) => ({ ...c, flags: 1 })); // all gaps
+
+    const mixed = bucketColumns(raw, IV, 4);
+    expect(mixed.columns[0].flags & 1).toBe(0); // not all-gap -> not flagged
+
+    const allGap = bucketColumns(allGapRaw, IV, 4);
+    expect(allGap.columns[0].flags & 1).toBe(1);
+  });
+
+  it('returns an empty result for an empty input', () => {
+    expect(bucketColumns([], IV, 4)).toEqual({ columns: [], rawCounts: [] });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 — LOD review-fix hardening (CRITICAL 1/2 + SHOULD-FIX 1/3 fixes).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('computeBucketFactorWithHysteresis (SHOULD-FIX — dead-zone anti-thrash)', () => {
+  it('matches the plain computeBucketFactor when clearly BELOW the low bound (dead zone not engaged)', () => {
+    const px = TARGET_MIN_COL_PX * LOD_HYSTERESIS_LOW_RATIO - 0.05;
+    expect(computeBucketFactorWithHysteresis(px, 1)).toBe(computeBucketFactor(px));
+  });
+
+  it('matches the plain computeBucketFactor when clearly ABOVE the high bound', () => {
+    const px = TARGET_MIN_COL_PX * LOD_HYSTERESIS_HIGH_RATIO + 0.5;
+    expect(computeBucketFactorWithHysteresis(px, 3)).toBe(computeBucketFactor(px));
+  });
+
+  it('holds the CURRENTLY APPLIED factor steady inside the dead zone regardless of tiny px jitter', () => {
+    // Dead zone is [1.4, 1.65] around TARGET_MIN_COL_PX=1.5. Simulate
+    // sub-pixel jitter hovering around 1.5 that would otherwise flip
+    // ceil(1.5/px) between 1 and 2 every frame.
+    const jitterValues = [1.499999, 1.500001, 1.5, 1.45, 1.6];
+    for (const px of jitterValues) {
+      expect(computeBucketFactorWithHysteresis(px, 1)).toBe(1); // stayed un-bucketed
+      expect(computeBucketFactorWithHysteresis(px, 2)).toBe(2); // stayed at factor 2
+    }
+  });
+
+  it('does not thrash across a simulated frame sequence hovering at the threshold', () => {
+    // Simulates drawFrame's per-frame usage: appliedFactor starts at 1 and
+    // is fed back in as the tier check re-runs each "frame".
+    const pxSequence = [1.51, 1.49, 1.5, 1.52, 1.48, 1.5, 1.51];
+    let applied = 1;
+    let changeCount = 0;
+    for (const px of pxSequence) {
+      const next = computeBucketFactorWithHysteresis(px, applied);
+      if (next !== applied) changeCount++;
+      applied = next;
+    }
+    expect(changeCount).toBe(0); // all these values sit inside the dead zone -> zero tier changes
+  });
+
+  it('genuinely switches tiers once px moves clearly past the threshold in either direction', () => {
+    let applied = 1;
+    applied = computeBucketFactorWithHysteresis(0.5, applied); // clearly below low bound -> bucket
+    expect(applied).toBeGreaterThan(1);
+    applied = computeBucketFactorWithHysteresis(3, applied); // clearly above high bound -> un-bucket
+    expect(applied).toBe(1);
+  });
+
+  it('falls back to the applied factor (or 1) for non-finite/non-positive px', () => {
+    expect(computeBucketFactorWithHysteresis(NaN, 4)).toBe(4);
+    expect(computeBucketFactorWithHysteresis(-1, 0)).toBe(1);
+  });
+});
+
+describe('computeRowMergeFactorWithHysteresis (SHOULD-FIX 1 — pane-resize anti-thrash)', () => {
+  it('matches the plain computeRowMergeFactor when clearly outside the dead zone', () => {
+    const belowPx = TARGET_MIN_ROW_PX * LOD_HYSTERESIS_LOW_RATIO - 0.05;
+    expect(computeRowMergeFactorWithHysteresis(belowPx, 1)).toBe(computeRowMergeFactor(belowPx));
+    const abovePx = TARGET_MIN_ROW_PX * LOD_HYSTERESIS_HIGH_RATIO + 0.3;
+    expect(computeRowMergeFactorWithHysteresis(abovePx, 5)).toBe(computeRowMergeFactor(abovePx));
+  });
+
+  it('holds steady inside the dead zone around TARGET_MIN_ROW_PX', () => {
+    const jitterValues = [TARGET_MIN_ROW_PX - 0.001, TARGET_MIN_ROW_PX, TARGET_MIN_ROW_PX + 0.001];
+    for (const px of jitterValues) {
+      expect(computeRowMergeFactorWithHysteresis(px, 1)).toBe(1);
+    }
+  });
+
+  it('a pane resize that clearly changes row px does trigger a factor change', () => {
+    const shrunk = computeRowMergeFactorWithHysteresis(0.3, 1); // pane got much shorter -> more merging
+    expect(shrunk).toBeGreaterThan(1);
+    const grown = computeRowMergeFactorWithHysteresis(5, shrunk); // pane grew back tall -> back to 1
+    expect(grown).toBe(1);
+  });
+});
+
+describe('paintedWindowEndMs (CRITICAL 1 fix)', () => {
+  it('adds the full bucket span (bucketFactor × rawIntervalMs) to the last column\'s bucket-start time', () => {
+    // bucketFactor=4, rawIntervalMs=5000 -> bucket span = 20000ms.
+    expect(paintedWindowEndMs(100_000, 4, 5000)).toBe(120_000);
+  });
+
+  it('degenerates to +rawIntervalMs when bucketFactor <= 1 (pre-LOD behavior)', () => {
+    expect(paintedWindowEndMs(100_000, 1, 5000)).toBe(105_000);
+    expect(paintedWindowEndMs(100_000, 0, 5000)).toBe(105_000); // treated as factor=1
+  });
+
+  it('never returns something before the input start time for a positive interval', () => {
+    expect(paintedWindowEndMs(0, 8, 5000)).toBeGreaterThan(0);
+  });
+
+  it('is a no-op addition (0) for a non-positive rawIntervalMs', () => {
+    expect(paintedWindowEndMs(100_000, 4, 0)).toBe(100_000);
+    expect(paintedWindowEndMs(100_000, 4, -5000)).toBe(100_000);
+  });
+});
+
+/** Shared test helper for bumpPersistMapForColumn / CRITICAL 2 fix tests below. */
+function col(bids: Array<[number, number]>, flags = 0, binSize = 1): DecodedColumnLike {
+  return { t: 0, binSize, flags, bids: bids.map(([price, q]) => ({ price, q })), asks: [] };
+}
+
+describe('bumpPersistMapForColumn', () => {
+  it('bumps a fresh price to count 1 against an empty map', () => {
+    const persistMap = new Map<number, number>();
+    bumpPersistMapForColumn(persistMap, col([[100, 50]]), 0, 1000, 0.001, 1);
+    expect(persistMap.get(100)).toBe(1);
+  });
+
+  it('increments an existing count by exactly 1', () => {
+    const persistMap = new Map<number, number>([[100, 5]]);
+    bumpPersistMapForColumn(persistMap, col([[100, 50]]), 0, 1000, 0.001, 1);
+    expect(persistMap.get(100)).toBe(6);
+  });
+
+  it('prunes a price absent from this column', () => {
+    const persistMap = new Map<number, number>([[100, 5], [200, 2]]);
+    bumpPersistMapForColumn(persistMap, col([[100, 50]]), 0, 1000, 0.001, 1);
+    expect(persistMap.has(200)).toBe(false);
+    expect(persistMap.get(100)).toBe(6);
+  });
+
+  it('never mutates persistMap for a gap column (flags bit0)', () => {
+    const persistMap = new Map<number, number>([[100, 5]]);
+    bumpPersistMapForColumn(persistMap, col([[100, 999]], 1), 0, 1000, 0.001, 1);
+    expect(persistMap.get(100)).toBe(5); // unchanged — gap columns never touch persistence
+  });
+
+  it('never mutates persistMap when the column\'s binSize mismatches curBinSize', () => {
+    const persistMap = new Map<number, number>([[100, 5]]);
+    bumpPersistMapForColumn(persistMap, col([[100, 999]], 0, 2), 0, 1000, 0.001, 1); // binSize=2 vs curBinSize=1
+    expect(persistMap.get(100)).toBe(5); // unchanged
+  });
+
+  it('ignores prices outside [priceMin, rowMaxPrice] (plus epsilon)', () => {
+    const persistMap = new Map<number, number>();
+    bumpPersistMapForColumn(persistMap, col([[5000, 50]]), 0, 1000, 0.001, 1);
+    expect(persistMap.size).toBe(0);
+  });
+});
+
+describe('CRITICAL 2 fix — persistence advances once per CLOSED bucket, not once per repaint', () => {
+  const P = 0.001;
+
+  it('documents the BUG this fix replaces: naively re-bumping the SAME live map on every extension repaint inflates the count once per repaint', () => {
+    // This is the pattern the review flagged: calling the bump primitive
+    // directly against a persistent, never-reset map every time an OPEN
+    // bucket is re-derived (once per raw tick that extends it).
+    const buggyLiveMap = new Map<number, number>([[100, 3]]); // baseline before this bucket
+    const reMergedBucket = () => col([[100, 50]]);
+    bumpPersistMapForColumn(buggyLiveMap, reMergedBucket(), 0, 1000, P, 1); // tick 1 (bucket has 1 raw col)
+    bumpPersistMapForColumn(buggyLiveMap, reMergedBucket(), 0, 1000, P, 1); // tick 2 (bucket re-merged, STILL open)
+    bumpPersistMapForColumn(buggyLiveMap, reMergedBucket(), 0, 1000, P, 1); // tick 3 (still open)
+    // After 3 extension repaints of the SAME still-open bucket, the naive
+    // approach has advanced the count by 3 — at bucketFactor>=6 this alone
+    // can saturate persistenceFactor's ramp (default 6) almost immediately.
+    expect(buggyLiveMap.get(100)).toBe(6); // 3 (baseline) + 3 (one per repaint) -- THE BUG
+  });
+
+  it('the FIX: cloning the stable base + bumping ONCE per repaint gives an IDENTICAL, stable result no matter how many times the open bucket is re-derived', () => {
+    const persistBaseMap = new Map<number, number>([[100, 3]]); // state right before the open bucket
+    function repaintOpenBucketOnce(mergedQ: number): Map<number, number> {
+      const working = new Map(persistBaseMap); // FRESH clone every tick — never the previous tick's result
+      bumpPersistMapForColumn(working, col([[100, mergedQ]]), 0, 1000, P, 1);
+      return working;
+    }
+
+    const tick1 = repaintOpenBucketOnce(10); // bucket has 1 raw column so far
+    const tick2 = repaintOpenBucketOnce(80); // re-merged with a 2nd raw column (q grew)
+    const tick3 = repaintOpenBucketOnce(120); // re-merged with a 3rd
+
+    // All three ticks — regardless of how many raw columns have accumulated
+    // into the still-open bucket — report the SAME count: base + 1.
+    expect(tick1.get(100)).toBe(4);
+    expect(tick2.get(100)).toBe(4);
+    expect(tick3.get(100)).toBe(4);
+  });
+
+  it('the FIX: closing a bucket commits its FINAL content into the base exactly once, and the NEXT bucket advances by exactly 1 from there', () => {
+    let persistBaseMap = new Map<number, number>([[100, 3]]);
+
+    // Bucket B is open for 3 extension ticks (all derived from the SAME base).
+    let working = new Map(persistBaseMap);
+    bumpPersistMapForColumn(working, col([[100, 50]]), 0, 1000, P, 1);
+    expect(working.get(100)).toBe(4);
+
+    // Bucket B closes (a new bucket starts) — commit B's FINAL merged
+    // content into the base EXACTLY ONCE.
+    const committed = new Map(persistBaseMap);
+    bumpPersistMapForColumn(committed, col([[100, 50]]), 0, 1000, P, 1);
+    persistBaseMap = committed;
+    expect(persistBaseMap.get(100)).toBe(4); // advanced by exactly 1 for the whole of bucket B
+
+    // Bucket B+1 opens — its first extension tick clones the NEW base.
+    working = new Map(persistBaseMap);
+    bumpPersistMapForColumn(working, col([[100, 5]]), 0, 1000, P, 1);
+    expect(working.get(100)).toBe(5); // base(4) + 1 -- exactly one advance per closed bucket
+
+    // A THIRD bucket, still present, advances by exactly 1 again.
+    persistBaseMap = new Map(working);
+    let working2 = new Map(persistBaseMap);
+    bumpPersistMapForColumn(working2, col([[100, 5]]), 0, 1000, P, 1);
+    expect(working2.get(100)).toBe(6);
+  });
+
+  it('the FIX: a price that disappears from a closed bucket is pruned from the base on commit (not carried forward)', () => {
+    let persistBaseMap = new Map<number, number>([[100, 3], [200, 5]]);
+    // Bucket B closes without price 200 present anymore.
+    const committed = new Map(persistBaseMap);
+    bumpPersistMapForColumn(committed, col([[100, 40]]), 0, 1000, P, 1);
+    persistBaseMap = committed;
+    expect(persistBaseMap.has(200)).toBe(false);
+    expect(persistBaseMap.get(100)).toBe(4);
   });
 });
