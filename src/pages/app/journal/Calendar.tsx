@@ -418,7 +418,7 @@ export default function JournalCalendar() {
   const trades = useMemo(
     () =>
       isTraderMode
-        ? normalizeTraderTrades(rawTrades as Parameters<typeof normalizeTraderTrades>[0], traderMode ?? 'per-contract')
+        ? normalizeTraderTrades(rawTrades as Parameters<typeof normalizeTraderTrades>[0], traderMode ?? 'per-account')
         : rawTrades,
     [isTraderMode, rawTrades, traderMode],
   ) as typeof rawTrades;

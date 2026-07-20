@@ -1897,7 +1897,18 @@ async function syncCredential(cred: {
                 0,
               ) / totalExitQty
             : null;
-          const lastLegTs = String(healedLegs[healedLegs.length - 1].timestamp ?? new Date().toISOString());
+          // close_at = the LATEST exit-leg timestamp across ALL legs, clamped to
+          // >= open_at. A healed leg can be an earlier fill than the entry
+          // (best-effort attribution when the true pairing was destroyed) — a
+          // close_at before open_at breaks position clustering (Trader /
+          // All-Accounts decision grouping treats the row as zero-width).
+          const legTimes = mergedExits
+            .map((e) => Date.parse(String((e as { timestamp?: unknown }).timestamp ?? '')))
+            .filter((t) => Number.isFinite(t));
+          const openAtMs = Date.parse(String(phantomTrade.open_at ?? ''));
+          const lastLegMs = legTimes.length > 0 ? Math.max(...legTimes) : Date.now();
+          const closeAtMs = Number.isFinite(openAtMs) ? Math.max(lastLegMs, openAtMs) : lastLegMs;
+          const lastLegTs = new Date(closeAtMs).toISOString();
           // NOTE: trades_exit_reason_chk only allows trailing/manual/signal/
           // target/stop — so the reconcile marker lives in updated_via (no
           // constraint; same convention as reconcile_open_trades_vs_broker)

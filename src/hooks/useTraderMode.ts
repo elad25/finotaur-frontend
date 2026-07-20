@@ -6,12 +6,14 @@ export type { TraderMode };
 const STORAGE_KEY = 'finotaur:trader-mode';
 
 function readStoredMode(): TraderMode {
-  if (typeof window === 'undefined') return 'per-contract';
+  if (typeof window === 'undefined') return 'per-account';
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === 'per-account' ? 'per-account' : 'per-contract';
+    // Default is per-account (avg per portfolio — "what did one account make");
+    // an explicit per-contract choice is still honored from storage.
+    return stored === 'per-contract' ? 'per-contract' : 'per-account';
   } catch {
-    return 'per-contract';
+    return 'per-account';
   }
 }
 
