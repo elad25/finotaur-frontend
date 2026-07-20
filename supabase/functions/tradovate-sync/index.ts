@@ -1637,6 +1637,15 @@ async function syncCredential(cred: {
         netByAccountSymbol.set(`${p.accountId}::${posSym}`, p.netPos);
       }
 
+      // Always-on summary so a silent skip is distinguishable from a silent
+      // failure in production logs (positions seen vs states checked vs healed).
+      console.log(JSON.stringify({
+        event:            'broker_truth_reconcile_scan',
+        connection_id:    cred.id,
+        open_states:      openStates.length,
+        broker_positions: Array.from(netByAccountSymbol.entries()).map(([k, v]) => `${k}=${v}`),
+      }));
+
       // Cursor-free fill history — fetched lazily, at most once per credential,
       // only when some state row actually needs healing.
       let fullFillHistory: TradovateFill[] | null = null;
