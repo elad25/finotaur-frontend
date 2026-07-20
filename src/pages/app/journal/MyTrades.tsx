@@ -133,6 +133,10 @@ interface Trade {
   trade_rating?: number | null;
   exit_reason?: string | null;
   multiplier?: number;
+  // Fill-level partial closes recorded by broker sync (tradovate-sync v46+).
+  // An OPEN trade with legs here has realized some of its exit already —
+  // the table must surface that instead of a blank Exit/P&L.
+  partial_exits?: Array<{ price?: number; quantity?: number; timestamp?: string }> | null;
   created_at?: string;
   mistake?: string;
   next_time?: string;
@@ -669,6 +673,30 @@ const TradeRow = memo(({
   const isMultiLeg = isOption && (trade.leg_count ?? 0) > 1;
   const optionDTE = isOption ? getDTE(trade.expiration_date) : null;
 
+  // Partial exits on an OPEN trade: broker sync records fill-level partial
+  // closes in partial_exits before the position fully closes. Without this,
+  // the row shows "—" for Exit/P&L and reads as "my exit was not captured".
+  const partialExitSummary = useMemo(() => {
+    if (isClosed) return null;
+    const legs = Array.isArray(trade.partial_exits) ? trade.partial_exits : [];
+    let exitedQty = 0;
+    let weightedSum = 0;
+    for (const leg of legs) {
+      const qty = Number(leg?.quantity ?? 0);
+      const price = Number(leg?.price ?? 0);
+      if (qty <= 0 || !Number.isFinite(price) || price <= 0) continue;
+      exitedQty += qty;
+      weightedSum += price * qty;
+    }
+    if (exitedQty <= 0) return null;
+    const avgExit = weightedSum / exitedQty;
+    const entry = Number(trade.entry_price) || 0;
+    const mult = Number(trade.multiplier) > 0 ? Number(trade.multiplier) : 1;
+    const perPoint = trade.side === 'SHORT' ? entry - avgExit : avgExit - entry;
+    const realizedPnl = perPoint * exitedQty * mult;
+    return { exitedQty, avgExit, realizedPnl, totalQty: Number(trade.quantity) || exitedQty };
+  }, [isClosed, trade.partial_exits, trade.entry_price, trade.multiplier, trade.side, trade.quantity]);
+
   const handleClick = useCallback(() => onOpen(trade), [trade, onOpen]);
   const handleEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -820,18 +848,30 @@ const TradeRow = memo(({
           ) : (
             <span className="text-zinc-500">—</span>
           )
+        ) : trade.exit_price && Number(trade.exit_price) > 0 ? (
+          `$${formatNumber(trade.exit_price, 2)}`
+        ) : partialExitSummary ? (
+          <span className="text-sm">
+            ${formatNumber(partialExitSummary.avgExit, 2)}{' '}
+            <span className="text-zinc-500 text-xs">
+              {partialExitSummary.exitedQty}/{partialExitSummary.totalQty} out
+            </span>
+          </span>
         ) : (
-          trade.exit_price && Number(trade.exit_price) > 0 
-            ? `$${formatNumber(trade.exit_price, 2)}` 
-            : '—'
+          '—'
         )}
       </TableCell>
-      
+
       {/* P&L - 🔥 FIXED: Show for both modes */}
       <TableCell>
         {isClosed ? (
           <span className={pnl >= 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
             {pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}
+          </span>
+        ) : partialExitSummary ? (
+          <span className={partialExitSummary.realizedPnl >= 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+            {partialExitSummary.realizedPnl >= 0 ? '+' : ''}${formatNumber(Math.abs(partialExitSummary.realizedPnl), 2)}{' '}
+            <span className="text-zinc-500 text-xs font-normal">partial</span>
           </span>
         ) : (
           <span className="text-zinc-500">—</span>
