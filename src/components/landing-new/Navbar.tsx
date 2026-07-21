@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ds/Button";
 import { Wordmark } from "@/components/ds/Wordmark";
 import PromoOfferChip from "@/components/PromoOfferChip";
-import { StartFreeLabel } from "@/components/landing-new/StartFreeLabel";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -109,7 +108,6 @@ const Navbar = () => {
             >
               Start free
             </Button>
-            <StartFreeLabel pillOnly />
           </div>
 
           {/* Mobile Menu Button */}
@@ -161,7 +159,6 @@ const Navbar = () => {
                 >
                   Start free
                 </Button>
-                <StartFreeLabel className="justify-center pt-1" />
               </div>
             </div>
           </motion.div>
