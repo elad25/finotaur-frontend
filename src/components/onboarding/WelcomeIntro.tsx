@@ -224,10 +224,27 @@ export default function WelcomeIntro() {
             }}
           />
 
-          <div className="flex flex-col items-center text-center gap-6 pt-2">
-            {/* Wordmark with soft radial gold glow behind it.
-                Trial view aligns it top-left; the classic welcome keeps it centered. */}
-            <div className={`relative flex items-center ${isAppTrial ? 'w-full justify-start' : 'justify-center'}`}>
+          {/* Brand bull on the right side of the modal (trial view). screen blend
+              drops the asset's black background so only the gold bull shows; the
+              left-fade mask keeps text legible. */}
+          {isAppTrial && (
+            <img
+              src="/BULL%20ONLY.png"
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute right-0 top-1/2 z-0 hidden h-[78%] w-auto -translate-y-1/2 select-none md:block"
+              style={{
+                mixBlendMode: 'screen',
+                opacity: 0.55,
+                maskImage: 'linear-gradient(to left, black 45%, transparent 92%)',
+                WebkitMaskImage: 'linear-gradient(to left, black 45%, transparent 92%)',
+              }}
+            />
+          )}
+
+          <div className="relative z-10 flex flex-col items-center text-center gap-6 pt-2">
+            {/* Wordmark with soft radial gold glow behind it, centered. */}
+            <div className="relative flex items-center justify-center">
               {/* Radial gold glow orb behind the wordmark */}
               <div
                 className="absolute pointer-events-none"
@@ -236,7 +253,6 @@ export default function WelcomeIntro() {
                   height: 80,
                   background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.14) 0%, transparent 70%)',
                   filter: 'blur(12px)',
-                  left: isAppTrial ? 0 : undefined,
                 }}
               />
               <Wordmark size="large" tone="gradient" />
@@ -319,7 +335,7 @@ export default function WelcomeIntro() {
                     <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                       <Button
                         variant="gold"
-                        size="lg"
+                        size="compact"
                         showArrow
                         onClick={handleConnectBroker}
                         className="w-full md:w-auto"
@@ -328,7 +344,7 @@ export default function WelcomeIntro() {
                       </Button>
                       <Button
                         variant="goldOutline"
-                        size="lg"
+                        size="compact"
                         showArrow={false}
                         onClick={handleStart}
                         className="w-full md:w-auto"
