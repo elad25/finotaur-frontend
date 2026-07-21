@@ -888,13 +888,16 @@ const Hero = () => {
           transition={{ duration: 0.7, delay: 0.55 }}
           className="mb-20 md:mb-28"
         >
-          <Button
-            variant="gold"
-            size="xl"
-            onClick={handleStartFree}
-          >
+          <div className="inline-flex flex-col items-center gap-3">
+            <Button
+              variant="gold"
+              size="xl"
+              onClick={handleStartFree}
+            >
+              Start free
+            </Button>
             <StartFreeLabel />
-          </Button>
+          </div>
         </motion.div>
 
         {/* ========== 4-CARD CAROUSEL STAGE ========== */}
@@ -963,24 +966,27 @@ const Hero = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.9 }}
-          className="flex flex-col sm:flex-row items-center gap-4"
+          className="flex flex-col items-center gap-3"
         >
-          <Button
-            variant="gold"
-            size="xl"
-            onClick={handleStartFree}
-          >
-            <StartFreeLabel />
-          </Button>
-          <Button
-            onClick={() => navigate('/auth/login')}
-            variant="outline"
-            size="lg"
-            className="px-8 py-6 text-[11px] font-sans uppercase tracking-[0.22em] font-medium rounded-sm border border-[#C9A646]/40 text-[#C9A646] bg-transparent hover:bg-[#C9A646]/10 transition-all"
-          >
-            <LogIn className="mr-2 w-4 h-4" />
-            Login
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <Button
+              variant="gold"
+              size="xl"
+              onClick={handleStartFree}
+            >
+              Start free
+            </Button>
+            <Button
+              onClick={() => navigate('/auth/login')}
+              variant="outline"
+              size="lg"
+              className="px-8 py-6 text-[11px] font-sans uppercase tracking-[0.22em] font-medium rounded-sm border border-[#C9A646]/40 text-[#C9A646] bg-transparent hover:bg-[#C9A646]/10 transition-all"
+            >
+              <LogIn className="mr-2 w-4 h-4" />
+              Login
+            </Button>
+          </div>
+          <StartFreeLabel />
         </motion.div>
 
       </div>

@@ -107,8 +107,9 @@ const Navbar = () => {
               size="compact"
               onClick={() => navigate('/auth/register')}
             >
-              <StartFreeLabel compact />
+              Start free
             </Button>
+            <StartFreeLabel pillOnly />
           </div>
 
           {/* Mobile Menu Button */}
@@ -158,8 +159,9 @@ const Navbar = () => {
                   className="w-full"
                   onClick={() => { navigate('/auth/register'); setIsMobileMenuOpen(false); }}
                 >
-                  <StartFreeLabel compact />
+                  Start free
                 </Button>
+                <StartFreeLabel className="justify-center pt-1" />
               </div>
             </div>
           </motion.div>

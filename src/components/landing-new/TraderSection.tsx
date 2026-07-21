@@ -626,12 +626,13 @@ const TraderSection = () => {
       </div>
 
       {/* ===== FINAL CTA ===== */}
-      <div className="text-center mt-6">
+      <div className="flex flex-col items-center gap-3 mt-6">
         <Link to="/register">
           <Button variant="gold" size="xl">
-            <StartFreeLabel />
+            Start free
           </Button>
         </Link>
+        <StartFreeLabel />
       </div>
     </SectionShell>
   );
