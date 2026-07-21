@@ -325,6 +325,11 @@ function paintColumnsRange(
   persistMap: Map<number, number>,
   rowMergeFactor: number = 1,
   bumpRangeStart: number = rangeStart,
+  // Step 2A (live-append fast-path threading — the Step-1 gap): forwarded to
+  // paintColumnsRangeToBuffer so live-tick appends in 'clean' mode paint
+  // with the SAME clean alpha as a full rebuild, instead of always falling
+  // back to legacy alpha here. Defaults to 'legacy' for any other caller.
+  visualModel: 'legacy' | 'clean' = 'legacy',
 ): void {
   const width = rangeEnd - rangeStart;
   if (width <= 0) return;
@@ -350,6 +355,7 @@ function paintColumnsRange(
     persistMap,
     rowMergeFactor,
     bumpRangeStart,
+    visualModel,
   );
   octx.putImageData(imgData, destX, 0);
 }
@@ -746,6 +752,23 @@ export function DepthMatrixLayer({
       : rampColumns + 2;
     const warmStart = Math.max(0, windowStartIdx - lookbackRawCount);
 
+    // Step 2A — visible price window (clean mode only need it, but it's
+    // cheap to compute unconditionally). Read straight from the series
+    // instance, mirroring drawFrame's yAtPriceMax/yAtPriceMin lookups —
+    // `series` is the same prop dispatchRebuild already closes over.
+    let visPriceLo: number | undefined;
+    let visPriceHi: number | undefined;
+    {
+      const _s = series;
+      const _h = heightRef.current;
+      const _top = _s?.coordinateToPrice(0);
+      const _bot = _h > 0 ? _s?.coordinateToPrice(_h) : null;
+      if (_top != null && _bot != null && Number.isFinite(_top) && Number.isFinite(_bot)) {
+        visPriceHi = Math.max(_top, _bot);
+        visPriceLo = Math.min(_top, _bot);
+      }
+    }
+
     const jobId = ++jobCounterRef.current;
     const job: RasterJob = {
       jobId,
@@ -761,6 +784,8 @@ export function DepthMatrixLayer({
       bucketFactor,
       paneHeightPxEstimate: heightRef.current,
       visualModel: visualModelRef.current,
+      visPriceLo,
+      visPriceHi,
     };
     pendingJobsRef.current.set(jobId, {
       zoomMult,
@@ -1107,6 +1132,23 @@ export function DepthMatrixLayer({
         }
       }
 
+      // Step 2A — price-axis analog of the time window-margin check above,
+      // clean mode only: the raster now paints the visible price window
+      // (+ margin) rather than a far-wall union, so panning/zooming the
+      // PRICE axis past the painted bounds must trigger a rebuild too (the
+      // legacy union window was wide enough that this was never needed).
+      // Reuses meta0.priceMin/priceMax as the last-rasterized bounds — no
+      // new ref required.
+      if (visualModelRef.current === 'clean' && meta0 && meta0.numCols > 0) {
+        const _top = seriesInstance.coordinateToPrice(0);
+        const _bot = seriesInstance.coordinateToPrice(cssH);
+        if (_top != null && _bot != null && Number.isFinite(_top) && Number.isFinite(_bot)) {
+          const _visHi = Math.max(_top, _bot);
+          const _visLo = Math.min(_top, _bot);
+          if (_visLo < meta0.priceMin || _visHi > meta0.priceMax) scheduleRebuild();
+        }
+      }
+
       if (rebuildDueRef.current) {
         doFullRebuild = true;
         rebuildDueRef.current = false;
@@ -1226,6 +1268,8 @@ export function DepthMatrixLayer({
                   meta.bloomEnabled,
                   stripWarmMap,
                   meta.rowMergeFactor,
+                  stripStart,
+                  visualModelRef.current,
                 );
                 lastPersistMapRef.current = stripWarmMap;
               } else {
@@ -1249,6 +1293,8 @@ export function DepthMatrixLayer({
                   meta.bloomEnabled,
                   lastPersistMapRef.current,
                   meta.rowMergeFactor,
+                  0,
+                  visualModelRef.current,
                 );
                 meta.cols.push(...appendCols);
                 meta.numCols = meta.numCols + appendCols.length;
@@ -1375,6 +1421,7 @@ export function DepthMatrixLayer({
                     workingMap,
                     meta.rowMergeFactor,
                     bumpRangeStart,
+                    visualModelRef.current,
                   );
                 } else {
                   paintColumnsRange(
@@ -1398,6 +1445,7 @@ export function DepthMatrixLayer({
                     workingMap,
                     meta.rowMergeFactor,
                     bumpRangeStart,
+                    visualModelRef.current,
                   );
                 }
                 lastPersistMapRef.current = workingMap;

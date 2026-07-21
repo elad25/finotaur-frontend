@@ -3043,6 +3043,7 @@ export function FinotaurChart({
           asks={depthProfile.asks}
           binSize={depthProfile.binSize}
           visible={depthProfile.visible}
+          pinOffscreen={depthMatrixVisualModel === 'clean'}
         />
       )}
 
