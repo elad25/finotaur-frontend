@@ -1019,7 +1019,7 @@ export const BillingTab = () => {
                     {investorIsAppTrial ? (
                       <Button
                         size="sm"
-                        onClick={() => navigate('/app/top-secret')}
+                        onClick={() => navigate('/app/upgrade')}
                         className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all"
                       >
                         <Crown className="w-3.5 h-3.5 mr-1.5" />Keep Investor access
