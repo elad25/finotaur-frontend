@@ -237,13 +237,17 @@ export function resolveTier(
   if (normalized === 'finotaur') return 'finotaur';
   if (normalized === 'core') return 'pro';
 
+  // App-granted 14-day trial: show TRIAL even when the trial has granted Investor
+  // (Top Secret) access — a trial is not a paid membership. Real PAID platform
+  // plans above still win; only the trial-via-Investor case is reordered here.
+  if (accountType === 'trial') return 'trial';
+
   // Investor tier (2026-07): an active Top Secret sub outranks the journal tier
   if (normalized === 'investor' || hasTopSecret) return 'topsecret';
 
   // Journal tier
   if (accountType === 'premium') return 'premium';
   if (accountType === 'basic') return 'basic';
-  if (accountType === 'trial') return 'trial';
 
   return 'free';
 }

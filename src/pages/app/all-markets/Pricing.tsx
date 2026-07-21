@@ -247,7 +247,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end, newsletter_enabled, newsletter_status, newsletter_interval, top_secret_enabled, top_secret_status, top_secret_interval, account_type, subscription_status, whop_membership_id, subscription_interval, subscription_expires_at, journal_yearly_expires_at, journal_yearly_plan, platform_yearly_expires_at, platform_yearly_plan')
+          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end, newsletter_enabled, newsletter_status, newsletter_interval, top_secret_enabled, top_secret_status, top_secret_is_in_trial, top_secret_interval, account_type, subscription_status, whop_membership_id, subscription_interval, subscription_expires_at, journal_yearly_expires_at, journal_yearly_plan, platform_yearly_expires_at, platform_yearly_plan')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -278,7 +278,16 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         }
 
         // 🔥 Interval-agnostic ownership (standalone Trader/Investor coexist — see handlePlanClick)
-        setHasActiveTopSecret(!!(data?.top_secret_enabled && ['active', 'trial'].includes(data?.top_secret_status || '')));
+        // "Owned" = a real paid Investor sub: status 'active', OR a legacy grandfathered
+        // Whop trial (top_secret_is_in_trial=true, will auto-charge). The app-granted 14-day
+        // trial sets top_secret_status='trial' with is_in_trial=false and NO Whop membership —
+        // it is NOT owned, so it must not be marked "Current Plan" or routed to cancel.
+        const topSecretIsOwned = !!(
+          data?.top_secret_enabled &&
+          (data?.top_secret_status === 'active' ||
+            (['trial', 'trialing'].includes(data?.top_secret_status || '') && !!data?.top_secret_is_in_trial))
+        );
+        setHasActiveTopSecret(topSecretIsOwned);
         setHasActiveNewsletter(!!['active', 'trial'].includes(data?.newsletter_status || ''));
         setTopSecretInterval(data?.top_secret_interval || null);
 
@@ -286,9 +295,8 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         const newsletterIsMonthly = 
           (data?.newsletter_status === 'active' || data?.newsletter_status === 'trial') &&
           (data?.newsletter_interval === 'monthly' || !data?.newsletter_interval);
-        const topSecretIsMonthly = 
-          data?.top_secret_enabled &&
-          (data?.top_secret_status === 'active' || data?.top_secret_status === 'trial') &&
+        const topSecretIsMonthly =
+          topSecretIsOwned &&
           (data?.top_secret_interval === 'monthly' || !data?.top_secret_interval);
         const journalPremiumIsMonthly = 
           data?.account_type === 'premium' &&

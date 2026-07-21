@@ -528,7 +528,7 @@ useEffect(() => {
 
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('account_type, subscription_interval, subscription_status, subscription_expires_at')
+        .select('account_type, subscription_interval, subscription_status, subscription_expires_at, trial_ends_at')
         .eq('id', user.id)
         .single();
 
@@ -549,6 +549,8 @@ useEffect(() => {
     
     if (account_type === 'free') {
       return { name: 'Free', badge: 'free' };
+    } else if (account_type === 'trial') {
+      return { name: 'Trial', badge: 'trial' };
     } else if (account_type === 'basic') {
       const intervalText = subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
       return { name: `Basic (${intervalText})`, badge: 'basic' };
@@ -562,6 +564,17 @@ useEffect(() => {
 
   const getNextBillingDate = () => {
     if (!userProfile || userProfile.account_type === 'free') {
+      return 'N/A';
+    }
+
+    if (userProfile.account_type === 'trial') {
+      if (userProfile.trial_ends_at) {
+        return new Date(userProfile.trial_ends_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
       return 'N/A';
     }
 
@@ -720,8 +733,8 @@ useEffect(() => {
                 ) : (
                   <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
                     planInfo.badge === "free"
-                      ? "bg-zinc-800 text-zinc-300" 
-                      : planInfo.badge === "basic"
+                      ? "bg-zinc-800 text-zinc-300"
+                      : planInfo.badge === "basic" || planInfo.badge === "trial"
                       ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                       : "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30"
                   }`}>
@@ -744,8 +757,12 @@ useEffect(() => {
             {/* Billing Date */}
             <div className="flex items-center justify-between py-4 border-b border-zinc-800">
               <div>
-                <label className="text-sm font-medium text-zinc-300">Billing Date</label>
-                <p className="text-xs text-zinc-500 mt-1">Next billing cycle</p>
+                <label className="text-sm font-medium text-zinc-300">
+                  {userProfile?.account_type === 'trial' ? 'Trial Ends' : 'Billing Date'}
+                </label>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {userProfile?.account_type === 'trial' ? 'Your free trial end date' : 'Next billing cycle'}
+                </p>
               </div>
               {loading ? (
                 <div className="h-5 w-32 bg-zinc-800 animate-pulse rounded"></div>
