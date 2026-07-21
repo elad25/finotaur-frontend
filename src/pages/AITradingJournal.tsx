@@ -63,12 +63,12 @@ const FAQS = [
   {
     question: "Is the AI coach included in every plan?",
     answer:
-      "The AI trading coach (FINO) is part of the Trader plan ($44.99/month, 14-day free trial). The free tier includes a 10-trade demo portfolio and 3 AI stock analyses a day.",
+      "The AI trading coach (FINO) is part of the Trader plan ($44.99/month), and every new account gets 14 days of full access to it — no card required. The free tier afterwards includes a 10-trade demo portfolio and 3 AI stock analyses a day.",
   },
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. The Trader plan includes a 14-day free trial so you can connect your broker and see your journal first — and the free tier needs no card at all.",
+      "Yes. Every new account automatically gets 14 days of full access to Trader and Investor features — no card required — so you can connect your broker and see your journal first. Afterwards you keep a free plan with 10 manual trades and preview mode.",
   },
 ];
 
@@ -146,7 +146,7 @@ export default function AITradingJournal() {
 
       <SEO
         title="AI Trading Journal"
-        description="An AI trading journal that auto-imports your trades and coaches you: daily ranked insights, a Leak Finder that names your costliest mistake, behavioral alerts, and one score for your real edge. 14-day free trial."
+        description="An AI trading journal that auto-imports your trades and coaches you: daily ranked insights, a Leak Finder that names your costliest mistake, behavioral alerts, and one score for your real edge. 14 days of full access at signup, no card required."
         path="/ai-trading-journal"
         jsonLd={[
           webPage({
@@ -182,7 +182,7 @@ export default function AITradingJournal() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Button asChild variant="goldOutline" size="xl">
             <Link to="/pricing">See pricing</Link>
@@ -391,7 +391,7 @@ export default function AITradingJournal() {
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-5">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Link
             to="/pricing"
@@ -503,7 +503,7 @@ export default function AITradingJournal() {
 
         <div className="flex justify-center mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
         </div>
 

@@ -628,7 +628,7 @@ const TraderSection = () => {
       <div className="text-center mt-6">
         <Link to="/register">
           <Button variant="gold" size="xl">
-            Start 14-day free trial
+            Start free — 14 days of full access, no card
           </Button>
         </Link>
       </div>

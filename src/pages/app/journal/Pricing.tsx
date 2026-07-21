@@ -479,7 +479,7 @@ function UpgradePlanModal({
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm">14-Day Trader Trial</span>
+                <span className="text-sm">14 Days Full Access at Signup</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">

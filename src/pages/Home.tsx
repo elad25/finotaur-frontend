@@ -84,7 +84,7 @@ const Home = () => {
         "Trading Journal Templates + Basic Stats",
         "AI Report Analysis",
       ],
-      cta: "Start Free Trial",
+      cta: "Start Free — Full Access",
       highlighted: true,
     },
     {
@@ -101,7 +101,7 @@ const Home = () => {
         "Coming: Options Flow / Dark Pool data",
         "Coming: Real-time algorithmic alerts",
       ],
-      cta: "Start Free Trial",
+      cta: "Start Free — Full Access",
       highlighted: false,
     },
   ];
@@ -158,7 +158,7 @@ const Home = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary" />
-                  <span>14-day free trial</span>
+                  <span>14 days of full access at signup, no card required</span>
                 </div>
               </div>
             </div>
@@ -413,7 +413,7 @@ const Home = () => {
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" asChild className="glow-primary text-lg h-14 px-8">
                   <Link to="/register">
-                    Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
+                    Start Free — Full Access <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="secondary" asChild className="text-lg h-14 px-8">
@@ -421,7 +421,7 @@ const Home = () => {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground mt-6">
-                14-day free trial • Cancel anytime
+                14 days of full access at signup, no card required • Cancel anytime
               </p>
             </div>
           </Card>

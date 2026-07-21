@@ -193,7 +193,8 @@ const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
 const JournalReportPage = lazy(() => import("@/pages/app/reports/JournalReportPage"));
 const PortfolioReportPage = lazy(() => import("@/pages/app/reports/PortfolioReportPage"));
 const MarketsReportPage = lazy(() => import("@/pages/app/reports/MarketsReportPage"));
-const IntroOffer = lazy(() => import("@/components/onboarding/IntroOffer"));
+// IntroOffer DISABLED 2026-07 (full-price-only decision) — lazy import + mount removed.
+// See src/components/onboarding/IntroOffer.tsx for details. Component kept, not deleted.
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
 const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
@@ -484,9 +485,7 @@ function AppContent() {
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
       {FEATURES.AFFILIATE_TRACKING && <Suspense fallback={null}><AffiliateTracker /></Suspense>}
-      <Suspense fallback={null}>
-        <IntroOffer />
-      </Suspense>
+      {/* IntroOffer DISABLED 2026-07 (full-price-only decision) — unmounted */}
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
         {import.meta.env.DEV && (

@@ -68,7 +68,7 @@ const FAQS = [
   {
     question: "How much does it cost?",
     answer:
-      "You can start free — the demo portfolio includes 10 journal trades and 3 AI stock analyses a day, no card required. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, and the AI trading coach.",
+      "Every new account automatically gets 14 days of full access to Trader and Investor features — no card required. Afterwards you keep a free plan with 10 manual trades and preview mode. Paid plans start when you upgrade: Trader is $44.99/month and adds unlimited trades, multiple broker connections, and the AI trading coach.",
   },
 ];
 
@@ -146,7 +146,7 @@ export default function BestTradingJournalFutures() {
 
       <SEO
         title="Best Trading Journal for Futures Traders"
-        description="A trading journal built for futures: tick- and contract-accurate analytics, automatic broker sync, R-multiple stats, and an AI coach — for ES, NQ, CL and more. 14-day free trial."
+        description="A trading journal built for futures: tick- and contract-accurate analytics, automatic broker sync, R-multiple stats, and an AI coach — for ES, NQ, CL and more. 14 days of full access at signup, no card required."
         path="/best-trading-journal-for-futures"
         jsonLd={[
           webPage({
@@ -182,7 +182,7 @@ export default function BestTradingJournalFutures() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Button asChild variant="goldOutline" size="xl">
             <Link to="/pricing">See pricing</Link>
@@ -389,7 +389,7 @@ export default function BestTradingJournalFutures() {
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Link
             to="/pricing"
@@ -501,7 +501,7 @@ export default function BestTradingJournalFutures() {
 
         <div className="flex justify-center mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
         </div>
 

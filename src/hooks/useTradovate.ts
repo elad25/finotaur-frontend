@@ -40,9 +40,15 @@ async function extractEdgeError(
     const ctx = err?.context;
     if (ctx && typeof ctx.json === 'function') {
       const body = await ctx.clone().json();
-      const message = typeof body?.error === 'string' && body.error.trim()
-        ? body.error
-        : (err?.message || fallback);
+      // Prefer an explicit human-readable `message` field (e.g. the
+      // trial-broker-limit / upgrade_required gates send {error:'<code>',
+      // message:'<readable text>'}) — fall back to `error` for endpoints
+      // that put the readable text directly in `error`.
+      const message = typeof body?.message === 'string' && body.message.trim()
+        ? body.message
+        : typeof body?.error === 'string' && body.error.trim()
+          ? body.error
+          : (err?.message || fallback);
       const code = typeof body?.code === 'string' ? body.code : undefined;
       return { message, code };
     }

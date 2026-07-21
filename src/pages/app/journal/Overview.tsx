@@ -1527,6 +1527,17 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     setShowAddBroker(true);
   }, [isFreeJournal, isPremium, allBrokerConnections]);
 
+  // Cross-page entry point for ConnectBrokerNudge (mounted in ProtectedAppLayout,
+  // which can't reach into this page's local popup state directly): navigating
+  // here with ?connect_broker=1 auto-opens the AddBroker popup once, then strips
+  // the param so a manual refresh doesn't re-trigger it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connect_broker') !== '1') return;
+    window.history.replaceState(null, '', window.location.pathname);
+    openAddBrokerPopup();
+  }, [openAddBrokerPopup]);
+
   const handoffToAddBrokerPopup = useCallback(() => {
     setShowAddBroker(true);
     window.setTimeout(() => {
@@ -1582,9 +1593,18 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // the UpgradeLimitDialog for that specific error value. FREE-plan users are
   // now blocked at the edge function too, which redirects with
   // ?oauth_error=upgrade_required — same dialog, free-locked copy.
+  // Trial anti-abuse: the same broker account can't power a second journal
+  // trial — oauth-callback redirects with ?oauth_error=trial_broker_limit,
+  // surfaced as a toast (not the upgrade dialog — it's not an upsell, it's a
+  // block on that specific account).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('oauth_error');
+    if (oauthError === 'trial_broker_limit') {
+      toast.error('This broker account was already used in another FINOTAUR trial. Upgrade to a paid plan to connect it.');
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
     if (oauthError === 'upgrade_required_for_multiple_brokers' || oauthError === 'upgrade_required') {
       setBrokerUpgradeReason(
         oauthError === 'upgrade_required' ? 'broker-free-locked' : 'broker-limit',

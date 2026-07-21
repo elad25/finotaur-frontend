@@ -12,9 +12,30 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { SkeletonText } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import BinanceApiKeyGuide from './BinanceApiKeyGuide';
+
+// supabase.functions.invoke() surfaces a non-2xx response as a
+// FunctionsHttpError whose top-level `.message` is a generic
+// "Edge Function returned a non-2xx status code" — the real, readable
+// reason lives in the response body (`.context`). exchange-connect sends
+// {ok:false, error:'<code>', message:'<readable text>'} for gate errors
+// (e.g. upgrade_required, trial_broker_limit) and {ok:false, error:'<readable text>'}
+// for validation errors — prefer `message` when present, else `error`.
+async function extractExchangeConnectError(err: unknown, fallback: string): Promise<string> {
+  if (err instanceof FunctionsHttpError) {
+    try {
+      const body = await err.context.json();
+      if (typeof body?.message === 'string' && body.message.trim()) return body.message;
+      if (typeof body?.error === 'string' && body.error.trim()) return body.error;
+    } catch {
+      /* fall through to fallback */
+    }
+  }
+  return err instanceof Error ? (err.message || fallback) : fallback;
+}
 
 // ============================================================================
 // TYPES
@@ -88,8 +109,8 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
         },
       );
 
-      if (connectErr) throw new Error(connectErr.message || 'Connection failed.');
-      if (!connectResult?.ok) throw new Error(connectResult?.error || 'Connection rejected by server.');
+      if (connectErr) throw new Error(await extractExchangeConnectError(connectErr, 'Connection failed.'));
+      if (!connectResult?.ok) throw new Error(connectResult?.message || connectResult?.error || 'Connection rejected by server.');
 
       const connectionId: string = connectResult.connectionId;
 

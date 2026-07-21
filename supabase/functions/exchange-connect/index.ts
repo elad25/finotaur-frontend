@@ -45,6 +45,17 @@ function normalizeSymbols(raw: unknown): string[] | null {
   return items.length > 0 ? items : null;
 }
 
+// ─── Trial anti-abuse: broker-account fingerprint ──────────────
+// SHA-256 hash of `${brokerKind}:${externalId}` — fed into
+// claim_trial_broker_fingerprint() so the same broker account can't power
+// more than one journal trial. No-ops server-side for non-trial users.
+// The API key is hashed only — the raw key is never persisted or logged.
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── Main handler ──────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   // CORS preflight
@@ -188,6 +199,37 @@ Deno.serve(async (req: Request) => {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         },
       );
+    }
+
+    // ── Trial anti-abuse: block an API key already claimed by a different
+    // journal trial. Fingerprint = hash of exchange + API key (the raw key
+    // is never persisted or logged — only its hash). Fails open on RPC
+    // error/timeout — a transient lookup hiccup must not lock out a
+    // legitimate connect. No-ops for non-trial users (RPC returns
+    // {allowed:true, reason:'not_trial'}).
+    {
+      try {
+        const fingerprint = await sha256Hex(`${broker}:${apiKey}`);
+        const { data: claim, error: claimError } = await supabaseAdmin.rpc('claim_trial_broker_fingerprint', {
+          p_user_id: userId,
+          p_broker_kind: broker,
+          p_fingerprint: fingerprint,
+        });
+        if (claimError) {
+          console.warn('[trial-fingerprint] claim RPC error — failing open:', claimError.message);
+        } else if ((claim as { allowed?: boolean } | null)?.allowed === false) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: 'trial_broker_limit',
+              message: 'This broker account was already used in another FINOTAUR trial. Upgrade to a paid plan to connect it.',
+            }),
+            { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+          );
+        }
+      } catch (fpErr) {
+        console.warn('[trial-fingerprint] unexpected error — failing open:', String(fpErr).slice(0, 300));
+      }
     }
 
     // ── Store credentials in Vault (never plaintext) ─────────

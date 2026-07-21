@@ -215,8 +215,8 @@ export function useTopSecret(): UseTopSecretReturn {
           ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           : null;
 
-        const isActive = 
-          profile?.top_secret_status === 'active' &&
+        const isActive =
+          (profile?.top_secret_status === 'active' || profile?.top_secret_status === 'trial') &&
           profile?.top_secret_enabled === true &&
           (!expiresAt || expiresAt > new Date());
 

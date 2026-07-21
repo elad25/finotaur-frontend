@@ -106,7 +106,7 @@ const Navbar = () => {
               size="compact"
               onClick={() => navigate('/auth/register')}
             >
-              Start free trial
+              Start free — 14 days of full access, no card
             </Button>
           </div>
 
@@ -157,7 +157,7 @@ const Navbar = () => {
                   className="w-full"
                   onClick={() => { navigate('/auth/register'); setIsMobileMenuOpen(false); }}
                 >
-                  Start free trial
+                  Start free — 14 days of full access, no card
                 </Button>
               </div>
             </div>

@@ -40,7 +40,7 @@ const FAQS = [
   {
     question: "Which one has a free plan?",
     answer:
-      "Finotaur has a genuine free plan (a 10-trade demo journal, no card required). TraderSync does not offer a free plan — it offers a 7-day free trial across all of its paid tiers, starting at $22.46/month billed annually.",
+      "Finotaur has a genuine free plan (a 10-trade demo journal, no card required), and every new account also automatically gets 14 days of full access to Trader and Investor features before falling back to that free plan. TraderSync does not offer a free plan — it offers a 7-day free trial across all of its paid tiers, starting at $22.46/month billed annually.",
   },
   {
     question: "Does TraderSync auto-sync with Tradovate?",
@@ -68,7 +68,7 @@ const COMPARISON_ROWS: Array<{ feature: string; tradersync: RowValue; finotaur: 
   {
     feature: "Free trial",
     tradersync: { kind: "text", label: "7 days, all plans" },
-    finotaur: { kind: "text", label: "14 days, Trader plan" },
+    finotaur: { kind: "text", label: "14 days, all features, no card" },
   },
   {
     feature: "Tradovate sync",
@@ -291,7 +291,7 @@ export default function FinotaurVsTraderSync() {
             <h3 className="font-wordmark font-medium text-xl text-ink-primary">Finotaur</h3>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>Free — $0/month, 10-trade demo journal, no card</li>
-              <li>Trader — $44.99/mo or $409/yr, 14-day free trial</li>
+              <li>Trader — $44.99/mo or $409/yr, 14 days free at signup</li>
               <li>Tradovate OAuth auto-sync, multiple accounts (funded/eval)</li>
               <li>AI coach, Leak Detector, Revenge Radar, trade copier, prop-risk dashboard included</li>
             </ul>
@@ -300,7 +300,7 @@ export default function FinotaurVsTraderSync() {
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Link
             to="/pricing"

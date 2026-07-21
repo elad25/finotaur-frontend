@@ -16,6 +16,8 @@ import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
 import WelcomeIntro from '@/components/onboarding/WelcomeIntro';
+import { ConnectBrokerNudge } from '@/components/onboarding/ConnectBrokerNudge';
+import { TrialEndedDialog } from '@/components/subscription/TrialEndedDialog';
 import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
 import { usePostCheckoutSync } from '@/hooks/usePostCheckoutSync';
 import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
@@ -180,6 +182,10 @@ export const ProtectedAppLayout = () => {
         <SpotlightTour />
         {/* Welcome intro overlay — renders null unless the welcome flag is set */}
         <WelcomeIntro />
+        {/* One-time nudge to connect a broker right after onboarding (app-trial, 0 connections) */}
+        <ConnectBrokerNudge />
+        {/* One-time modal shown when the app-granted or journal trial has ended */}
+        <TrialEndedDialog />
       </div>
     </PortfolioProvider>
     </ProductDrawerProvider>

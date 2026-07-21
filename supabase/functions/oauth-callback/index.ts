@@ -36,6 +36,16 @@ function redirectTo(path: string): Response {
   return Response.redirect(`${FRONTEND_BASE_URL}${JOURNAL_PATH}${path}`, 302);
 }
 
+// ─── Trial anti-abuse: broker-account fingerprint ──────────────
+// SHA-256 hash of `${brokerKind}:${externalId}` — fed into
+// claim_trial_broker_fingerprint() so the same broker account can't power
+// more than one journal trial. No-ops server-side for non-trial users.
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -128,6 +138,37 @@ Deno.serve(async (req: Request) => {
   }
 
   const isPropFirm = userInfo.accounts.some((a) => a.isPropFirm);
+
+  // Trial anti-abuse: block a broker account already claimed by a different
+  // journal trial. Claims the resolved providerUserId AND every account id
+  // returned for this login. Fails open on RPC error/timeout — a transient
+  // lookup hiccup must not lock out a legitimate connect. No-ops for
+  // non-trial users (RPC returns {allowed:true, reason:'not_trial'}).
+  {
+    const resolvedProviderUserId = tokens.providerUserId ?? userInfo.providerUserId;
+    const fingerprintTargets = [resolvedProviderUserId, ...userInfo.accounts.map((a) => a.id)]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+    for (const externalId of fingerprintTargets) {
+      try {
+        const fingerprint = await sha256Hex(`${broker}:${externalId}`);
+        const { data: claim, error: claimError } = await supabaseAdmin.rpc('claim_trial_broker_fingerprint', {
+          p_user_id: userId,
+          p_broker_kind: broker,
+          p_fingerprint: fingerprint,
+        });
+        if (claimError) {
+          console.warn('[trial-fingerprint] claim RPC error — failing open:', claimError.message);
+          continue;
+        }
+        if ((claim as { allowed?: boolean } | null)?.allowed === false) {
+          return redirectTo('?oauth_error=trial_broker_limit');
+        }
+      } catch (fpErr) {
+        console.warn('[trial-fingerprint] unexpected error — failing open:', String(fpErr).slice(0, 300));
+      }
+    }
+  }
 
   // Build vault secret payload — tokens stored here ONLY, never in logs
   const secretPayload = JSON.stringify({

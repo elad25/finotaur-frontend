@@ -168,7 +168,7 @@ export default function FindYourTradingLeaks() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Button asChild variant="goldOutline" size="xl">
             <Link to="/pricing">See pricing</Link>
@@ -423,7 +423,7 @@ export default function FindYourTradingLeaks() {
 
         <div className="flex justify-center mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
         </div>
 

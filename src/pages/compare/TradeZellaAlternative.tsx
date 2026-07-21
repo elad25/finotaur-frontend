@@ -46,7 +46,7 @@ const FAQS = [
   {
     question: "Is there a free TradeZella alternative?",
     answer:
-      "Yes. TradeZella has no free plan and no advertised free trial as of July 2026 — you need to pay before you can see the product. Finotaur has a free plan (a 10-trade demo journal, no card required) plus a 14-day free trial on the paid Trader plan.",
+      "Yes. TradeZella has no free plan and no advertised free trial as of July 2026 — you need to pay before you can see the product. Every new Finotaur account automatically gets 14 days of full access to Trader and Investor features — no card required. Afterwards you keep a free plan with 10 manual trades and preview mode. Paid plans start when you upgrade.",
   },
   {
     question: "Does TradeZella have a trade copier?",
@@ -56,7 +56,7 @@ const FAQS = [
   {
     question: "Can I try Finotaur before paying?",
     answer:
-      "Yes. Start on the free plan with no card required, or start the Trader plan's 14-day free trial to unlock unlimited trades, broker auto-sync, and the AI coach.",
+      "Yes. Every new account automatically gets 14 days of full access to Trader and Investor features — no card required — including unlimited trades, broker auto-sync, the AI coach, and the full research desk. Afterwards you keep a free plan with 10 manual trades and preview mode.",
   },
   {
     question: "Does TradeZella limit how much AI I can use?",
@@ -95,7 +95,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   {
     label: "Free trial",
     tradezella: { value: "no" },
-    finotaur: { value: "text", text: "14 days (Trader)" },
+    finotaur: { value: "text", text: "14 days, all features, no card" },
   },
   {
     label: "Tradovate auto-sync",
@@ -142,7 +142,7 @@ const DIFFERENTIATORS = [
     Icon: Gift,
     title: "Free start, then a real trial",
     description:
-      "Begin on a free 10-trade demo journal with no card required. Move to the 14-day Trader trial when you're ready to connect a live account.",
+      "Every account gets 14 days of full access to Trader and Investor features at signup — no card required. Connect a live account and use everything before you decide.",
   },
   {
     Icon: Brain,
@@ -180,7 +180,7 @@ export default function TradeZellaAlternative() {
 
       <SEO
         title="TradeZella Alternative (2026)"
-        description="Looking for a TradeZella alternative? Compare pricing, AI limits, and the trade copier gap — and see why Finotaur offers a free plan, a 14-day trial, and a built-in copier."
+        description="Looking for a TradeZella alternative? Compare pricing, AI limits, and the trade copier gap — and see why Finotaur offers a free plan, 14 days of full access at signup, and a built-in copier."
         path="/tradezella-alternative"
         jsonLd={[
           webPage({
@@ -210,8 +210,9 @@ export default function TradeZellaAlternative() {
         <p className="font-sans text-base md:text-lg text-ink-secondary text-center max-w-2xl mx-auto">
           Traders look for a TradeZella alternative mainly over three things: no free plan or
           trial, an AI-credit system that meters how much coaching you can use, and no trade
-          copier. Finotaur offers a free start, a 14-day Trader trial, AI review that isn't
-          credit-metered, and a built-in copier with prop-firm risk tracking.
+          copier. Finotaur offers a free start, 14 days of full access to Trader and Investor
+          features at signup, AI review that isn't credit-metered, and a built-in copier with
+          prop-firm risk tracking.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
@@ -224,7 +225,7 @@ export default function TradeZellaAlternative() {
         </div>
 
         <p className="text-ink-tertiary text-[13px] text-center mt-ds-4">
-          No card required to start · 14-day free trial on Trader
+          No card required to start · 14 days of full access at signup
         </p>
       </SectionShell>
 
@@ -586,7 +587,7 @@ export default function TradeZellaAlternative() {
         </div>
 
         <p className="text-ink-tertiary text-[13px] text-center mt-ds-4">
-          No card required · 14-day free trial on Trader · Cancel anytime
+          No card required · 14 days of full access at signup · Cancel anytime
         </p>
       </SectionShell>
 

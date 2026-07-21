@@ -6,7 +6,6 @@
 // ================================================
 
 import { supabase } from '@/lib/supabase';
-import { startIntroOffer } from './IntroOffer';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -20,6 +19,10 @@ export const TOUR_ACTIVE_KEY = 'finotaur_tour_active';
 
 /** Set to '1' in sessionStorage while the welcome intro overlay should show. */
 export const WELCOME_ACTIVE_KEY = 'finotaur_welcome_active';
+
+/** Set to '1' in localStorage right after onboarding completes; consumed once
+ *  by ProtectedAppLayout to show the one-time ConnectBrokerNudge, then cleared. */
+export const CONNECT_NUDGE_PENDING_KEY = 'finotaur_connect_nudge_pending';
 
 // ---------------------------------------------------------------------------
 // recordOnboardingCompletion
@@ -50,13 +53,14 @@ export const recordOnboardingCompletion = async (): Promise<void> => {
 // finishOnboarding
 // Single call-site for both "Finish" and "Skip" paths:
 //   1. Write profiles.onboarding_completed_at (async, best-effort)
-//   2. Start the one-time-ever 30-min Intro Offer countdown
+//   2. Arm the one-time ConnectBrokerNudge (IntroOffer countdown removed
+//      2026-07 — full-price-only decision)
 //   3. Mark onboarding as seen in localStorage
 //   4. Clear tour-active flag from sessionStorage
 // ---------------------------------------------------------------------------
 export const finishOnboarding = (): void => {
   void recordOnboardingCompletion();
-  void startIntroOffer();
+  localStorage.setItem(CONNECT_NUDGE_PENDING_KEY, '1');
   localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
   sessionStorage.removeItem(TOUR_ACTIVE_KEY);
 };

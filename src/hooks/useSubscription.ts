@@ -369,7 +369,11 @@ const { data, error } = await supabase.rpc('check_usage_warning', {
       }
     },
     // 'basic' removed from enabled condition 2026-06 (Basic tier eliminated, zero subscribers)
-    enabled: !!effectiveUserId && limits?.account_type === 'trial',
+    // App-granted trial (account_type='trial' + future trial_ends_at) is unlimited — do NOT
+    // fire the trade-limit warning query for it (inlined check: hasAppTrial isn't defined yet
+    // at this point in the hook body).
+    enabled: !!effectiveUserId && limits?.account_type === 'trial' &&
+      !(!!limits?.trial_ends_at && new Date(limits.trial_ends_at).getTime() > Date.now()),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -431,14 +435,23 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     limits.subscription_status === 'active' &&
     !!limits.whop_membership_id;
 
-  const hasJournalTrial = 
+  const hasJournalTrial =
     !isAdmin &&
     limits?.account_type === 'basic' &&
     limits?.subscription_status === 'trial' &&
     limits?.is_in_trial === true &&
     !!limits.whop_membership_id;
-  
-  const hasJournalFromBundle = 
+
+  // 🔥 App-granted 14-day trial (DB sets account_type='trial' at signup, cron flips back to 'free' after 14d).
+  // Deliberately NOT keyed on is_in_trial or whop_membership_id — the date check is authoritative
+  // so an app-trial user is never gated by a Whop field that doesn't apply to them.
+  const hasAppTrial =
+    !isAdmin && !isLifetimeUser &&
+    limits?.account_type === 'trial' &&
+    !!limits?.trial_ends_at &&
+    new Date(limits.trial_ends_at).getTime() > Date.now();
+
+  const hasJournalFromBundle =
     limits?.platform_bundle_journal_granted === true ||
     (limits?.platform_plan && 
      ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits.platform_plan) &&
@@ -450,16 +463,17 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   // 🔥 v8.5.0: FREE platform users get FREE_TRADE_LIMIT lifetime trades in Journal
   const hasJournalFromFree =
     !isAdmin && !isLifetimeUser &&
-    !hasDirectJournalSubscription && !hasJournalTrial && !hasJournalFromBundle && !hasJournalFromCore;
+    !hasDirectJournalSubscription && !hasJournalTrial && !hasJournalFromBundle && !hasJournalFromCore && !hasAppTrial;
 
   // 🔥 v8.5.0: All users now have journal access (FREE gets FREE_TRADE_LIMIT lifetime trades)
-  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle || hasJournalFromCore || hasJournalFromFree;
-  
+  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle || hasJournalFromCore || hasJournalFromFree || hasAppTrial;
+
   const effectiveJournalPlan = (() => {
     if (isAdmin) return 'premium';
     if (isLifetimeUser) return 'premium';
     if (hasJournalFromBundle) return 'premium';
     if (hasDirectJournalSubscription) return limits?.account_type as AccountType;
+    if (hasAppTrial) return 'premium';
     if (hasJournalFromCore) return 'basic';
     if (hasJournalTrial) return 'trial';
     if (hasJournalFromFree) return 'free';
@@ -470,7 +484,7 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   // COMPUTED VALUES
   // ═══════════════════════════════════════════
   
-  const isTrial = !isAdmin && !isLifetimeUser && hasJournalTrial;
+  const isTrial = !isAdmin && !isLifetimeUser && (hasJournalTrial || hasAppTrial);
   const isBasic = !isAdmin && !isLifetimeUser && (effectiveJournalPlan === 'basic' || hasJournalFromCore);
   const isFreeJournal = !isAdmin && !isLifetimeUser && hasJournalFromFree;
   const isPremium = isAdmin || isLifetimeUser || effectiveJournalPlan === 'premium';
@@ -511,21 +525,35 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     return Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   })();
   
+  // App-granted trial's day count is date-derived (authoritative), separate from the
+  // Whop journal-trial's server-computed `trial_days_remaining`.
+  const appTrialDaysRemaining = hasAppTrial
+    ? Math.max(0, Math.ceil((new Date(limits!.trial_ends_at!).getTime() - Date.now()) / 86_400_000))
+    : null;
+
+  const unifiedTrialDaysRemaining = hasAppTrial ? appTrialDaysRemaining : (limits?.trial_days_remaining ?? null);
+
   const isTrialExpired = (() => {
     if (isAdmin || isLifetimeUser) return false;
+    // App-granted trial: account_type flips to 'trial' at signup; the cron flips it back to
+    // 'free' after 14 days, but until it runs we must not trust account_type alone — always
+    // check trial_ends_at directly (cron-lag guard).
+    if (limits?.account_type === 'trial') {
+      return !!limits?.trial_ends_at && new Date(limits.trial_ends_at) <= new Date();
+    }
     if (!isTrial) return false;
     if (!limits?.trial_ends_at) return false;
     const trialEnd = new Date(limits.trial_ends_at);
     return trialEnd < new Date();
   })();
-  
+
   const isTrialExpiringSoon = (() => {
     if (isAdmin || isLifetimeUser) return false;
     if (!isTrial) return false;
-    const daysLeft = limits?.trial_days_remaining ?? 0;
+    const daysLeft = unifiedTrialDaysRemaining ?? 0;
     return daysLeft > 0 && daysLeft <= 3;
   })();
-  
+
   const oneRValue = (() => {
     if (!limits) return 100;
     const portfolioSize = limits.portfolio_size || limits.current_portfolio || 10000;
@@ -591,9 +619,13 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     isInTrial: isTrial,
     isTrialExpired,
     isTrialExpiringSoon,
-    trialDaysRemaining: limits?.trial_days_remaining ?? null,
+    trialDaysRemaining: unifiedTrialDaysRemaining,
     trialEndsAt: limits?.trial_ends_at ?? null,
     trialUsed: limits?.trial_used ?? false,
+
+    // App-granted 14-day trial (account_type='trial', date-authoritative)
+    isAppTrial: hasAppTrial,
+    appTrialDaysRemaining,
     
     // Payment provider
     isWhopSubscription,

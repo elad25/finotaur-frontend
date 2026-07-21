@@ -17,6 +17,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import { useSubscription } from '@/hooks/useSubscription';
 
 
 // ============================================
@@ -60,16 +61,16 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$0',
     yearlyPrice: '$0',
     yearlyMonthlyEquivalent: '$0',
-    description: 'The hook — explore the platform',
+    description: 'What you keep after your 14-day trial ends',
     trialDays: 0,
     checkoutCategory: 'none',
     features: [
+      '10 lifetime manual trades',
+      'Manual journal',
       'AI Stock Analyzer — 3/day',
       'FINO assistant + Community',
-      'Demo journal — 10 trades',
+      'Preview mode with sample data',
       'Market Pulse & news',
-      'P&L calendar & core stats',
-      '1 watchlist + basic screener',
     ],
     cta: 'Free Plan',
     featured: false,
@@ -81,7 +82,7 @@ const plans: PlanConfig[] = [
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34',
     description: "The trader's desk — journal & execution",
-    trialDays: 14,
+    trialDays: 0,
     trialOnceOnly: false,
     checkoutCategory: 'journal',
     features: [
@@ -95,7 +96,7 @@ const plans: PlanConfig[] = [
       'Revenge Radar + AI coach',
       'Prop-firm risk dashboard',
     ],
-    cta: 'Start 14-Day Trial',
+    cta: 'Upgrade to Trader',
     featured: false,
     savings: 'Save 24%',
   },
@@ -106,7 +107,7 @@ const plans: PlanConfig[] = [
     yearlyPrice: '$499',
     yearlyMonthlyEquivalent: '$42',
     description: "The investor's desk — intel, research & AI",
-    trialDays: 14,
+    trialDays: 0,
     trialOnceOnly: false,
     checkoutCategory: 'top_secret',
     features: [
@@ -118,7 +119,7 @@ const plans: PlanConfig[] = [
       'Research hub — insiders, 13F, ETFs',
       'Private Discord trade room',
     ],
-    cta: 'Start 14-Day Trial',
+    cta: 'Upgrade to Investor',
     featured: false,
     savings: 'Save 15%',
   },
@@ -183,6 +184,7 @@ export default function PlatformPricing() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isAppTrial } = useSubscription();
   
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const [loading, setLoading] = useState<PlatformPlanId | null>(null);
@@ -512,6 +514,9 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
           </h1>
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
             Built for who you are: a free start, a Trader desk, an Investor desk — or the full FINOTAUR engine.
+          </p>
+          <p className="text-sm text-slate-500 max-w-2xl mx-auto mt-2">
+            Every account starts with 14 days of full access to Trader and Investor features — no card required. Free plan afterwards: 10 manual trades and preview mode.
           </p>
         </div>
 
@@ -878,6 +883,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                     <span className="flex items-center justify-center gap-2">
                       ↓ Downgrade to {plan.name}
                     </span>
+                  ) : isAppTrial && (plan.id === 'journal' || plan.id === 'top_secret') ? (
+                    <span className="flex items-center justify-center gap-2">
+                      Keep {plan.name}
+                      <span>→</span>
+                    </span>
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       {billingInterval === 'yearly' && plan.trialDays > 0 ? 'Get Yearly Plan' : plan.cta}
@@ -1196,7 +1206,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-500" />
-              <span className="text-sm">14-Day Free Trial</span>
+              <span className="text-sm">14 Days Full Access at Signup</span>
             </div>
             <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
             <div className="flex items-center gap-2">

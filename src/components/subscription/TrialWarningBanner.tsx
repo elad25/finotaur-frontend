@@ -9,20 +9,22 @@ import { useState } from 'react';
 
 export function TrialWarningBanner() {
   const navigate = useNavigate();
- const { 
-  tradesRemaining, 
-  isLimitReached, 
-  isPremium, 
+ const {
+  tradesRemaining,
+  isLimitReached,
+  isPremium,
   isBasic,
   isInTrial,
   trialDaysRemaining,
   isLegacyFreeUser,
-  limits 
+  isAppTrial,
+  limits
 } = useSubscription();
   const [dismissed, setDismissed] = useState(false);
 
-  // Don't show if premium (unlimited trades)
-  if (isPremium) return null;
+  // Don't show if premium (unlimited trades) — but app-trial users are mapped to
+  // isPremium=true (unlimited during the trial), so they still need the countdown.
+  if (isPremium && !isAppTrial) return null;
 
   // Don't show if dismissed
   if (dismissed) return null;
@@ -67,15 +69,15 @@ const getContent = () => {
         message: (
           <>
             <span className="font-bold">
-              {trialDaysRemaining === 0 
-                ? 'Your trial ends today!' 
-                : `${trialDaysRemaining} day${trialDaysRemaining === 1 ? '' : 's'} left in your trial.`
+              {trialDaysRemaining === 0
+                ? 'Your Trader trial ends today.'
+                : `Your Trader trial ends in ${trialDaysRemaining} day${trialDaysRemaining === 1 ? '' : 's'}.`
               }
             </span>
-            {' '}Subscribe now to keep your access.
+            {' '}Subscribe to keep broker sync, the copier, and unlimited trades.
           </>
         ),
-        ctaText: 'Subscribe Now',
+        ctaText: 'Keep Trader',
         canDismiss: trialDaysRemaining > 1,
       };
     }
@@ -151,7 +153,7 @@ const getContent = () => {
             <Button
               size="sm"
               className="bg-gold text-base-900 hover:bg-gold/90 font-medium h-8"
-              onClick={() => navigate('/pricing')}
+              onClick={() => navigate('/app/upgrade')}
             >
               {content.ctaText}
             </Button>

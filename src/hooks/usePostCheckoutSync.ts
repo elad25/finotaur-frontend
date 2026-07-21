@@ -32,6 +32,10 @@ export function usePostCheckoutSync(): void {
   const location = useLocation();
   const { isFreeJournal, refresh } = useSubscription();
 
+  // Note: app-trial users are already non-free (isFreeJournal=false, hasAppTrial
+  // maps effectiveJournalPlan to 'premium'), so the poll below resolves instantly
+  // for them — no logic change needed here.
+
   // Interval/timeout closures read these refs so they always see the latest
   // subscription state without needing to be torn down and recreated.
   const isFreeRef = useRef(isFreeJournal);

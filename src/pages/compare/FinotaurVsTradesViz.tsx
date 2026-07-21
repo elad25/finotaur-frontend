@@ -287,7 +287,7 @@ export default function FinotaurVsTradesViz() {
             <h3 className="font-wordmark font-medium text-xl text-ink-primary">Finotaur</h3>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>Free — $0/month, 10-trade demo journal, no card</li>
-              <li>Trader — $44.99/mo or $409/yr, 14-day free trial</li>
+              <li>Trader — $44.99/mo or $409/yr, 14 days free at signup</li>
               <li>Tradovate OAuth auto-sync, multiple accounts (funded/eval)</li>
               <li>AI coach, Leak Detector, Revenge Radar, trade copier, prop-risk dashboard included</li>
             </ul>
@@ -296,7 +296,7 @@ export default function FinotaurVsTradesViz() {
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Link
             to="/pricing"

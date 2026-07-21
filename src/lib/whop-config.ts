@@ -523,7 +523,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // INVESTOR (Top Secret product) — 14-day free trial (no intro discount)
+  // INVESTOR (Top Secret product) — Whop-side trial cancelled 2026-07; trial
+  // is app-granted at signup instead (no intro discount)
   // $49/mo | $499/yr ($41.58/mo)
   // v9.0.0: Rebranded "Top Secret" → "Investor" tier. SAME Whop plans/products —
   // existing Top Secret subscribers are grandfathered into Investor automatically.
@@ -532,7 +533,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $49/month, 14-day free trial
+    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $49/month, no Whop trial
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Investor',
@@ -540,14 +541,13 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
-    trialDays: 14,
+    trialDays: 0, // Whop-side trial cancelled 2026-07 — trial is app-granted at signup
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Free Trial',
+    badge: '$49/month',
     category: 'journal',
     features: [
-      '🎁 14 days FREE trial',
-      '💰 Then $49/month — cancel anytime',
+      '💰 $49/month — cancel anytime',
       '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -574,13 +574,12 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     periodLabel: '/year',
     monthlyEquivalent: 41.58,  // $499/12 ≈ $41.58/mo — save ~$99/yr vs monthly
     maxTrades: 0,
-    trialDays: 14,
+    trialDays: 0, // Whop-side trial cancelled 2026-07 — trial is app-granted at signup
     isTopSecret: true,
     discordIncluded: true,
     badge: '🔥 Save $89/year vs monthly',
     category: 'journal',
     features: [
-      '🎁 14 days FREE trial',
       '💰 $41.58/month — save $89/year vs monthly',
       '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',

@@ -1,4 +1,5 @@
 // src/components/onboarding/IntroOffer.tsx
+// DISABLED 2026-07: full-price-only decision; surface unmounted in App.tsx
 // ================================================
 // 🎁 INTRO OFFER — One-time-ever hidden Trader discount popup
 // Shows after Guided Tour ends with a 30-minute countdown.
