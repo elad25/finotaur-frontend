@@ -225,8 +225,9 @@ export default function WelcomeIntro() {
           />
 
           <div className="flex flex-col items-center text-center gap-6 pt-2">
-            {/* Wordmark with soft radial gold glow behind it */}
-            <div className="relative flex items-center justify-center">
+            {/* Wordmark with soft radial gold glow behind it.
+                Trial view aligns it top-left; the classic welcome keeps it centered. */}
+            <div className={`relative flex items-center ${isAppTrial ? 'w-full justify-start' : 'justify-center'}`}>
               {/* Radial gold glow orb behind the wordmark */}
               <div
                 className="absolute pointer-events-none"
@@ -235,6 +236,7 @@ export default function WelcomeIntro() {
                   height: 80,
                   background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.14) 0%, transparent 70%)',
                   filter: 'blur(12px)',
+                  left: isAppTrial ? 0 : undefined,
                 }}
               />
               <Wordmark size="large" tone="gradient" />
@@ -317,7 +319,7 @@ export default function WelcomeIntro() {
                     <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                       <Button
                         variant="gold"
-                        size="xl"
+                        size="lg"
                         showArrow
                         onClick={handleConnectBroker}
                         className="w-full md:w-auto"
@@ -326,7 +328,7 @@ export default function WelcomeIntro() {
                       </Button>
                       <Button
                         variant="goldOutline"
-                        size="xl"
+                        size="lg"
                         showArrow={false}
                         onClick={handleStart}
                         className="w-full md:w-auto"
