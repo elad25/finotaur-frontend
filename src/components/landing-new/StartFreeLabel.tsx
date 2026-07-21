@@ -1,26 +1,24 @@
+import { Check } from 'lucide-react';
+
 /**
- * Supporting label placed OUTSIDE the gold "Start free" button.
- * The gold button holds only "Start free"; the reassurance ("14 days of full
- * access" + a green "No credit card" pill) lives here, next to / below it.
- *
- * - default:  14 days of full access   [ No credit card ]
- * - pillOnly: [ No credit card ]        (for the tight navbar)
+ * Supporting reassurance placed OUTSIDE the gold "Start free" button.
+ * The gold button holds only "Start free"; the reassurance lives here as
+ * green-check items (no pill): "14 days of full access" and "No credit card".
  */
-export function StartFreeLabel({
-  pillOnly = false,
-  className = '',
-}: {
-  pillOnly?: boolean;
-  className?: string;
-}) {
+export function StartFreeLabel({ className = '' }: { className?: string }) {
+  const item = (text: string) => (
+    <span className="inline-flex items-center gap-1.5">
+      <Check className="h-4 w-4 shrink-0 text-emerald-500" strokeWidth={3} aria-hidden />
+      {text}
+    </span>
+  );
+
   return (
     <span
-      className={`inline-flex items-center gap-2 text-sm font-medium text-white/75 whitespace-nowrap ${className}`}
+      className={`inline-flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm font-medium text-white/75 ${className}`}
     >
-      {!pillOnly && <span>14 days of full access</span>}
-      <span className="inline-flex items-center rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide leading-none text-white shadow-sm">
-        No credit card
-      </span>
+      {item('14 days of full access')}
+      {item('No credit card')}
     </span>
   );
 }
