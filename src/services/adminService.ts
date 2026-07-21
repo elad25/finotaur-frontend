@@ -332,9 +332,10 @@ interface AdminListUsersRow {
  *   'platform'          → platform_subscription_status = 'active'
  *   'journal'           → account_type IN ('basic','premium')
  *   'newsletter'        → the Investor set: newsletter_status = 'active' OR top_secret_status = 'active'
- *   'free'              → the Free set: account_type = 'free' | null | 'trial'
- *                        (an app-granted 14-day trial is a Free account with a temporary
- *                         full-access window, so trial users live under Free, never Investor)
+ *   'trial'             → active app trial (account_type='trial') OR legacy Whop basic-trial.
+ *                        Fresh signups land in Trial directly; at expiry the sweep flips
+ *                        account_type 'trial' -> 'free'.
+ *   'free'              → genuine free / finished-trial: account_type = 'free' | null
  *
  * account_type (legacy, still honoured when product_filter is absent):
  *   'trial'   → the app trial (account_type='trial') OR legacy Whop basic-trial
@@ -357,12 +358,13 @@ function applyProductFilter(
   if (pf === 'newsletter') {
     return rows.filter(r => r.newsletter_status === 'active' || r.top_secret_status === 'active');
   }
-  if (pf === 'free' || at === 'free') {
-    // Free set = genuine free + app-trial (trial is a Free account on a temporary trial).
-    return rows.filter(r => r.account_type === 'free' || r.account_type == null || r.account_type === 'trial');
-  }
-  if (at === 'trial') {
+  if (pf === 'trial' || at === 'trial') {
+    // Active app trial (fresh signups land here directly); also the legacy Whop basic-trial.
     return rows.filter(r => r.account_type === 'trial' || (r.account_type === 'basic' && r.is_in_trial === true));
+  }
+  if (pf === 'free' || at === 'free') {
+    // Free = genuine free / finished-trial only (account_type flips trial -> free at expiry).
+    return rows.filter(r => r.account_type === 'free' || r.account_type == null);
   }
   if (at === 'basic') {
     return rows.filter(r => r.account_type === 'basic');
@@ -472,6 +474,7 @@ export interface NewJoins24h {
   journal: number;
   newsletter: number;
   top_secret: number;
+  trial: number;
   free: number;
   since: string;
 }
@@ -494,6 +497,7 @@ export async function getNewJoins24h(): Promise<NewJoins24h> {
         journal: Number(d.journal) || 0,
         newsletter: Number(d.newsletter) || 0,
         top_secret: Number(d.top_secret) || 0,
+        trial: Number(d.trial) || 0,
         free: Number(d.free) || 0,
         since: d.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       };
