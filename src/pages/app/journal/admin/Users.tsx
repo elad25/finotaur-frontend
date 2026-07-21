@@ -322,7 +322,7 @@ export default function AdminUsers() {
               color="blue"
             />
             <FilterButton
-              label="Free (Legacy)"
+              label="Free & Trial"
               isActive={filters.product_filter === 'free'}
               onClick={() => handleFilterChange({ product_filter: 'free' as ProductFilter })}
               color="gray"

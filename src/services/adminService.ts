@@ -332,10 +332,12 @@ interface AdminListUsersRow {
  *   'platform'          → platform_subscription_status = 'active'
  *   'journal'           → account_type IN ('basic','premium')
  *   'newsletter'        → the Investor set: newsletter_status = 'active' OR top_secret_status = 'active'
- *   'free'              → account_type = 'free' or null (legacy)
+ *   'free'              → the Free set: account_type = 'free' | null | 'trial'
+ *                        (an app-granted 14-day trial is a Free account with a temporary
+ *                         full-access window, so trial users live under Free, never Investor)
  *
  * account_type (legacy, still honoured when product_filter is absent):
- *   'trial'   → account_type='basic' AND is_in_trial=true
+ *   'trial'   → the app trial (account_type='trial') OR legacy Whop basic-trial
  *   'basic'   → account_type='basic'
  *   'premium' → account_type='premium'
  */
@@ -356,10 +358,11 @@ function applyProductFilter(
     return rows.filter(r => r.newsletter_status === 'active' || r.top_secret_status === 'active');
   }
   if (pf === 'free' || at === 'free') {
-    return rows.filter(r => r.account_type === 'free' || r.account_type == null);
+    // Free set = genuine free + app-trial (trial is a Free account on a temporary trial).
+    return rows.filter(r => r.account_type === 'free' || r.account_type == null || r.account_type === 'trial');
   }
   if (at === 'trial') {
-    return rows.filter(r => r.account_type === 'basic' && r.is_in_trial === true);
+    return rows.filter(r => r.account_type === 'trial' || (r.account_type === 'basic' && r.is_in_trial === true));
   }
   if (at === 'basic') {
     return rows.filter(r => r.account_type === 'basic');
@@ -368,11 +371,13 @@ function applyProductFilter(
     return rows.filter(r => r.account_type === 'premium');
   }
 
-  // Default: any subscriber across any product
+  // Default: any subscriber across any product, plus app-trial users (the current
+  // active base — every new signup is a trial), so "All Subscribers" is not empty.
   return rows.filter(r =>
     r.platform_subscription_status === 'active' ||
     r.account_type === 'basic' ||
     r.account_type === 'premium' ||
+    r.account_type === 'trial' ||
     r.newsletter_status === 'active' ||
     r.top_secret_status === 'active'
   );
