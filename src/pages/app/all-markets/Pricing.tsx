@@ -67,7 +67,7 @@ const plans: PlanConfig[] = [
     features: [
       '10 lifetime manual trades',
       'Manual journal',
-      'AI Stock Analyzer — 3/day',
+      'AI Stock Analyzer: 3/day',
       'FINO assistant + Community',
       'Preview mode with sample data',
       'Market Pulse & news',
@@ -81,18 +81,18 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$44.99',
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34',
-    description: "The trader's desk — journal & execution",
+    description: "The trader's desk: journal & execution",
     trialDays: 0,
     trialOnceOnly: false,
     checkoutCategory: 'journal',
     features: [
       'Everything in Free, plus:',
-      'Unlimited trades — auto-synced',
-      'Trade Copier — Tradovate & NinjaTrader',
-      'Leak Detector — AI finds your most expensive losing pattern',
+      'Unlimited trades, auto-synced',
+      'Trade Copier: Tradovate & NinjaTrader',
+      'Leak Detector: AI finds your most expensive losing pattern',
       'Full performance analytics',
       'Strategy builder & Playbooks',
-      'Shadow — what-if analysis',
+      'Shadow: what-if analysis',
       'Revenge Radar + AI coach',
       'Prop-firm risk dashboard',
     ],
@@ -106,17 +106,17 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$49',
     yearlyPrice: '$499',
     yearlyMonthlyEquivalent: '$42',
-    description: "The investor's desk — intel, research & AI",
+    description: "The investor's desk: intel, research & AI",
     trialDays: 0,
     trialOnceOnly: false,
     checkoutCategory: 'top_secret',
     features: [
       'TOP SECRET',
       'WAR ZONE',
-      'AI Stock Analyzer — 10/day',
-      'The Weekly Report — Sundays',
+      'AI Stock Analyzer: 10/day',
+      'The Weekly Report: Sundays',
       'Monthly deep-dive research',
-      'Research hub — insiders, 13F, ETFs',
+      'Research hub: insiders, 13F, ETFs',
       'Private Discord trade room',
     ],
     cta: 'Upgrade to Investor',
@@ -129,7 +129,7 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$89',
     yearlyPrice: '$890',
     yearlyMonthlyEquivalent: '$74',
-    description: 'The entire platform — every tool, one price',
+    description: 'The entire platform: every tool, one price',
     trialDays: 14,
     trialOnceOnly: false,
     includesJournal: true,
@@ -137,11 +137,11 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'platform',
     features: [
       'Everything in Trader & Investor, plus:',
-      'FINO — unlimited, on every page',
+      'FINO: unlimited, on every page',
       'Options Intelligence AI',
-      'Flow Scanner — Dark Pool',
+      'Flow Scanner: Dark Pool',
       'Real-time Market Scanner',
-      'AI Scanner — daily Top 5',
+      'AI Scanner: daily Top 5',
       'Strategy Backtesting engine',
       'Unlimited AI, alerts & screeners',
     ],
@@ -155,13 +155,13 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$200',
     yearlyPrice: '$2,000',
     yearlyMonthlyEquivalent: '$167',
-    description: 'Your AI portfolio manager — invests and trades alongside you, 24/7 oversight.',
+    description: 'Your AI portfolio manager: invests and trades alongside you, 24/7 oversight.',
     trialDays: 0,
     comingSoon: true,
     checkoutCategory: 'platform',
     features: [
       'Everything in FINOTAUR, plus:',
-      'Copilot — AI Portfolio Manager',
+      'Copilot: AI Portfolio Manager',
       '24/7 AI position oversight',
       'Live mark-to-market',
       'Proactive AI risk alerts',
@@ -382,7 +382,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     // 🔥 Block Yearly → Monthly upgrade
     if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier) {
       setBillingInterval('yearly');
-      toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
+      toast.info("You're on a yearly plan. Switch to Yearly billing above to upgrade.");
       return;
     }
 
@@ -455,7 +455,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     const delta = standaloneMonthlyTotal - 89;
     const headline =
       delta >= 0
-        ? `Save $${Math.round(delta)}/mo — go FINOTAUR`
+        ? `Save $${Math.round(delta)}/mo, go FINOTAUR`
         : `Get everything for just $${Math.round(Math.abs(delta))} more`;
 
     return (
@@ -513,12 +513,12 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             <span className="text-[#C9A646]">Plan</span>
           </h1>
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
-            Built for who you are: a free start, a Trader desk, an Investor desk — or the full FINOTAUR engine.
+            Built for who you are: a free start, a Trader desk, an Investor desk, or the full FINOTAUR engine.
           </p>
           {isAppTrial && (
             <p className="text-sm text-blue-400 max-w-2xl mx-auto mt-2 flex items-center justify-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              You're on your 14-day full-access trial — Trader and Investor features included.
+              You're on your 14-day full-access trial. Trader and Investor features included.
             </p>
           )}
         </div>
@@ -544,10 +544,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2">
-                  FINOTAUR — The Complete Trading Platform
+                  FINOTAUR: The Complete Trading Platform
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  Trader desk + Investor intel + Options Intelligence, Dark Pool flow & unlimited AI — the complete FINOTAUR arsenal, one price.
+                  Trader desk + Investor intel + Options Intelligence, Dark Pool flow & unlimited AI: the complete FINOTAUR arsenal, one price.
                   {proTrialUsed ? ' Start your subscription today!' : ' Try free for 14 days!'}
                 </p>
               </div>
@@ -800,11 +800,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   <div className="flex flex-wrap justify-center gap-2 mb-4">
                     <span className="flex items-center gap-1.5 bg-[#C9A646]/20 border border-[#C9A646]/50 px-3 py-1.5 rounded-full text-xs font-medium text-[#C9A646]">
                       <Gift className="w-3.5 h-3.5" />
-                      +Trader (Journal)
+                      +Trader
                     </span>
                     <span className="flex items-center gap-1.5 bg-[#C9A646]/20 border border-[#C9A646]/50 px-3 py-1.5 rounded-full text-xs font-medium text-[#C9A646]">
                       <Gift className="w-3.5 h-3.5" />
-                      +Investor (TOP SECRET)
+                      +Investor
                     </span>
                   </div>
                 )}
@@ -813,7 +813,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 {isBlockedYearlyToMonthly && (
                   <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
                     <p className="text-amber-300 text-xs leading-relaxed">
-                      You're on a <strong>Yearly plan</strong>. Switch to <strong>Yearly billing</strong> above to upgrade — or wait until your current cycle ends.
+                      You're on a <strong>Yearly plan</strong>. Switch to <strong>Yearly billing</strong> above to upgrade, or wait until your current cycle ends.
                     </p>
                   </div>
                 )}
@@ -1086,7 +1086,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 </button>
                 
                 <p className="text-center text-xs text-zinc-600">
-                  {isInTrial ? 'Your free trial ends — no charge will be made' : 'Access continues until end of billing period'}
+                  {isInTrial ? 'Your free trial ends. No charge will be made' : 'Access continues until end of billing period'}
                 </p>
               </div>
             </div>
@@ -1120,7 +1120,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   </span>.
                   {isInTrial && (
                     <span className="block mt-1 text-xs text-blue-400">
-                      (Your 14-day free trial ends on this date — no charge will be made)
+                      (Your 14-day free trial ends on this date. No charge will be made)
                     </span>
                   )}
                 </p>
@@ -1129,7 +1129,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               <div className="mx-6 mb-4 p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
                 <p className="text-sm text-zinc-300 font-medium mb-1">What to do instead:</p>
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Cancel your current plan now — you'll keep full access until your billing period ends.
+                  Cancel your current plan now. You'll keep full access until your billing period ends.
                   Then subscribe to{' '}
                   <span className="text-white font-medium capitalize">{pendingDowngradePlanId}</span>{' '}
                   when it expires.
@@ -1172,7 +1172,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                       );
                       const data = await response.json();
                       if (data.success) {
-                        toast.success('Subscription cancelled — you keep access until your billing period ends.');
+                        toast.success('Subscription cancelled. You keep access until your billing period ends.');
                         setCancelAtPeriodEnd(true);
                       } else {
                         toast.error(data.error || 'Failed to cancel. Try from Settings.');
@@ -1191,7 +1191,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
 
                 <p className="text-center text-xs text-zinc-500">
                   {isInTrial
-                    ? 'Your free trial ends on this date — you will not be charged'
+                    ? 'Your free trial ends on this date. You will not be charged'
                     : 'Your access continues until the end of your billing period'}
                 </p>
               </div>
@@ -1243,7 +1243,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">
               You're currently on a <span className="text-white font-medium capitalize">{currentPlatformPlan} Yearly</span> plan.
-              Subscribing to Ultimate will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
+              Subscribing to Ultimate will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span>. You'll keep full access until then.
             </p>
             <div className="p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 mb-5">
               <p className="text-xs text-zinc-400">
@@ -1304,7 +1304,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               <h3 className="text-white font-semibold text-base">Heads up before you continue</h3>
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-5">
-              Upgrading to {pendingPlanName} will <span className="text-amber-400 font-medium">automatically cancel</span> your {cancelList} subscription{cancelTargets.length > 1 ? 's' : ''} — everything included is part of your new plan.
+              Upgrading to {pendingPlanName} will <span className="text-amber-400 font-medium">automatically cancel</span> your {cancelList} subscription{cancelTargets.length > 1 ? 's' : ''}. Everything included is part of your new plan.
             </p>
             <div className="flex gap-3">
               <button
