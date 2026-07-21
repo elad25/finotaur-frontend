@@ -10,6 +10,7 @@ import { LogIn, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/providers/AuthProvider";
+import { StartFreeLabel } from "@/components/landing-new/StartFreeLabel";
 
 // ===========================================
 // 4 Preview components — show, don't tell
@@ -892,7 +893,7 @@ const Hero = () => {
             size="xl"
             onClick={handleStartFree}
           >
-            Start free — 14 days of full access, no card
+            <StartFreeLabel />
           </Button>
         </motion.div>
 
@@ -969,7 +970,7 @@ const Hero = () => {
             size="xl"
             onClick={handleStartFree}
           >
-            Start free — 14 days of full access, no card
+            <StartFreeLabel />
           </Button>
           <Button
             onClick={() => navigate('/auth/login')}
