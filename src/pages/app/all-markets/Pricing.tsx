@@ -515,9 +515,12 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
             Built for who you are: a free start, a Trader desk, an Investor desk — or the full FINOTAUR engine.
           </p>
-          <p className="text-sm text-slate-500 max-w-2xl mx-auto mt-2">
-            Every account starts with 14 days of full access to Trader and Investor features — no card required. Free plan afterwards: 10 manual trades and preview mode.
-          </p>
+          {isAppTrial && (
+            <p className="text-sm text-blue-400 max-w-2xl mx-auto mt-2 flex items-center justify-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              You're on your 14-day full-access trial — Trader and Investor features included.
+            </p>
+          )}
         </div>
 
         {/* Guarantee Box */}

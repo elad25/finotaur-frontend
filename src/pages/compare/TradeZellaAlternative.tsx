@@ -95,7 +95,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   {
     label: "Free trial",
     tradezella: { value: "no" },
-    finotaur: { value: "text", text: "14 days, all features, no card" },
+    finotaur: { value: "text", text: "14-day welcome (new accounts), no card" },
   },
   {
     label: "Tradovate auto-sync",

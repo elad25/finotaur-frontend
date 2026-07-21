@@ -72,7 +72,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: "Free trial",
-    finotaur: { value: "text", text: "14 days, all features, no card" },
+    finotaur: { value: "text", text: "14-day welcome (new accounts), no card" },
     tradezella: { value: "no" },
   },
   {
@@ -310,7 +310,7 @@ export default function FinotaurVsTradeZella() {
                 <p className="text-gold-primary font-semibold text-xl mt-ds-1">
                   $44.99/mo <span className="text-ink-tertiary text-sm font-normal">or $409/yr</span>
                 </p>
-                <p className="text-ink-tertiary text-[13px] mt-ds-1">14 days free at signup</p>
+                <p className="text-ink-tertiary text-[13px] mt-ds-1">Cancel anytime</p>
               </Card>
             </div>
           </div>

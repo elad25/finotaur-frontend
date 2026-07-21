@@ -440,7 +440,7 @@ const PricingSection = () => {
                       <TrendingUp className="w-4 h-4" /> Most Popular
                     </div>
                   )}
-                  {plan.trialDays && !plan.featured && (
+                  {plan.trialDays > 0 && !plan.featured && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg z-50">
                       <Clock className="w-4 h-4" /> 14 Days Free at Signup
                     </div>
@@ -456,7 +456,7 @@ const PricingSection = () => {
                         <span className="text-slate-400">{displayPrice.period}</span>
                       </div>
                       {displayPrice.billedAs && <span className="text-sm text-slate-500">{displayPrice.billedAs}</span>}
-                      {plan.trialDays && <span className="text-sm text-blue-400 font-medium mt-1">First 14 days free, then {displayPrice.price}{displayPrice.period}</span>}
+                      {plan.trialDays > 0 && <span className="text-sm text-blue-400 font-medium mt-1">First 14 days free, then {displayPrice.price}{displayPrice.period}</span>}
                     </div>
                     <p className="text-slate-400">{plan.description}</p>
                   </div>
@@ -597,7 +597,7 @@ const journalTestimonials = [
   { id: 3, name: "Alex Thompson", role: "Prop Firm Trader", avatar: "AT", text: "Best trading journal I've used, period. The Bloomberg-style interface feels professional, and the AI catches patterns I'd never spot manually. Worth every penny.", highlight: "Best trading journal I've used", metric: "Consistency", metricValue: "12 Green Weeks", icon: Award },
   { id: 4, name: "Michael Rodriguez", role: "Swing Trader • Equities", avatar: "MR", text: "The strategy tracker is incredible. It proved my breakout setup loses money 65% of the time. Dropped it completely, focused on mean reversion, and haven't looked back.", highlight: "haven't looked back", metric: "Strategy Focus", metricValue: "3 → 1 Setup", icon: Zap },
   { id: 5, name: "Rachel Green", role: "Options Trader", avatar: "RG", text: "As someone who traded blindly for years, Finotaur is like someone turned on the lights in a dark room. The AI insights plus the journal — I can't imagine trading without it now.", highlight: "turned on the lights in a dark room", metric: "Monthly P&L", metricValue: "+$5.8K", icon: Target },
-  { id: 6, name: "James Kim", role: "Portfolio Manager", avatar: "JK", text: "I started with the 14-day free trial and canceled all my other subscriptions. The AI analyzer alone is worth 10x the price. This is the real deal.", highlight: "canceled all my other subscriptions", metric: "ROI", metricValue: "10x Value", icon: Award },
+  { id: 6, name: "James Kim", role: "Portfolio Manager", avatar: "JK", text: "I started with the 14-day full-access welcome when I signed up and canceled all my other subscriptions. The AI analyzer alone is worth 10x the price. This is the real deal.", highlight: "canceled all my other subscriptions", metric: "ROI", metricValue: "10x Value", icon: Award },
 ];
 
 const duplicatedTestimonials = [...journalTestimonials, ...journalTestimonials];
