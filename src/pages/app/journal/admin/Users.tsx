@@ -271,6 +271,7 @@ export default function AdminUsers() {
           <JoinChip label="Platform" value={joins24h?.platform} color="gold" />
           <JoinChip label="Trader (Journal)" value={joins24h?.journal} color="emerald" />
           <JoinChip label="Investor" value={joins24h?.top_secret} color="purple" />
+          <JoinChip label="Trial" value={joins24h?.trial} color="blue" />
           <JoinChip label="Free" value={joins24h?.free} color="gray" />
         </div>
       </div>
@@ -322,7 +323,13 @@ export default function AdminUsers() {
               color="blue"
             />
             <FilterButton
-              label="Free & Trial"
+              label="Trial"
+              isActive={filters.product_filter === 'trial'}
+              onClick={() => handleFilterChange({ product_filter: 'trial' as ProductFilter })}
+              color="blue"
+            />
+            <FilterButton
+              label="Free"
               isActive={filters.product_filter === 'free'}
               onClick={() => handleFilterChange({ product_filter: 'free' as ProductFilter })}
               color="gray"

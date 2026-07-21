@@ -271,7 +271,7 @@ export interface AdminAuditLog {
 // ============================================
 
 /** Top-level product category tabs used on the admin subscribers page. */
-export type ProductFilter = 'platform' | 'journal' | 'newsletter' | 'free';
+export type ProductFilter = 'platform' | 'journal' | 'newsletter' | 'trial' | 'free';
 
 export interface UserFilters {
   search?: string;
