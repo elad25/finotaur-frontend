@@ -61,7 +61,6 @@ const plans: Plan[] = [
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34",
     description: "The trader's desk — journal, copier & analytics",
-    trialDays: 14,
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — auto-synced",
@@ -76,7 +75,6 @@ const plans: Plan[] = [
     cta: "Start Free — Full Access",
     featured: false,
     savings: "Save 24%",
-    badge: "14 days free at signup",
   },
   {
     id: "top_secret",
@@ -85,8 +83,6 @@ const plans: Plan[] = [
     yearlyPrice: "$499",
     yearlyMonthlyEquivalent: "$42",
     description: "The investor's desk — daily intel, research & AI analysis",
-    trialDays: 14,
-    badge: "14 days free at signup",
     features: [
       "TOP SECRET",
       "WAR ZONE",
@@ -195,10 +191,34 @@ const Pricing = () => {
             <span className="text-ink-primary">Choose Your </span>
             <span className="text-gold-primary">Plan</span>
           </SectionTitle>
-          <p className="text-sm text-ink-muted">
-            Every account starts with 14 days of full access to Trader and
-            Investor features — no card required. Cancel anytime.
-          </p>
+          <p className="text-sm text-ink-muted">Cancel anytime.</p>
+        </motion.div>
+
+        {/* Welcome Offer — new accounts only, not a plan feature */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+          className="flex justify-center mb-8"
+        >
+          <div
+            className="flex items-start gap-3 max-w-xl rounded-xl px-4 py-3"
+            style={{
+              background: "rgba(201,166,70,0.08)",
+              border: "1px solid rgba(201,166,70,0.25)",
+            }}
+          >
+            <Gift className="w-5 h-5 text-gold-primary shrink-0 mt-0.5" />
+            <p className="text-ink-secondary text-xs leading-relaxed text-left">
+              <span className="text-gold-primary font-semibold">
+                New to Finotaur?
+              </span>{" "}
+              Your first 14 days include full access to everything, Trader
+              and Investor, free. No card. It starts the moment you create
+              your account.
+            </p>
+          </div>
         </motion.div>
 
         {/* Billing Toggle */}
@@ -306,9 +326,6 @@ const Pricing = () => {
                       {plan.badge === "Most Popular" && (
                         <Star className="w-3 h-3 inline mr-1 -mt-0.5" />
                       )}
-                      {plan.badge === "14 days free at signup" && (
-                        <Clock className="w-3 h-3 inline mr-1 -mt-0.5" />
-                      )}
                       {plan.badge}
                     </span>
                   </div>
@@ -351,8 +368,8 @@ const Pricing = () => {
                         )}
                       </div>
 
-                      {/* Trial text */}
-                      {plan.trialDays && billingInterval === "monthly" && (
+                      {/* Trial text (only for plans that genuinely carry a trial, e.g. the FINOTAUR bundle) */}
+                      {typeof plan.trialDays === "number" && plan.trialDays > 0 && billingInterval === "monthly" && (
                         <p className="text-gold-primary text-xs font-semibold mt-1">
                           First {plan.trialDays} days free
                         </p>

@@ -763,7 +763,7 @@ const PricingSection = () => {
                     </div>
                   )}
 
-                  {plan.trialDays && !plan.featured && (
+                  {plan.trialDays > 0 && !plan.featured && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg z-50">
                       <Clock className="w-4 h-4" />
                       14 Days Free at Signup
@@ -787,7 +787,7 @@ const PricingSection = () => {
                         <span className="text-slate-400">{displayPrice.period}</span>
                       </div>
                       {displayPrice.billedAs && <span className="text-sm text-slate-500">{displayPrice.billedAs}</span>}
-                      {plan.trialDays && (
+                      {plan.trialDays > 0 && (
                         <span className="text-sm text-blue-400 font-medium mt-1">
                           First 14 days free, then {displayPrice.price}{displayPrice.period}
                         </span>
