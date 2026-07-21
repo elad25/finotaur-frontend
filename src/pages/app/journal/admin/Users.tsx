@@ -519,7 +519,10 @@ const UserRow = React.memo<{
 }>(({ user, attribution, onActionComplete, isRecentlyChanged = false }) => {
   
   // Determine if user is in trial
-  const isInTrial = user.is_in_trial && user.account_type === 'basic';
+  // Trial = the legacy Whop basic-trial OR the app-granted 14-day trial (account_type='trial').
+  // An app trial is a Free account with a temporary full-access window, so it shows as "Trial",
+  // never as Investor/Trader.
+  const isInTrial = (user.is_in_trial && user.account_type === 'basic') || user.account_type === 'trial';
   
   // Plan badge style
   const planBadgeStyle = useMemo(() => {
