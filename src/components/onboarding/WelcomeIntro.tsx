@@ -190,15 +190,18 @@ export default function WelcomeIntro() {
         }}
       />
 
-      {/* Faint gold bull in the PAGE BACKGROUND (bottom-left, outside the modal
-          rectangle), matching the /app/home watermark treatment. */}
+      {/* Faint gold bull in the PAGE BACKGROUND, matching the /app/home
+          watermark treatment — comes in from the left, anchored bottom. The
+          horizontal offset is pulled far enough left that the bull's head
+          stops short of the centered modal's left edge and never overlaps it.
+          Desktop only. */}
       {isAppTrial && (
         <img
           src={finoBullWatermark}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 z-0 hidden select-none md:block"
-          style={{ height: '85vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
+          className="pointer-events-none absolute bottom-0 z-0 hidden select-none md:block"
+          style={{ right: 'calc(50vw + 380px)', height: '85vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
         />
       )}
 
