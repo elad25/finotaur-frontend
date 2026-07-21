@@ -19,15 +19,12 @@ import {
   CalendarDays,
   LayoutGrid,
   Bell,
-  Link2,
-  ShieldCheck,
-  Gift,
-  FileText,
-  CreditCard,
+  Check,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
+import finoBullWatermark from '@/assets/brand/fino-bull-watermark.png';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Wordmark } from '@/components/ds/Wordmark';
@@ -51,34 +48,34 @@ const CAPABILITIES: { icon: LucideIcon; label: string }[] = [
 // explanation, not just a celebration.
 const TRIAL_POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
-    icon: LineChart,
+    icon: Check,
     title: 'Full Trader access',
     body:
       'Connect your broker, trades sync automatically, unlimited journaling, trade copier, Shadow, Revenge Radar, Leak Detector, and risk tools.',
   },
   {
-    icon: FileText,
+    icon: Check,
     title: 'Full Investor access',
     body: 'Top Secret research and WAR ZONE reports, fully unlocked during your trial.',
   },
   {
-    icon: CreditCard,
+    icon: Check,
     title: 'No credit card, ever',
     body: 'Nothing is charged. The trial simply ends after 14 days.',
   },
   {
-    icon: Gift,
+    icon: Check,
     title: 'You keep a free plan',
     body:
       'After 14 days your journal history stays, plus 10 manual trades and preview mode. Upgrade anytime to keep full access.',
   },
   {
-    icon: Link2,
+    icon: Check,
     title: 'Best first step',
     body: 'Connect your broker now so every screen fills with your real trading data.',
   },
   {
-    icon: ShieldCheck,
+    icon: Check,
     title: 'Your data is safe',
     body: 'Bank-grade security. We never share your data. You are always in control.',
   },
@@ -224,21 +221,15 @@ export default function WelcomeIntro() {
             }}
           />
 
-          {/* Brand bull on the right side of the modal (trial view). screen blend
-              drops the asset's black background so only the gold bull shows; the
-              left-fade mask keeps text legible. */}
+          {/* Faint gold bull watermark on the LEFT, behind content, matching the
+              /app/home treatment (fino-bull-watermark.png, opacity ~0.2). */}
           {isAppTrial && (
             <img
-              src="/BULL%20ONLY.png"
+              src={finoBullWatermark}
               alt=""
               aria-hidden="true"
-              className="pointer-events-none absolute right-0 top-1/2 z-0 hidden h-[78%] w-auto -translate-y-1/2 select-none md:block"
-              style={{
-                mixBlendMode: 'screen',
-                opacity: 0.55,
-                maskImage: 'linear-gradient(to left, black 45%, transparent 92%)',
-                WebkitMaskImage: 'linear-gradient(to left, black 45%, transparent 92%)',
-              }}
+              className="pointer-events-none absolute bottom-0 left-0 z-0 hidden h-[88%] w-auto select-none md:block"
+              style={{ opacity: 0.2, maxWidth: 'none' }}
             />
           )}
 
@@ -301,7 +292,7 @@ export default function WelcomeIntro() {
                               border: '1px solid rgba(201,166,70,0.22)',
                             }}
                           >
-                            <Icon className="h-4 w-4" style={{ color: '#C9A646' }} />
+                            <Icon className="h-4 w-4" strokeWidth={3} style={{ color: '#C9A646' }} />
                           </span>
                           <div>
                             <p className="text-sm font-semibold text-ink-primary leading-tight">
