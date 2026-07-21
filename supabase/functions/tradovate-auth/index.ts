@@ -276,6 +276,16 @@ async function readFromVault(secretId: string): Promise<string | null> {
   return data as string;
 }
 
+// ─── Trial anti-abuse: broker-account fingerprint ──────────────
+// SHA-256 hash of `${brokerKind}:${externalId}` — fed into
+// claim_trial_broker_fingerprint() so the same broker account can't power
+// more than one journal trial. No-ops server-side for non-trial users.
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -739,6 +749,35 @@ Deno.serve(async (req: Request) => {
     console.log('[tradovate-auth] accounts:', accounts.length, 'primary:', primaryAccount?.id);
     if (!primaryAccount) {
       throw new Error('No accounts returned from Tradovate — check credentials and account status');
+    }
+
+    // 3.5 Trial anti-abuse: block a broker account already claimed by a
+    // different journal trial. Checked for every account under this login
+    // (not just the primary), before the connection is created. Fails open
+    // on RPC error/timeout — a transient lookup hiccup must not lock out a
+    // legitimate connect. No-ops for non-trial users (RPC returns
+    // {allowed:true, reason:'not_trial'}).
+    for (const acc of accounts) {
+      try {
+        const fingerprint = await sha256Hex(`${brokerName}:${acc.id}`);
+        const { data: claim, error: claimError } = await supabaseAdmin.rpc('claim_trial_broker_fingerprint', {
+          p_user_id: userId,
+          p_broker_kind: brokerName,
+          p_fingerprint: fingerprint,
+        });
+        if (claimError) {
+          console.warn('[trial-fingerprint] claim RPC error — failing open:', claimError.message);
+          continue;
+        }
+        if ((claim as { allowed?: boolean } | null)?.allowed === false) {
+          return json({
+            error: 'trial_broker_limit',
+            message: 'This broker account was already used in another FINOTAUR trial. Upgrade to a paid plan to connect it.',
+          }, 403);
+        }
+      } catch (fpErr) {
+        console.warn('[trial-fingerprint] unexpected error — failing open:', String(fpErr).slice(0, 300));
+      }
     }
 
     // 4. Upsert broker_connections row (metadata + jsonb only — tokens live in Vault)

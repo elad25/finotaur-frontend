@@ -98,7 +98,7 @@ const ContactPage = () => {
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="font-semibold text-lg mb-2">Do you offer a free trial?</h3>
               <p className="text-sm text-muted-foreground">
-                Yes! We offer a 14-day free trial with full Basic features. Start journaling immediately and explore everything Finotaur has to offer.
+                Yes! Every new account automatically gets 14 days of full access to Trader and Investor features — no card required. Start journaling immediately and explore everything Finotaur has to offer.
               </p>
             </div>
 
@@ -106,7 +106,7 @@ const ContactPage = () => {
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="font-semibold text-lg mb-2">What's your refund policy?</h3>
               <p className="text-sm text-muted-foreground">
-                Plans with a free trial are non-refundable (the trial is your evaluation period). For plans without a trial, we offer a 7-day money-back guarantee. Learn more in our{' '}
+                Your 14-day trial at signup is free and non-refundable since no payment is taken during it. Once you upgrade to a paid plan, we offer a 7-day money-back guarantee. Learn more in our{' '}
                 <Link to="/legal/refund" className="text-primary hover:underline">
                   Refund Policy
                 </Link>
@@ -158,7 +158,7 @@ const ContactPage = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to="/register">
               <Button size="lg" className="gap-2 min-w-[200px]">
-                Start Free Trial
+                Start Free — Full Access
               </Button>
             </Link>
             <a href="mailto:support@finotaur.com">

@@ -165,7 +165,8 @@ export const BillingTab = () => {
   const tierAccent = isFreeTier ? '#3F3F46' : tierConfig.edge;
   const tierGlow = isFreeTier ? '#52525B' : tierConfig.peak;
 
-  // Top Secret — flat pricing, 14-day free trial only (no intro discount)
+  // Top Secret — flat pricing, no Whop-side trial (cancelled 2026-07 — grandfathered
+  // subscribers who are still mid-trial from before the cutoff keep seeing real DB state below)
   const getTopSecretPricingInfo = () => {
     // Use DB trial flag instead of calculating
     if (topSecretIsInTrial && profile?.top_secret_trial_ends_at) {
@@ -1014,7 +1015,7 @@ export const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 14-day FREE trial → then $49/mo
+                    Upgrade to Investor — $49/mo
                   </p>
                 </div>
                 <Button
@@ -1022,7 +1023,7 @@ export const BillingTab = () => {
                   size="sm"
                   className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-medium shadow-lg shadow-red-900/20"
                 >
-                  Start Free Trial
+                  Upgrade to Investor
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>

@@ -892,7 +892,7 @@ const Hero = () => {
             size="xl"
             onClick={handleStartFree}
           >
-            Start free trial
+            Start free — 14 days of full access, no card
           </Button>
         </motion.div>
 
@@ -969,7 +969,7 @@ const Hero = () => {
             size="xl"
             onClick={handleStartFree}
           >
-            Start 14-day free trial
+            Start free — 14 days of full access, no card
           </Button>
           <Button
             onClick={() => navigate('/auth/login')}

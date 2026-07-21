@@ -115,7 +115,7 @@ const fmtUsd = (n: number | null, signed = false): string => {
 export default function JournalSettings() {
   // 🚀 OPTIMIZED HOOKS - All using React Query
   // 🔥 SYNC FIX: Use subscription for live trade counts (updates after each trade)
-  const { limits, isFreeJournal, isUnlimitedUser } = useSubscription();
+  const { limits, isFreeJournal, isUnlimitedUser, isAppTrial } = useSubscription();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { data: trades = [] } = useTrades(); // Pre-cached for export + R performance
   const { portfolios } = usePortfolios(); // exclude hidden accounts (WHISPER paper) from R Performance
@@ -412,9 +412,11 @@ const rPerformance = useMemo(() => {
                 <p className="text-xs text-zinc-500 mt-1">
                   {isFreeJournal
                     ? `Free tier: ${FREE_TRADE_LIMIT} trades total (never resets)`
-                    : isUnlimitedUser
-                      ? 'Unlimited trades with your plan'
-                      : 'Resets each billing cycle'
+                    : isAppTrial
+                      ? 'Unlimited during your trial'
+                      : isUnlimitedUser
+                        ? 'Unlimited trades with your plan'
+                        : 'Resets each billing cycle'
                   }
                 </p>
               </div>

@@ -63,12 +63,12 @@ const FAQS = [
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. The Trader plan includes a 14-day free trial so you can connect your accounts and see your journal before paying — and the free tier lets you try the journal with 10 trades, no card required.",
+      "Yes. Every new account automatically gets 14 days of full access to Trader and Investor features — no card required — so you can connect your accounts and see your journal before paying. Afterwards you keep a free plan with 10 manual trades and preview mode.",
   },
   {
     question: "How much does it cost?",
     answer:
-      "You can start free with a 10-trade demo portfolio. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
+      "Every new account automatically gets 14 days of full access to Trader and Investor features — no card required. Afterwards you keep a free plan with 10 manual trades and preview mode. Paid plans start when you upgrade: Trader is $44.99/month and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
   },
 ];
 
@@ -150,7 +150,7 @@ export default function BestTradingJournalPropFirm() {
 
       <SEO
         title="Best Trading Journal for Prop Firm Traders"
-        description="A trading journal for prop firm and funded traders: track multiple evaluation and funded accounts, measure consistency and discipline, and get AI feedback. Built futures-first. 14-day free trial."
+        description="A trading journal for prop firm and funded traders: track multiple evaluation and funded accounts, measure consistency and discipline, and get AI feedback. Built futures-first. 14 days of full access at signup, no card required."
         path="/best-trading-journal-for-prop-firm"
         jsonLd={[
           webPage({
@@ -186,7 +186,7 @@ export default function BestTradingJournalPropFirm() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Button asChild variant="goldOutline" size="xl">
             <Link to="/pricing">See pricing</Link>
@@ -393,7 +393,7 @@ export default function BestTradingJournalPropFirm() {
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Link
             to="/pricing"
@@ -505,7 +505,7 @@ export default function BestTradingJournalPropFirm() {
 
         <div className="flex justify-center mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
         </div>
 

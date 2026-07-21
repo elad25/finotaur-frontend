@@ -44,7 +44,7 @@ const Pricing = () => {
         { text: "Win rate & R:R analytics", available: true },
       ],
       locked: ["Real-time L1 data", "Broker integrations", "Algorithmic alerts"],
-      cta: "Start Pro Trial",
+      cta: "Start Free — Full Access",
       highlighted: true,
     },
     {
@@ -70,7 +70,7 @@ const Pricing = () => {
         "Options flow data",
         "Dark pool activity",
       ],
-      cta: "Start Elite Trial",
+      cta: "Start Free — Full Access",
       highlighted: false,
     },
   ];
@@ -195,8 +195,9 @@ const Pricing = () => {
 <Card className="p-6 bg-card border-border rounded-xl hover:border-primary/20 transition-smooth">
               <h3 className="font-semibold mb-2">What's your refund policy?</h3>
               <p className="text-sm text-muted-foreground">
-                Plans with a free trial are non-refundable. For plans without a trial,
-                we offer a 7-day money-back guarantee from your first payment.
+                Every account gets 14 days of full access at signup, no card required — that
+                trial period is non-refundable since no payment is taken. Once you upgrade to
+                a paid plan, we offer a 7-day money-back guarantee from your first payment.
               </p>
             </Card>
             <Card className="p-6 bg-card border-border rounded-xl hover:border-primary/20 transition-smooth">

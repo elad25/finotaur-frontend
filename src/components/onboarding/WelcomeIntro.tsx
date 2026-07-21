@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSubscription } from '@/hooks/useSubscription';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Wordmark } from '@/components/ds/Wordmark';
@@ -44,6 +45,7 @@ export default function WelcomeIntro() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { isAppTrial } = useSubscription();
   const [active, setActive] = useState(
     () => sessionStorage.getItem(WELCOME_ACTIVE_KEY) === '1',
   );
@@ -191,6 +193,13 @@ export default function WelcomeIntro() {
             <h1 className="text-2xl md:text-4xl font-bold text-ink-primary tracking-tight leading-tight">
               {firstName ? `Welcome, ${firstName}` : 'Welcome to Finotaur'}
             </h1>
+
+            {/* App-granted trial notice — only shown for active app-trial users */}
+            {isAppTrial && (
+              <p className="text-sm font-medium" style={{ color: '#C9A646' }}>
+                Your 14-day full-access trial is active. Everything is unlocked.
+              </p>
+            )}
 
             {/* Brand line — gold gradient text */}
             <p

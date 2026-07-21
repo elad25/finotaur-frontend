@@ -129,7 +129,7 @@ const FAQ_GROUPS = [
       {
         question: "How much does Finotaur cost?",
         answer:
-          "You can start free with a 10-trade demo portfolio and no card required. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, and the AI trading coach. See the pricing page for current plan details and any other tiers.",
+          "Every new account automatically gets 14 days of full access to Trader and Investor features — no card required. Afterwards you keep a free plan with 10 manual trades and preview mode. Paid plans start when you upgrade: Trader is $44.99/month and adds unlimited trades, multiple broker connections, and the AI trading coach. See the pricing page for current plan details and any other tiers.",
       },
     ],
   },
@@ -310,7 +310,7 @@ export default function FAQPage() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-ds-4 mt-ds-7">
           <Button asChild variant="gold" size="xl">
-            <Link to="/register">Start your 14-day free trial</Link>
+            <Link to="/register">Start free — 14 days of full access</Link>
           </Button>
           <Button asChild variant="goldOutline" size="xl">
             <Link to="/pricing">See pricing</Link>

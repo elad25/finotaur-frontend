@@ -102,8 +102,8 @@ export const PaymentSuccessModal = ({ isOpen, onClose }: PaymentSuccessModalProp
                   <Calendar className="w-4 h-4 text-green-400" />
                 </div>
                 <div>
-                  <p className="text-white font-medium text-sm">7-Day Free Trial</p>
-                  <p className="text-gray-500 text-xs">You won't be charged during your trial period</p>
+                  <p className="text-white font-medium text-sm">You're All Set</p>
+                  <p className="text-gray-500 text-xs">Your Investor Desk subscription is active — cancel anytime</p>
                 </div>
               </div>
             </div>

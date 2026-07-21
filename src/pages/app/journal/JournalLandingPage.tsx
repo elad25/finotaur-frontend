@@ -150,7 +150,7 @@ const HeroSection = () => {
                 className="group px-8 py-7 text-lg font-bold bg-gradient-to-r from-[#C9A646] via-[#D4AF37] to-[#C9A646] text-black rounded-xl hover:scale-105 transition-all duration-300"
                 style={{ boxShadow: '0 4px 24px rgba(201,166,70,0.4)' }}
               >
-                Start 14-Day Free Trial
+                Start Free — 14 Days Full Access
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
               </Button>
             </motion.div>
@@ -597,7 +597,7 @@ const plans = [
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited trades + your AI trading coach",
-    trialDays: 14,
+    trialDays: 0,
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — never hit a cap",
@@ -766,7 +766,7 @@ const PricingSection = () => {
                   {plan.trialDays && !plan.featured && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg z-50">
                       <Clock className="w-4 h-4" />
-                      14-Day Free Trial
+                      14 Days Free at Signup
                     </div>
                   )}
 
@@ -838,7 +838,7 @@ const PricingSection = () => {
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-500" />
-                <span className="text-sm">14-Day Trader Trial</span>
+                <span className="text-sm">14 Days Full Access at Signup</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
@@ -1104,7 +1104,7 @@ const FooterSection = () => {
             className="group px-10 py-6 text-lg font-bold bg-gradient-to-r from-[#C9A646] via-[#D4AF37] to-[#C9A646] text-black rounded-xl hover:scale-105 transition-all duration-300"
             style={{ boxShadow: '0 4px 24px rgba(201,166,70,0.4)' }}
           >
-            Start 14-Day Free Trial
+            Start Free — 14 Days Full Access
             <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
           </Button>
         </div>

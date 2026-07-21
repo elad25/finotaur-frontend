@@ -39,7 +39,7 @@ const FAQS = [
   {
     question: "Does either have a free plan?",
     answer:
-      "Finotaur does — a free demo journal with no card required, plus a 14-day free trial on the Trader plan. TradeZella has no free plan and no advertised free trial as of July 2026; every tier requires payment upfront.",
+      "Finotaur does. Every new account automatically gets 14 days of full access to Trader and Investor features — no card required. Afterwards you keep a free plan with 10 manual trades and preview mode. Paid plans start when you upgrade. TradeZella has no free plan and no advertised free trial as of July 2026; every tier requires payment upfront.",
   },
   {
     question: "Which has better AI?",
@@ -72,7 +72,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: "Free trial",
-    finotaur: { value: "text", text: "14 days (Trader)" },
+    finotaur: { value: "text", text: "14 days, all features, no card" },
     tradezella: { value: "no" },
   },
   {
@@ -188,7 +188,7 @@ export default function FinotaurVsTradeZella() {
         </div>
 
         <p className="text-ink-tertiary text-[13px] text-center mt-ds-4">
-          No card required to start · 14-day free trial on Trader
+          No card required to start · 14 days of full access at signup
         </p>
       </SectionShell>
 
@@ -310,7 +310,7 @@ export default function FinotaurVsTradeZella() {
                 <p className="text-gold-primary font-semibold text-xl mt-ds-1">
                   $44.99/mo <span className="text-ink-tertiary text-sm font-normal">or $409/yr</span>
                 </p>
-                <p className="text-ink-tertiary text-[13px] mt-ds-1">14-day free trial</p>
+                <p className="text-ink-tertiary text-[13px] mt-ds-1">14 days free at signup</p>
               </Card>
             </div>
           </div>
@@ -532,7 +532,7 @@ export default function FinotaurVsTradeZella() {
         </div>
 
         <p className="text-ink-tertiary text-[13px] text-center mt-ds-4">
-          No card required · 14-day free trial on Trader · Cancel anytime
+          No card required · 14 days of full access at signup · Cancel anytime
         </p>
       </SectionShell>
 

@@ -232,7 +232,7 @@ const HeroLeft = memo(function HeroLeft({
         research lands all month long.
       </p>
 
-      {/* 14-Day Free Trial pill */}
+      {/* Included free for 14 days at signup pill */}
       <div
         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl mb-6"
         style={{
@@ -242,7 +242,7 @@ const HeroLeft = memo(function HeroLeft({
         }}
       >
         <Gift className="w-4 h-4 text-emerald-400" />
-        <span className="text-emerald-300 font-semibold text-sm">14-day free trial</span>
+        <span className="text-emerald-300 font-semibold text-sm">Included free for 14 days when you create an account</span>
         <span className="text-emerald-600 text-xs">· Cancel anytime</span>
       </div>
 
@@ -261,7 +261,7 @@ const HeroLeft = memo(function HeroLeft({
               Redirecting...
             </span>
           ) : (
-            'Start your 14-day free trial'
+            'Upgrade to Investor'
           )}
         </Button>
       </div>
@@ -731,7 +731,7 @@ const UnifiedMonthlyCard = memo(function UnifiedMonthlyCard({
         border: '1px solid rgba(201,166,70,0.3)',
       }}
     >
-      {/* 14-DAY FREE TRIAL badge */}
+      {/* Included free for 14 days at signup badge */}
       <div className="absolute -top-3 left-8">
         <div
           className="px-4 py-1.5 rounded-xl text-xs font-bold shadow-lg"
@@ -741,7 +741,7 @@ const UnifiedMonthlyCard = memo(function UnifiedMonthlyCard({
             boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
           }}
         >
-          14-DAY FREE TRIAL
+          FREE FOR 14 DAYS AT SIGNUP
         </div>
       </div>
 
@@ -794,7 +794,7 @@ const UnifiedMonthlyCard = memo(function UnifiedMonthlyCard({
               Redirecting...
             </span>
           ) : (
-            'Start free trial'
+            'Upgrade to Investor'
           )}
         </Button>
       </div>

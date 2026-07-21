@@ -73,10 +73,10 @@ const plans: Plan[] = [
       "Revenge Radar + AI coach",
       "Prop-firm risk dashboard",
     ],
-    cta: "Start 14-Day Free Trial",
+    cta: "Start Free — Full Access",
     featured: false,
     savings: "Save 24%",
-    badge: "14-Day Free Trial",
+    badge: "14 days free at signup",
   },
   {
     id: "top_secret",
@@ -86,7 +86,7 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: "$42",
     description: "The investor's desk — daily intel, research & AI analysis",
     trialDays: 14,
-    badge: "14-Day Free Trial",
+    badge: "14 days free at signup",
     features: [
       "TOP SECRET",
       "WAR ZONE",
@@ -96,7 +96,7 @@ const plans: Plan[] = [
       "Research hub — insiders, 13F, ETFs",
       "Private Discord trade room",
     ],
-    cta: "Start 14-Day Free Trial",
+    cta: "Start Free — Full Access",
     featured: false,
     savings: "Save 15%",
   },
@@ -196,8 +196,8 @@ const Pricing = () => {
             <span className="text-gold-primary">Plan</span>
           </SectionTitle>
           <p className="text-sm text-ink-muted">
-            Simple, transparent pricing. Start with a 14-day free trial. Cancel
-            anytime.
+            Every account starts with 14 days of full access to Trader and
+            Investor features — no card required. Cancel anytime.
           </p>
         </motion.div>
 
@@ -306,7 +306,7 @@ const Pricing = () => {
                       {plan.badge === "Most Popular" && (
                         <Star className="w-3 h-3 inline mr-1 -mt-0.5" />
                       )}
-                      {plan.badge === "14-Day Free Trial" && (
+                      {plan.badge === "14 days free at signup" && (
                         <Clock className="w-3 h-3 inline mr-1 -mt-0.5" />
                       )}
                       {plan.badge}
@@ -456,7 +456,7 @@ const Pricing = () => {
             <span className="text-ink-tertiary/40">·</span>
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-gold-primary/50" />
-              14-Day Free Trial
+              14 Days Free at Signup
             </span>
             <span className="text-ink-tertiary/40">·</span>
             <span className="flex items-center gap-1.5">

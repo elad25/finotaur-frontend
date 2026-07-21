@@ -171,7 +171,7 @@ export default function WarZonePricingSelection() {
         .from('system_updates')
         .insert({
           title: 'Welcome to the Investor Desk!',
-          content: 'Your 7-day free trial has started. Check your email for upcoming daily briefing alerts.',
+          content: 'Your Investor Desk subscription is active. Check your email for upcoming daily briefing alerts.',
           type: 'success',
           target_group: 'newsletter',
           is_active: true,
@@ -399,7 +399,7 @@ export default function WarZonePricingSelection() {
                       <span className="text-slate-500 text-sm">/{isMonthly ? 'mo' : 'yr'}</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-medium mt-1">
-                      {isMonthly ? '7-Day Free Trial' : `Save $${singleSavings}/year (~$${singleMonthlyEquivalent}/mo)`}
+                      {isMonthly ? 'Cancel anytime' : `Save $${singleSavings}/year (~$${singleMonthlyEquivalent}/mo)`}
                     </p>
                   </div>
 
@@ -447,7 +447,7 @@ export default function WarZonePricingSelection() {
                     ) : (
                       <Rocket className="w-4 h-4" />
                     )}
-                    {isMonthly ? 'Start Free Trial' : 'Subscribe Now'}
+                    {isMonthly ? 'Get Investor Access' : 'Subscribe Now'}
                   </button>
                 </div>
 
@@ -734,7 +734,7 @@ export default function WarZonePricingSelection() {
             }}
           >
             <Clock className="w-5 h-5 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-bold text-lg">LIMITED TIME OFFER: 7 DAYS FREE TRIAL</span>
+            <span className="text-[#C9A646] font-bold text-lg">Every account gets 14 days of full access at signup — no card required</span>
             <ChevronRight className="w-5 h-5 text-[#C9A646]" />
           </div>
         </motion.div>
@@ -786,11 +786,8 @@ export default function WarZonePricingSelection() {
                   <span className="text-5xl font-bold text-white">${MONTHLY_PRICE}</span>
                   <span className="text-xl text-slate-400">/month</span>
                 </div>
-                <p className="text-sm font-bold text-blue-400 mb-1">
-                  FREE 7 DAY TRIAL
-                </p>
                 <p className="text-emerald-400 text-base font-semibold">
-                  First 7 days completely free!
+                  Cancel anytime
                 </p>
               </div>
 
@@ -812,7 +809,7 @@ export default function WarZonePricingSelection() {
                   </div>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    START FREE TRIAL
+                    GET INVESTOR ACCESS
                     <ArrowRight className="w-5 h-5" />
                   </span>
                 )}
