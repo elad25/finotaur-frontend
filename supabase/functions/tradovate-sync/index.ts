@@ -1680,11 +1680,16 @@ async function syncCredential(cred: {
       }
     }
 
-    await reconCrumb('recon:entry', {
-      state_targets:     (openStates ?? []).length,
-      stateless_targets: targets.filter(t => t.stateId === null).length,
-      discovered:        discoveredAccountIds.length,
-    });
+    // Crumb only when there is actually something to reconcile — the
+    // unconditional variant wrote a row per credential per tick (thousands of
+    // no-op rows/day into tradovate_api_call_log). heal/error crumbs remain.
+    if (targets.length > 0) {
+      await reconCrumb('recon:entry', {
+        state_targets:     (openStates ?? []).length,
+        stateless_targets: targets.filter(t => t.stateId === null).length,
+        discovered:        discoveredAccountIds.length,
+      });
+    }
 
     if (targets.length > 0) {
       // One /position/list per credential. OAuth prop-firm tokens may need the
