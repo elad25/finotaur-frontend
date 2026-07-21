@@ -41,6 +41,7 @@ import strategiesShot from '@/assets/landing/strategies.webp';
 import dayOfWeekShot from '@/assets/landing/day-of-week.webp';
 import copierShot from '@/assets/landing/copier.webp';
 import riskManagementShot from '@/assets/landing/risk-management.webp';
+import { StartFreeLabel } from '@/components/landing-new/StartFreeLabel';
 
 // ---------------------------------------------------------------------------
 // Tab data — copy/bullets carried over verbatim from the former stacked
@@ -628,7 +629,7 @@ const TraderSection = () => {
       <div className="text-center mt-6">
         <Link to="/register">
           <Button variant="gold" size="xl">
-            Start free — 14 days of full access, no card
+            <StartFreeLabel />
           </Button>
         </Link>
       </div>

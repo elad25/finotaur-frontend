@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ds/Button";
 import { Wordmark } from "@/components/ds/Wordmark";
 import PromoOfferChip from "@/components/PromoOfferChip";
+import { StartFreeLabel } from "@/components/landing-new/StartFreeLabel";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -106,7 +107,7 @@ const Navbar = () => {
               size="compact"
               onClick={() => navigate('/auth/register')}
             >
-              Start free — 14 days of full access, no card
+              <StartFreeLabel compact />
             </Button>
           </div>
 
@@ -157,7 +158,7 @@ const Navbar = () => {
                   className="w-full"
                   onClick={() => { navigate('/auth/register'); setIsMobileMenuOpen(false); }}
                 >
-                  Start free — 14 days of full access, no card
+                  <StartFreeLabel compact />
                 </Button>
               </div>
             </div>
