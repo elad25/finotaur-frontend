@@ -201,7 +201,7 @@ export default function WelcomeIntro() {
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 z-0 hidden select-none md:block"
-          style={{ right: 'calc(50vw + 380px)', height: '85vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
+          style={{ right: 'calc(50vw + 340px)', height: '85vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
         />
       )}
 
