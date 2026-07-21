@@ -5,33 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Self-healing chunk recovery (runs before the module entry; classic script so it
-         always executes even when every hashed chunk fails). After a deploy, a returning
-         tab may reference old /assets/*.js hashes that no longer exist; Cloudflare then
-         serves the index.html shell (text/html) for them, so the module script fails with
-         a MIME error and main.tsx never runs → infinite boot splash. We catch that failure
-         and force ONE reload to fetch the fresh, no-cache shell (which points at the current
-         hashes). A 12s sessionStorage guard prevents any reload loop during a real outage. -->
+         ALWAYS executes even when every hashed chunk fails). Core failure mode: after a
+         deploy, or during Cloudflare Pages' 20-40 min propagation window, an edge that does
+         not yet have /assets/<hash>.js returns a 404 (or the SPA shell) for it. When the
+         FAILING chunk is a core vendor bundle (vendor-react / vendor-data), main.tsx never
+         runs, so lazyWithRetry (which lives inside the app) cannot help — this script is the
+         only recovery. It escalates: up to 3 cache-busting reloads inside a 90s window, then
+         a terminal fallback UI with a manual Refresh button instead of an infinite splash.
+         A mount-timeout backstop shows the same fallback if React simply never paints. -->
     <script>
       (function () {
         try {
-          var KEY = '__finotaur_chunk_reload_at';
+          var KEY = '__finotaur_chunk_reload';
+          var WINDOW_MS = 90000;
+          var MAX_ATTEMPTS = 3;
+          var MOUNT_TIMEOUT_MS = 15000;
+
+          function readState() {
+            try {
+              var s = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+              return { firstAt: Number((s && s.firstAt) || 0), attempts: Number((s && s.attempts) || 0) };
+            } catch (_) { return { firstAt: 0, attempts: 0 }; }
+          }
+
+          function bustAssetCache(onDone) {
+            var urls = [];
+            try {
+              var entries = performance.getEntriesByType('resource');
+              for (var i = 0; i < entries.length; i++) {
+                var n = entries[i].name;
+                if (n && n.indexOf('/assets/') !== -1 && /\.(js|mjs|css)(\?|$)/.test(n)) urls.push(n);
+              }
+            } catch (_) {}
+            if (!window.fetch || !urls.length) { onDone(); return; }
+            var done = 0;
+            function tick() { done++; if (done >= urls.length) onDone(); }
+            for (var j = 0; j < urls.length; j++) {
+              try { fetch(urls[j], { cache: 'reload' }).then(tick, tick); } catch (_) { tick(); }
+            }
+            setTimeout(onDone, 4000); // safety: reload even if some fetches hang
+          }
+
+          function showFallback() {
+            try {
+              if (window.__finotaur_boot_fallback) return;
+              window.__finotaur_boot_fallback = true;
+              var splash = document.getElementById('boot-splash');
+              if (!splash || splash.className.indexOf('boot-splash--hide') !== -1) return;
+              splash.removeAttribute('aria-hidden');
+              var msg = document.createElement('div');
+              msg.className = 'boot-splash__msg';
+              msg.textContent = 'Updating the app… this can take a minute.';
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'boot-splash__btn';
+              btn.textContent = 'Refresh now';
+              btn.onclick = function () {
+                try {
+                  btn.disabled = true;
+                  btn.textContent = 'Refreshing…';
+                  try { sessionStorage.removeItem(KEY); } catch (_) {}
+                  bustAssetCache(function () { location.reload(); });
+                } catch (_) { location.reload(); }
+              };
+              splash.appendChild(msg);
+              splash.appendChild(btn);
+            } catch (_) {}
+          }
+
           function recover(badUrl) {
-            var last = parseInt(sessionStorage.getItem(KEY) || '0', 10);
-            if (Date.now() - last < 12000) return; // reloaded very recently — don't loop
-            sessionStorage.setItem(KEY, String(Date.now()));
-            // A plain reload cannot evict an `immutable`-cached entry, so if the
-            // failing /assets/*.js URL was poisoned (text/html cached under it),
-            // force-revalidate it first with { cache: 'reload' } — that overwrites
-            // the cache entry with what the edge now returns (the real chunk once
-            // propagation completes, or a clean 404 from functions/assets), which
-            // breaks the poison loop. Then reload. Best-effort; never block.
+            var state = readState();
+            var now = Date.now();
+            if (!state.firstAt || now - state.firstAt > WINDOW_MS) { state = { firstAt: now, attempts: 0 }; }
+            if (state.attempts >= MAX_ATTEMPTS) { showFallback(); return; } // tried enough — offer the button
+            state.attempts += 1;
+            try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (_) {}
+            // A plain reload cannot evict an `immutable`-cached entry, so force-revalidate the
+            // failing URL first with { cache: 'reload' } — overwrites any poisoned entry with
+            // what the edge now returns (the real chunk, or a clean 404 from functions/assets).
             function go() { location.reload(); }
             if (badUrl && window.fetch) {
-              fetch(badUrl, { cache: 'reload' }).then(go, go);
+              try { fetch(badUrl, { cache: 'reload' }).then(go, go); } catch (_) { go(); }
             } else {
               go();
             }
           }
+
           // Resource load errors (script/link) don't bubble — listen in the capture phase.
           window.addEventListener('error', function (e) {
             var t = e && e.target;
@@ -42,11 +101,20 @@
               recover(url);
             }
           }, true);
+
           // Vite raises this for failed lazy dynamic imports (payload.href = failed URL).
           window.addEventListener('vite:preloadError', function (e) {
             var u = (e && e.payload && (e.payload.href || e.payload.url)) || '';
             recover(u);
           }, true);
+
+          // Backstop: if React never paints (boot-splash still visible), offer the manual
+          // Refresh UI instead of an infinite spinner. Does NOT auto-reload, so a genuinely
+          // slow-but-fine load is never interrupted — the button is opt-in.
+          setTimeout(function () {
+            var splash = document.getElementById('boot-splash');
+            if (splash && splash.className.indexOf('boot-splash--hide') === -1) showFallback();
+          }, MOUNT_TIMEOUT_MS);
         } catch (_) { /* never block boot */ }
       })();
     </script>
@@ -245,6 +313,31 @@
         color: #c9a646;
         opacity: 0.85;
       }
+      .boot-splash__msg {
+        max-width: 300px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.55);
+        text-align: center;
+        padding: 0 20px;
+      }
+      .boot-splash__btn {
+        margin-top: 4px;
+        padding: 10px 22px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #0a0a0a;
+        background: #c9a646;
+        border: 0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 160ms ease;
+      }
+      .boot-splash__btn:hover { background: #f0c75e; }
+      .boot-splash__btn:disabled { opacity: 0.6; cursor: default; }
       @keyframes boot-splash-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
         .boot-splash__mark { animation: none; }
