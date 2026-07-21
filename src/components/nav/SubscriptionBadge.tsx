@@ -7,7 +7,7 @@
 
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gem, Crown, Sparkles, Award, Circle, ChevronRight, CircleCheck } from 'lucide-react';
+import { Gem, Crown, Sparkles, Award, Circle, Clock, ChevronRight, CircleCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Popover,
@@ -17,7 +17,7 @@ import {
 
 // ── Types ────────────────────────────────────────────────────
 
-export type TierKey = 'admin' | 'vip' | 'elite' | 'finotaur' | 'pro' | 'topsecret' | 'premium' | 'basic' | 'free';
+export type TierKey = 'admin' | 'vip' | 'elite' | 'finotaur' | 'pro' | 'topsecret' | 'premium' | 'basic' | 'trial' | 'free';
 
 interface TierConfig {
   label: string;
@@ -179,6 +179,21 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     labelColor: '#D98E4F',
     useGoldClass: false,
   },
+  // Trial: a FREE user who was granted the app 14-day trial. Same black FREE
+  // background, labelled TRIAL with a clock icon to signal it's time-limited.
+  trial: {
+    label: 'TRIAL',
+    color: '#A1A1AA',
+    icon: Clock,
+    description: 'Full access during your 14-day free trial',
+    group: 'Free',
+    tag: 'TRIAL',
+    edge: '#000000',
+    peak: '#171717',
+    onColor: '#FFFFFF',
+    labelColor: '#E4E4E7',
+    useGoldClass: false,
+  },
   free: {
     label: 'FREE',
     color: '#A1A1AA',
@@ -228,7 +243,7 @@ export function resolveTier(
   // Journal tier
   if (accountType === 'premium') return 'premium';
   if (accountType === 'basic') return 'basic';
-  if (accountType === 'trial') return 'basic';
+  if (accountType === 'trial') return 'trial';
 
   return 'free';
 }

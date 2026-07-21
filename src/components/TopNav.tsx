@@ -15,7 +15,6 @@
 
 import { Settings, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
-import { TrialCountdownChip } from '@/components/subscription/TrialCountdownChip';
 import PromoOfferChip from '@/components/PromoOfferChip';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
@@ -161,11 +160,6 @@ export const TopNav = () => {
 
         {/* ── RIGHT: Upgrade · Ask Fino · user menu ────────────── */}
         <div className="flex items-center gap-2 justify-end flex-shrink-0">
-
-          {/* Trial countdown — only rendered for app-granted trial users */}
-          <div className="hidden md:flex items-center">
-            <TrialCountdownChip />
-          </div>
 
           {/* Subscription tier badge */}
           <div className="hidden md:flex items-center">
