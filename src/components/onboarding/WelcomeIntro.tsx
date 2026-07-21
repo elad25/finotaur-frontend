@@ -190,8 +190,21 @@ export default function WelcomeIntro() {
         }}
       />
 
+      {/* Faint gold bull in the PAGE BACKGROUND (bottom-left, outside the modal
+          rectangle), matching the /app/home watermark treatment. */}
+      {isAppTrial && (
+        <img
+          src={finoBullWatermark}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 z-0 hidden select-none md:block"
+          style={{ height: '85vh', width: 'auto', maxWidth: 'none', opacity: 0.2 }}
+        />
+      )}
+
       {/* Card entrance animation */}
       <motion.div
+        className="relative z-10"
         initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
@@ -220,18 +233,6 @@ export default function WelcomeIntro() {
               background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.45), rgba(201,166,70,0.6), rgba(201,166,70,0.45), transparent)',
             }}
           />
-
-          {/* Faint gold bull watermark on the LEFT, behind content, matching the
-              /app/home treatment (fino-bull-watermark.png, opacity ~0.2). */}
-          {isAppTrial && (
-            <img
-              src={finoBullWatermark}
-              alt=""
-              aria-hidden="true"
-              className="pointer-events-none absolute bottom-0 left-0 z-0 hidden h-[88%] w-auto select-none md:block"
-              style={{ opacity: 0.2, maxWidth: 'none' }}
-            />
-          )}
 
           <div className="relative z-10 flex flex-col items-center text-center gap-6 pt-2">
             {/* Wordmark with soft radial gold glow behind it, centered. */}
