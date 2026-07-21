@@ -150,6 +150,22 @@ export const BillingTab = () => {
   const topSecretIsActive = topSecretEnabled && ['active', 'trial', 'trialing', 'canceling'].includes(topSecretStatus);
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
 
+  // ── App-granted 14-day trial vs a real paid subscription ─────────────
+  // The app trial sets account_type='trial' and grants Investor by setting
+  // top_secret_status='trial' (top_secret_is_in_trial stays false, no Whop
+  // membership, no payment). It must NEVER be shown as a billed subscription:
+  // no price-as-active, no "Next billing", no "Unsubscribe"/"Manage on Whop".
+  const isAppTrial = journalPlan === 'trial'; // journalPlan = profile.account_type
+  const investorIsAppTrial =
+    topSecretEnabled && topSecretStatus === 'trial' && !topSecretIsInTrial;
+  // Paid = active / canceling / a legacy grandfathered Whop trial (is_in_trial=true).
+  const investorIsPaid = topSecretIsActive && !investorIsAppTrial;
+  const investorTrialEndsAt = profile?.top_secret_expires_at ?? null;
+  const investorTrialEndsMs = investorTrialEndsAt ? new Date(investorTrialEndsAt).getTime() : NaN;
+  const investorTrialDaysLeft = Number.isFinite(investorTrialEndsMs)
+    ? Math.max(0, Math.ceil((investorTrialEndsMs - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
+
   // Resolve the user's unified membership tier (same logic as the TopNav badge)
   // and derive accent colors for the tier-themed subscriptions card.
   // v2026-07: an active Top Secret sub resolves to the INVESTOR tier.
@@ -546,18 +562,20 @@ export const BillingTab = () => {
               <div>
                 <h2 className="font-semibold text-white text-lg">Active Plans</h2>
                 <p className="text-xs font-medium" style={{ color: tierConfig.labelColor }}>
-                  {tierConfig.label} membership
+                  {tierConfig.label}{isAppTrial ? ' · 14-day full access' : ' membership'}
                 </p>
               </div>
             </div>
-            <a
-              href="https://whop.com/@me/settings/orders/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
-            >
-              Manage on Whop <ExternalLink className="w-3 h-3" />
-            </a>
+            {!isAppTrial && (
+              <a
+                href="https://whop.com/@me/settings/orders/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
+              >
+                Manage on Whop <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
 
           {/* Plan rows — inner panel */}
@@ -613,11 +631,21 @@ export const BillingTab = () => {
         <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
           <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
           <span className="text-xs text-zinc-500 w-20 shrink-0">Trader</span>
-          <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', journalInfo.color)}>
-            {journalInfo.name}
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', isAppTrial ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : journalInfo.color)}>
+            {isAppTrial ? 'Trial' : journalInfo.name}
           </span>
           <div className="ml-auto flex items-center gap-2">
-            {journalIsFree ? (
+            {isAppTrial ? (
+              <>
+                <span className="text-xs text-zinc-500">Included · ends {formatDate(profile?.trial_ends_at ?? investorTrialEndsAt)}</span>
+                <button
+                  onClick={() => navigate('/app/upgrade')}
+                  className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-medium transition-colors"
+                >
+                  Upgrade
+                </button>
+              </>
+            ) : journalIsFree ? (
               <button
                 onClick={() => navigate('/app/journal/overview')}
                 className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-medium transition-colors"
@@ -662,7 +690,9 @@ export const BillingTab = () => {
           <Mail className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
           <span className="text-xs text-zinc-500 w-20 shrink-0">Investor</span>
           <span className="text-xs text-zinc-300">
-            {newsletterIsActive || topSecretStatus === 'active' || topSecretStatus === 'trial'
+            {investorIsAppTrial
+              ? 'Trial'
+              : (newsletterIsActive || topSecretStatus === 'active')
               ? 'Active'
               : 'None'}
           </span>
@@ -781,7 +811,7 @@ export const BillingTab = () => {
                 <p className="text-xs text-zinc-400">Intel, Research &amp; AI — The Investor Desk</p>
               </div>
             </div>
-            {topSecretIsActive && (
+            {investorIsPaid && (
               <a
                 href="https://whop.com/@me/settings/orders/"
                 target="_blank"
@@ -815,6 +845,8 @@ export const BillingTab = () => {
                   "px-2.5 py-1",
                   profile?.top_secret_cancel_at_period_end
                     ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    : investorIsAppTrial
+                    ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
                     : topSecretIsActive
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                     : topSecretStatus === 'cancelled'
@@ -823,6 +855,8 @@ export const BillingTab = () => {
                 )}>
                   {profile?.top_secret_cancel_at_period_end ? (
                     <><Clock className="w-3 h-3 mr-1" />Cancelling</>
+                  ) : investorIsAppTrial ? (
+                    <><Clock className="w-3 h-3 mr-1" />Trial</>
                   ) : topSecretIsActive ? (
                     <><CheckCircle2 className="w-3 h-3 mr-1" />Active</>
                   ) : topSecretStatus === 'cancelled' ? (
@@ -834,7 +868,14 @@ export const BillingTab = () => {
               </div>
               <div className="text-right">
                 {topSecretIsActive ? (
-                  topSecretInterval === 'yearly' ? (
+                  investorIsAppTrial ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white">Free trial</span>
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs px-2 py-0.5">
+                        {investorTrialDaysLeft} day{investorTrialDaysLeft === 1 ? '' : 's'} left
+                      </Badge>
+                    </div>
+                  ) : topSecretInterval === 'yearly' ? (
                     <span className="text-xl font-bold text-white">$499/yr</span>
                   ) : topSecretPricing.isInTrial ? (
                     <div className="flex items-center gap-2">
@@ -888,17 +929,17 @@ export const BillingTab = () => {
               )}>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
+                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">{investorIsAppTrial ? 'Access' : 'Billing cycle'}</p>
                     <p className={cn(
                       "capitalize font-medium",
                       topSecretInterval === 'yearly' ? "text-yellow-300" : "text-zinc-200"
                     )}>
-                      {topSecretInterval === 'yearly' ? '✨ Yearly' : 'Monthly'}
+                      {investorIsAppTrial ? 'Trial' : topSecretInterval === 'yearly' ? '✨ Yearly' : 'Monthly'}
                     </p>
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
-                      {topSecretPricing.isInTrial ? 'First charge' : 'Next billing'}
+                      {investorIsAppTrial ? 'Trial ends' : topSecretPricing.isInTrial ? 'First charge' : 'Next billing'}
                     </p>
                     <p className="text-zinc-200 font-medium flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
@@ -912,7 +953,12 @@ export const BillingTab = () => {
 
                 {topSecretInterval === 'monthly' && (
                   <div className="mt-3 pt-3 border-t border-zinc-700/30">
-                    {topSecretPricing.isInTrial ? (
+                    {investorIsAppTrial ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">Free Trial</Badge>
+                        <span className="text-zinc-400">→ $49/mo only if you upgrade</span>
+                      </div>
+                    ) : topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">14-Day Trial</Badge>
                         <span className="text-zinc-400">→ Then $49/mo after trial</span>
@@ -930,7 +976,7 @@ export const BillingTab = () => {
 
                 {profile?.top_secret_started_at && (
                   <div className="mt-2 pt-2 border-t border-zinc-700/30">
-                    <p className="text-xs text-zinc-500">Member since {formatDate(profile.top_secret_started_at)}</p>
+                    <p className="text-xs text-zinc-500">{isAppTrial ? 'Trial started' : 'Member since'} {formatDate(profile.top_secret_started_at)}</p>
                   </div>
                 )}
               </div>
@@ -951,12 +997,12 @@ export const BillingTab = () => {
                         )}
                       </span>
                     ) : (
-                      <span>Full classified access</span>
+                      <span>{isAppTrial ? 'Full access included in your 14-day trial' : 'Full classified access'}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
-                    {topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && (
+                    {investorIsPaid && topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && (
                       <Button
                         size="sm"
                         onClick={handleUpgradeTopSecretToYearly}
@@ -970,7 +1016,15 @@ export const BillingTab = () => {
                         )}
                       </Button>
                     )}
-                    {profile?.top_secret_cancel_at_period_end ? (
+                    {investorIsAppTrial ? (
+                      <Button
+                        size="sm"
+                        onClick={() => navigate('/app/top-secret')}
+                        className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all"
+                      >
+                        <Crown className="w-3.5 h-3.5 mr-1.5" />Keep Investor access
+                      </Button>
+                    ) : profile?.top_secret_cancel_at_period_end ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1206,7 +1260,9 @@ export const BillingTab = () => {
       <Card className="p-4 bg-zinc-900/30 border-zinc-800">
         <p className="text-sm text-zinc-500 flex items-center gap-2">
           <ExternalLink className="w-4 h-4" />
-          All subscriptions are managed through Whop. Click "Manage on Whop" to update your plan, billing, or cancel.
+          {isAppTrial
+            ? "You're on a 14-day free trial. No billing yet, and nothing to cancel. Upgrade anytime to keep full access."
+            : 'All subscriptions are managed through Whop. Click "Manage on Whop" to update your plan, billing, or cancel.'}
         </p>
       </Card>
 
