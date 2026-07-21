@@ -469,6 +469,13 @@ export interface DepthMatrixLayerProps {
    * MarketScanner.tsx and any other caller that doesn't pass this prop.
    */
   sensitivity?: DepthSensitivity;
+  /**
+   * Opt-in Bookmap-style clean visual model (steeper alpha ramp — see
+   * depthSignificance.ts's softKneeAlpha doc comment). Default 'legacy' —
+   * safe no-op for MarketScanner.tsx and any other caller that doesn't pass
+   * this prop; the continuous soft-knee formula is unchanged.
+   */
+  depthVisualModel?: 'legacy' | 'clean';
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -485,6 +492,7 @@ export function DepthMatrixLayer({
   palette = 'classic',
   smoothing = false,
   sensitivity = 'balanced',
+  depthVisualModel = 'legacy',
 }: DepthMatrixLayerProps) {
   const canvasRef          = useRef<HTMLCanvasElement>(null);
   const offscreenRef       = useRef<OffscreenCanvas | null>(null);
@@ -572,6 +580,7 @@ export function DepthMatrixLayer({
   const paletteRef         = useRef<DepthPaletteId>(palette);
   const smoothingRef       = useRef<boolean>(smoothing);
   const sensitivityRef     = useRef<DepthSensitivity>(sensitivity);
+  const visualModelRef     = useRef<'legacy' | 'clean'>(depthVisualModel);
 
   columnsRef.current        = columns;
   binSizeRef.current        = binSize;
@@ -582,6 +591,7 @@ export function DepthMatrixLayer({
   paletteRef.current        = palette;
   smoothingRef.current      = smoothing;
   sensitivityRef.current    = sensitivity;
+  visualModelRef.current    = depthVisualModel;
 
   // Phase 6 — arms the debounced full-rebuild timer. Idempotent while
   // already armed (lets it fire once rather than perpetually resetting).
@@ -750,6 +760,7 @@ export function DepthMatrixLayer({
       rawIntervalMs,
       bucketFactor,
       paneHeightPxEstimate: heightRef.current,
+      visualModel: visualModelRef.current,
     };
     pendingJobsRef.current.set(jobId, {
       zoomMult,

@@ -202,7 +202,7 @@ const LEGACY_WEAK_CELL_T_CAP = 0.10;
  * cell — this runs O(window-cells) times per rebuild so avoiding per-cell
  * allocation matters.
  */
-export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: number) {
+export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: number, visualModel: 'legacy' | 'clean' = 'legacy') {
   let lastHot = false;
   const colorOf = (q: number, persistMult: number): number => {
     lastHot = false;
@@ -234,7 +234,7 @@ export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legac
     // visible at full strength in its first column — this is the single
     // funnel both the full repaint and the append fast path go through, so
     // the gate applies consistently everywhere.
-    const alpha = softKneeAlpha(usd, vLo) * sizeGatedPersistenceFactor(persistMult, usd, vLo);
+    const alpha = softKneeAlpha(usd, vLo, undefined, visualModel) * sizeGatedPersistenceFactor(persistMult, usd, vLo);
     const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
     if (a === 0) {
       // Hide floor (2026-07-20): a fully-transparent cell must be COMPLETELY
@@ -339,12 +339,17 @@ export function paintColumnsRangeToBuffer(
   // contribution was already committed into the caller's persistence base
   // snapshot. Defaults to `rangeStart` (bump everything).
   bumpRangeStart: number = rangeStart,
+  // Opt-in Bookmap-style clean visual model (steeper alpha ramp — see
+  // depthSignificance.ts's softKneeAlpha). Defaults to 'legacy' so every
+  // existing caller (MarketScanner, DepthMatrixLayer's live-append path)
+  // stays byte-identical unless explicitly threaded through.
+  visualModel: 'legacy' | 'clean' = 'legacy',
 ): void {
   const width = rangeEnd - rangeStart;
   if (width <= 0) return;
 
   const hotMask = smoothingEnabled && bloomEnabled ? scratchU8Zeroed(width * numRows) : null;
-  const { colorOf, wasHot } = makeQToColorFn(vHi, vLo, lut, legacyQCut);
+  const { colorOf, wasHot } = makeQToColorFn(vHi, vLo, lut, legacyQCut, visualModel);
 
   for (let ci = rangeStart; ci < rangeEnd; ci++) {
     const col = cols[ci];
@@ -453,6 +458,8 @@ export interface RasterJob {
   rawIntervalMs: number;
   bucketFactor: number;
   paneHeightPxEstimate: number;
+  /** Opt-in Bookmap-style clean visual model — see depthSignificance.ts's softKneeAlpha doc comment. Defaults to 'legacy' (byte-identical to pre-existing behavior) if undefined. */
+  visualModel: 'legacy' | 'clean';
 }
 
 /** The rebuild's complete output — pixels + every meta field the main thread needs to commit. `pixels` is transferable (postMessage transfer list) for a zero-copy return. */
@@ -535,6 +542,7 @@ export function computeFullRaster(job: RasterJob): RasterResult {
     bucketFactor,
     paneHeightPxEstimate,
   } = job;
+  const visualModel = job.visualModel ?? 'legacy';
 
   const rawWindowCols = windowRawCols;
   if (rawWindowCols.length === 0) return emptyResult(job);
@@ -700,6 +708,8 @@ export function computeFullRaster(job: RasterJob): RasterResult {
     bloomEnabled,
     persistMap,
     rowMergeFactor,
+    0, // bumpRangeStart — full window rebuild always bumps everything
+    visualModel,
   );
 
   // LOD append bookkeeping — track the currently-open LAST painted bucket's

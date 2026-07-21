@@ -73,6 +73,7 @@ function makeBasicJob(overrides: Partial<RasterJob> = {}): RasterJob {
     rawIntervalMs: 5000,
     bucketFactor: 1,
     paneHeightPxEstimate: 800,
+    visualModel: 'legacy',
     ...overrides,
   };
 }
@@ -201,5 +202,40 @@ describe('computeFullRaster', () => {
     expect(result.rawNumRows).toBeGreaterThan(MAX_GRID_ROWS);
     expect(result.paintedNumRows).toBeLessThanOrEqual(MAX_GRID_ROWS);
     expect(result.rowMergeFactor).toBeGreaterThanOrEqual(2);
+  });
+
+  describe('visualModel gating (Step 1 — clean vs legacy alpha)', () => {
+    it('clean mode hides a sub-knee cell that legacy still paints', () => {
+      // usd=10,000 is 0.1x vLo (100,000): above legacy's HIDE_BELOW_KNEE_FRACTION
+      // (0.02 -> $2,000 hide floor, so legacy paints it faint) but below clean's
+      // CLEAN_HIDE_BELOW_KNEE_FRACTION (0.6 -> $60,000 hide floor, so clean hides
+      // it entirely) — see depthSignificance.ts's softKneeAlpha.
+      const anchor = 65_000;
+      const binSize = 10;
+      const price = 64_990;
+      const usd = 10_000;
+      const col = makeColumn(1_000_000, anchor, binSize, [[price, usd]], []);
+
+      const legacyJob = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'legacy' });
+      const cleanJob = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'clean' });
+
+      const legacyResult = computeFullRaster(legacyJob);
+      const cleanResult = computeFullRaster(cleanJob);
+
+      expect(legacyResult.empty).toBe(false);
+      expect(hasNonzeroPixel(legacyResult.pixels!)).toBe(true);
+
+      expect(cleanResult.empty).toBe(false);
+      expect(hasNonzeroPixel(cleanResult.pixels!)).toBe(false);
+    });
+
+    it('defaults to legacy when visualModel is omitted from the job (backward compat)', () => {
+      const job = makeBasicJob() as Partial<RasterJob> as RasterJob;
+      // Simulate an older caller that never set visualModel at all.
+      delete (job as { visualModel?: 'legacy' | 'clean' }).visualModel;
+      const result = computeFullRaster(job);
+      expect(result.empty).toBe(false);
+      expect(hasNonzeroPixel(result.pixels!)).toBe(true);
+    });
   });
 });

@@ -65,6 +65,12 @@ export const SOFT_KNEE_MIN_ALPHA = 0.05;
 /** Cells below this fraction of the knee are HIDDEN outright (alpha 0) rather than painted faint — the balanced noise-cleanup level Elad picked (2026-07-20). */
 export const HIDE_BELOW_KNEE_FRACTION = 0.02;
 
+// Clean visual model (Bookmap-style): hide everything below a high fraction of
+// the knee, and paint survivors at near-full alpha — kills the faint-cell soup.
+// Tune these two to taste (raise HIDE fraction / MIN_ALPHA => cleaner/harsher).
+export const CLEAN_HIDE_BELOW_KNEE_FRACTION = 0.6;
+export const CLEAN_SOFT_KNEE_MIN_ALPHA = 0.85;
+
 /**
  * Continuous per-cell alpha for the depth-matrix render: 0 below the hide
  * floor (`kneeUsd * HIDE_BELOW_KNEE_FRACTION`), then a smoothstep ramp from
@@ -73,10 +79,26 @@ export const HIDE_BELOW_KNEE_FRACTION = 0.02;
  * continuous shape reads naturally with no visible seam at the knee.
  * `kneeUsd <= 0` (no meaningful knee — e.g. an empty/degenerate window)
  * returns full alpha rather than dividing by zero.
+ *
+ * `mode` defaults to `'legacy'` (unchanged behavior — every existing caller
+ * is byte-identical). `'clean'` is an opt-in Bookmap-style variant: cells
+ * below `CLEAN_HIDE_BELOW_KNEE_FRACTION` of the knee are hidden entirely,
+ * and survivors ramp steeply to `CLEAN_SOFT_KNEE_MIN_ALPHA` (near-opaque)
+ * across the remaining narrow band — kills the "soup of faint cells" that
+ * softKneeAlpha's wide legacy ramp produces.
  */
-export function softKneeAlpha(usd: number, kneeUsd: number, minAlpha = SOFT_KNEE_MIN_ALPHA): number {
+export function softKneeAlpha(usd: number, kneeUsd: number, minAlpha = SOFT_KNEE_MIN_ALPHA, mode: 'legacy' | 'clean' = 'legacy'): number {
   if (!Number.isFinite(usd) || usd <= 0) return 0;
   if (!Number.isFinite(kneeUsd) || kneeUsd <= 0) return 1;
+  if (mode === 'clean') {
+    if (usd < kneeUsd * CLEAN_HIDE_BELOW_KNEE_FRACTION) return 0; // hard hide floor
+    const x = Math.min(1, Math.max(0, usd / kneeUsd));
+    const lo = CLEAN_HIDE_BELOW_KNEE_FRACTION;
+    const t = Math.min(1, Math.max(0, (x - lo) / (1 - lo))); // 0..1 across [hideFloor, knee]
+    const smooth = t * t * (3 - 2 * t); // smoothstep on the narrow band
+    return CLEAN_SOFT_KNEE_MIN_ALPHA + (1 - CLEAN_SOFT_KNEE_MIN_ALPHA) * smooth;
+  }
+  // ── legacy path: EXACTLY the current body, unchanged ──
   if (usd < kneeUsd * HIDE_BELOW_KNEE_FRACTION) return 0; // hide floor — sub-noise cells vanish, not dim
   const x = Math.min(1, Math.max(0, usd / kneeUsd));
   const smooth = x * x * (3 - 2 * x); // smoothstep

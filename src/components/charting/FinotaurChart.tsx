@@ -979,6 +979,14 @@ export interface FinotaurChartProps {
    */
   depthMatrixSensitivity?: DepthSensitivity;
   /**
+   * Opt-in Bookmap-style clean visual model for the depth matrix (matrix
+   * mode only — see DepthMatrixLayer.tsx's `depthVisualModel` prop /
+   * depthSignificance.ts's softKneeAlpha doc comment). Default 'legacy' —
+   * safe no-op for MarketScanner.tsx and every other caller that doesn't
+   * pass this prop.
+   */
+  depthMatrixVisualModel?: 'legacy' | 'clean';
+  /**
    * Optional "executed aggression" volume bubbles overlay (ATAS/Bookmap-
    * style sized circles at (time, price) for trade prints whose dominant-
    * side volume clears a threshold — see volumeBubbles.ts). Mounts
@@ -1261,6 +1269,7 @@ export function FinotaurChart({
   depthMatrixPalette = 'classic',
   depthMatrixSmoothing = false,
   depthMatrixSensitivity = 'balanced',
+  depthMatrixVisualModel = 'legacy',
   liquidityBand = null,
   onManualPriceScale,
   onBarsLoad,
@@ -2974,6 +2983,7 @@ export function FinotaurChart({
           palette={depthMatrixPalette}
           smoothing={depthMatrixSmoothing}
           sensitivity={depthMatrixSensitivity}
+          depthVisualModel={depthMatrixVisualModel}
         />
       )}
 
