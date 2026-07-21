@@ -23,7 +23,7 @@
 //     (restoredRef) feeding that same pipeline is the smallest fit.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { RawSlice, DecodedColumn, BinRecord } from './depthTypes';
+import type { DecodedColumn, BinRecord } from './depthTypes';
 import {
   capColumnsForSave,
   loadDepthHistory,
@@ -285,7 +285,7 @@ function dominantBinSize(columns: DecodedColumn[]): number {
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 const LIVE_EDGE_INTERVAL_MS = 5_000;
-const WORKER_TIMEOUT_MS = 10_000;
+const WORKER_TIMEOUT_MS = 15_000; // covers JSON.parse(~8-9MB) + decode, now both in the worker
 
 // Phase 2 persistence tuning — duplicated (not imported) from
 // useLiveDepthColumns.ts's PERSIST_SAVE_INTERVAL_MS / RESTORE_MAX_AGE_MS,
@@ -323,8 +323,11 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
 
   // Worker instance — created once per hook mount.
   const workerRef = useRef<Worker | null>(null);
-  // Pending decode requests: id → resolve callback.
-  const pendingRef = useRef<Map<number, (cols: DecodedColumn[]) => void>>(new Map());
+  // Pending decode requests: id → resolve/reject pair. reject is fired when
+  // the worker signals a parse/decode failure (ok:false) so a corrupt body
+  // surfaces as a rejection the fetch loop can `break` on — rather than being
+  // silently indistinguishable from a legit empty response.
+  const pendingRef = useRef<Map<number, { resolve: (cols: DecodedColumn[]) => void; reject: (err: Error) => void }>>(new Map());
   const nextIdRef = useRef<number>(0);
 
   // Historical columns keyed by t (ms) — de-duplicated across paginated fetches.
@@ -360,12 +363,17 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     );
 
     w.onmessage = (evt: MessageEvent) => {
-      const msg = evt.data as { type: string; columns: DecodedColumn[]; id: number };
+      const msg = evt.data as { type: string; columns: DecodedColumn[]; id: number; ok?: boolean };
       if (msg.type !== 'decoded') return;
-      const resolve = pendingRef.current.get(msg.id);
-      if (resolve) {
+      const pending = pendingRef.current.get(msg.id);
+      if (pending) {
         pendingRef.current.delete(msg.id);
-        resolve(msg.columns);
+        if (msg.ok === false) {
+          console.warn('[useDepthSlices] worker failed to parse/decode a chunk body');
+          pending.reject(new Error('Depth chunk parse/decode failed'));
+        } else {
+          pending.resolve(msg.columns);
+        }
       }
     };
 
@@ -378,30 +386,28 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     };
   }, []);
 
-  // ── Decode via worker ─────────────────────────────────────────────────────
-  const decodeSlices = useCallback((slices: RawSlice[]): Promise<DecodedColumn[]> => {
+  // ── Parse + decode via worker ─────────────────────────────────────────────
+  // The worker JSON.parses the raw response body (off the main thread) AND
+  // decodes it. We transfer the ArrayBuffer (zero-copy) so the ~8-9MB body
+  // never gets structure-cloned across the boundary either.
+  const parseAndDecode = useCallback((buf: ArrayBuffer): Promise<DecodedColumn[]> => {
     return new Promise((resolve, reject) => {
       const worker = workerRef.current;
       if (!worker) { reject(new Error('Worker not ready')); return; }
 
       const id = nextIdRef.current++;
-      pendingRef.current.set(id, resolve);
-
-      // Timeout guard
       const timer = setTimeout(() => {
         if (pendingRef.current.has(id)) {
           pendingRef.current.delete(id);
           reject(new Error('Worker decode timeout'));
         }
       }, WORKER_TIMEOUT_MS);
-
-      const origResolve = pendingRef.current.get(id)!;
-      pendingRef.current.set(id, (cols) => {
-        clearTimeout(timer);
-        origResolve(cols);
+      pendingRef.current.set(id, {
+        resolve: (cols) => { clearTimeout(timer); resolve(cols); },
+        reject: (err) => { clearTimeout(timer); reject(err); },
       });
 
-      worker.postMessage({ type: 'decode', slices, id });
+      worker.postMessage({ type: 'parseDecode', buf, id }, [buf]);
     });
   }, []);
 
@@ -593,6 +599,12 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
       // the entire point.
       const SETTLED_AGE_MS = 10 * 60_000; // matches the server's isFullyHistorical margin
       const settledBefore = now - SETTLED_AGE_MS;
+      // Rebuild the grid at most twice per cold-load fetch (not once per
+      // chunk): paint immediately after the first data chunk lands (newest,
+      // since the loop is newest-first), then one trailing rebuild after all
+      // chunks. Avoids the O(N^2) full-grid rebuild that ran per chunk.
+      let firstPaintDone = false;
+      let pendingRebuild = false;
       // Newest-first: the visible window hugs 'to', so the most recent chunk paints immediately; older chunks backfill.
       for (const gap of [...gaps].reverse()) {
         let cursor = gap.to;
@@ -609,13 +621,20 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
           try {
             const resp = await fetch(url, { signal: controller.signal });
             if (!resp.ok) break;
-            const data = await resp.json() as { symbol: string; res: string; slices: RawSlice[] };
-            if (data.slices && data.slices.length > 0) {
-              const decoded = await decodeSlices(data.slices);
+            // Read the raw body (download only — no main-thread JSON.parse) and
+            // hand the ArrayBuffer to the worker, which parses AND decodes it.
+            const buf = await resp.arrayBuffer();
+            const decoded = await parseAndDecode(buf);
+            if (decoded.length > 0) {
               for (const col of decoded) {
                 historicalRef.current.set(col.t, col);
               }
-              rebuildState(res);
+              if (!firstPaintDone) {
+                firstPaintDone = true;
+                rebuildState(res); // instant first paint (newest chunk)
+              } else {
+                pendingRebuild = true;
+              }
             }
           } catch {
             // Network errors / timeouts: stop this gap silently — heatmap
@@ -629,6 +648,9 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
           cursor = chunkStart;
         }
       }
+
+      // One trailing rebuild folds in every backfilled chunk after the first.
+      if (pendingRebuild) rebuildState(res);
     }
 
     // Replace prior coverage for this resolution with the full requested
@@ -638,7 +660,7 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
     // unboundedly across ticks.
     fetchedWindowsRef.current = fetchedWindowsRef.current.filter(w => w.res !== res);
     fetchedWindowsRef.current.push({ from: winFrom, to: winTo, res, fetchedAt: now });
-  }, [decodeSlices, rebuildState]);
+  }, [parseAndDecode, rebuildState]);
 
   // ── Fetch on window or resolution change ─────────────────────────────────
   useEffect(() => {
