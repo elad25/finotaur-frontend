@@ -22,6 +22,8 @@ import {
   Link2,
   ShieldCheck,
   Gift,
+  FileText,
+  CreditCard,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
@@ -55,12 +57,12 @@ const TRIAL_POINTS: { icon: LucideIcon; title: string; body: string }[] = [
       'Connect your broker, trades sync automatically, unlimited journaling, trade copier, Shadow, Revenge Radar, Leak Detector, and risk tools.',
   },
   {
-    icon: Newspaper,
+    icon: FileText,
     title: 'Full Investor access',
-    body: 'Top Secret research and WAR ZONE reports — fully unlocked.',
+    body: 'Top Secret research and WAR ZONE reports, fully unlocked during your trial.',
   },
   {
-    icon: ShieldCheck,
+    icon: CreditCard,
     title: 'No credit card, ever',
     body: 'Nothing is charged. The trial simply ends after 14 days.',
   },
@@ -69,6 +71,16 @@ const TRIAL_POINTS: { icon: LucideIcon; title: string; body: string }[] = [
     title: 'You keep a free plan',
     body:
       'After 14 days your journal history stays, plus 10 manual trades and preview mode. Upgrade anytime to keep full access.',
+  },
+  {
+    icon: Link2,
+    title: 'Best first step',
+    body: 'Connect your broker now so every screen fills with your real trading data.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Your data is safe',
+    body: 'Bank-grade security. We never share your data. You are always in control.',
   },
 ];
 
@@ -188,14 +200,16 @@ export default function WelcomeIntro() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         style={{
           width: '100%',
-          maxWidth: `min(${isAppTrial ? 620 : 560}px, calc(100vw - 2rem))`,
+          maxWidth: isAppTrial
+            ? 'min(980px, calc(100vw - 2rem))'
+            : 'min(560px, calc(100vw - 2rem))',
         }}
       >
         {/* Card frame */}
         <Card
           variant="featured"
           padding="spacious"
-          className="relative w-full overflow-hidden"
+          className="relative w-full overflow-x-hidden overflow-y-auto max-h-[90vh]"
           style={{
             background: 'linear-gradient(180deg, #121212 0%, #0c0c0c 100%)',
             boxShadow: '0 0 30px rgba(201,166,70,0.07)',
@@ -226,32 +240,29 @@ export default function WelcomeIntro() {
               <Wordmark size="large" tone="gradient" />
             </div>
 
-            <img
-              src="/BULL%20ONLY.png"
-              alt=""
-              aria-hidden="true"
-              className="h-36 w-auto -mt-1"
-              style={{
-                maskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
-                WebkitMaskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
-              }}
-            />
-
             {isAppTrial ? (
               <>
                 {/* Trial welcome — detailed explanation is the first thing a
-                    new trial user sees, per the trial-phase1 spec. */}
+                    new trial user sees, per the trial-phase1 spec. Wide
+                    3-column layout, no bull graphic — the Wordmark above
+                    carries the brand. */}
                 <p className="text-sm font-medium text-ink-secondary">
                   {firstName ? `Welcome, ${firstName}` : 'Welcome to Finotaur'}
                 </p>
 
                 {/* Headline */}
-                <h1 className="text-2xl md:text-4xl font-bold text-ink-primary tracking-tight leading-tight">
-                  Everything is unlocked for 14 days
+                <h1 className="text-3xl md:text-4xl font-bold text-ink-primary tracking-tight leading-tight">
+                  Everything is unlocked for the next 14 days.
                 </h1>
 
+                {/* Subhead */}
+                <p className="text-ink-secondary text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+                  Explore every tool, every feature, and every edge Finotaur has to
+                  offer. No limits. No payments. Just your full trading advantage.
+                </p>
+
                 {/* Detail cards — scannable explanation of what's included */}
-                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-left">
+                <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 text-left">
                   {TRIAL_POINTS.map(({ icon: Icon, title, body }, i) => (
                     <motion.div
                       key={title}
@@ -288,54 +299,43 @@ export default function WelcomeIntro() {
                   ))}
                 </div>
 
-                {/* Best-first-step callout — leads into the primary CTA */}
+                {/* Bottom CTA bar — horizontal on desktop, stacked on mobile */}
                 <Card
                   variant="featured"
                   padding="compact"
                   className="w-full text-left"
                 >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                      style={{
-                        background: 'rgba(201,166,70,0.14)',
-                        border: '1px solid rgba(201,166,70,0.3)',
-                      }}
-                    >
-                      <Link2 className="h-4 w-4" style={{ color: '#C9A646' }} />
-                    </span>
-                    <p className="text-sm text-ink-secondary leading-snug">
-                      <span className="font-semibold text-ink-primary">
-                        Best first step —{' '}
-                      </span>
-                      connect your broker now so every screen fills with your real
-                      trading data.
-                    </p>
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-ink-primary">
+                        Let's get you connected
+                      </p>
+                      <p className="text-sm text-ink-secondary">
+                        Connect your broker and start seeing your data in real-time.
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                      <Button
+                        variant="gold"
+                        size="xl"
+                        showArrow
+                        onClick={handleConnectBroker}
+                        className="w-full md:w-auto"
+                      >
+                        Connect your broker
+                      </Button>
+                      <Button
+                        variant="goldOutline"
+                        size="xl"
+                        showArrow={false}
+                        onClick={handleStart}
+                        className="w-full md:w-auto"
+                      >
+                        Explore the app first
+                      </Button>
+                    </div>
                   </div>
                 </Card>
-
-                {/* CTA row — primary connects the broker, secondary continues
-                    into the app first (same behavior as "Let's Start!"). */}
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                  <Button
-                    variant="gold"
-                    size="xl"
-                    showArrow={false}
-                    onClick={handleConnectBroker}
-                    className="w-full sm:flex-1"
-                  >
-                    Connect your broker
-                  </Button>
-                  <Button
-                    variant="goldOutline"
-                    size="xl"
-                    showArrow={false}
-                    onClick={handleStart}
-                    className="w-full sm:flex-1"
-                  >
-                    Explore the app first
-                  </Button>
-                </div>
               </>
             ) : (
               <>
