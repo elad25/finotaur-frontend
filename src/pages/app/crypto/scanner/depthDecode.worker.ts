@@ -4,6 +4,8 @@
 //
 // Protocol:
 //   In:  { type: 'decode', slices: RawSlice[], id: number }
+//   In:  { type: 'parseDecode', buf: ArrayBuffer, id: number }
+//        → worker JSON.parses the raw body off the main thread
 //   Out: { type: 'decoded', columns: DecodedColumn[], id: number }
 //
 // Encoding: bids/asks are base64 of packed 4-byte LE records.
@@ -47,20 +49,49 @@ function decodeSide(b64: string, anchor: number, binSize: number): BinRecord[] {
   return records;
 }
 
-// ── Message handler ───────────────────────────────────────────────────────────
+// ── Decode one slice → column ─────────────────────────────────────────────────
 
-self.onmessage = (evt: MessageEvent) => {
-  const msg = evt.data as { type: string; slices: RawSlice[]; id: number };
-  if (msg.type !== 'decode') return;
-
-  const columns: DecodedColumn[] = msg.slices.map(slice => ({
+function decodeSliceToColumn(slice: RawSlice): DecodedColumn {
+  return {
     t:       slice.t,
     anchor:  slice.anchor,
     binSize: slice.binSize,
     flags:   slice.flags,
     bids:    decodeSide(slice.bids, slice.anchor, slice.binSize),
     asks:    decodeSide(slice.asks, slice.anchor, slice.binSize),
-  }));
+  };
+}
 
-  self.postMessage({ type: 'decoded', columns, id: msg.id });
+// ── Message handler ───────────────────────────────────────────────────────────
+
+self.onmessage = (evt: MessageEvent) => {
+  const msg = evt.data as
+    | { type: 'decode'; slices: RawSlice[]; id: number }
+    | { type: 'parseDecode'; buf: ArrayBuffer; id: number };
+
+  if (msg.type === 'parseDecode') {
+    let columns: DecodedColumn[] = [];
+    let ok = true;
+    try {
+      // Both the JSON.parse AND the base64/record decode run inside the
+      // try: a truncated body can be valid JSON but carry corrupt base64,
+      // so decode errors must also flip ok=false (not throw uncaught in a
+      // worker with no onerror handler → the caller would only recover via
+      // the 15s timeout).
+      const text = new TextDecoder().decode(new Uint8Array(msg.buf));
+      const data = JSON.parse(text) as { slices?: RawSlice[] };
+      columns = (data.slices ?? []).map(decodeSliceToColumn);
+    } catch {
+      ok = false;
+      columns = [];
+    }
+    self.postMessage({ type: 'decoded', columns, id: msg.id, ok });
+    return;
+  }
+
+  if (msg.type === 'decode') {
+    const columns: DecodedColumn[] = msg.slices.map(decodeSliceToColumn);
+    self.postMessage({ type: 'decoded', columns, id: msg.id, ok: true });
+    return;
+  }
 };
