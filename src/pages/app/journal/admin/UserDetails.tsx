@@ -22,7 +22,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getUserById } from '@/services/adminService';
+import { getUserById, getSignupAttribution, SignupAttribution } from '@/services/adminService';
 import { UserWithStats } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import ChangeSubscriptionModal from '@/components/admin/ChangeSubscriptionModal';
@@ -40,6 +40,7 @@ export default function UserDetails() {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserWithStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attribution, setAttribution] = useState<SignupAttribution | null>(null);
   
   // 🎭 Impersonation
   const { startImpersonation } = useImpersonation();
@@ -62,6 +63,10 @@ export default function UserDetails() {
       setLoading(true);
       const data = await getUserById(userId!);
       setUser(data);
+
+      // 🎯 Signup traffic attribution — defensive, never throws
+      const attributionMap = await getSignupAttribution([userId!]);
+      setAttribution(attributionMap.get(userId!) || null);
     } catch (error) {
       console.error('❌ Error loading user details:', error);
       toast.error('Failed to load user details');
@@ -269,6 +274,100 @@ export default function UserDetails() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ✅ NEW: Traffic Source Card */}
+          <div className="bg-[#111111] border border-gray-800 rounded-lg p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              🎯 Traffic Source
+            </h2>
+            {attribution && (
+              attribution.utmSource ||
+              attribution.utmMedium ||
+              attribution.campaign ||
+              attribution.adName ||
+              attribution.metaAdId ||
+              attribution.referrer ||
+              attribution.landingPage ||
+              attribution.touchCount
+            ) ? (
+              <div className="space-y-3">
+                {attribution.utmSource && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Source:</span>
+                    <span className="text-white text-sm">{attribution.utmSource}</span>
+                  </div>
+                )}
+
+                {attribution.utmMedium && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Medium:</span>
+                    <span className="text-white text-sm">{attribution.utmMedium}</span>
+                  </div>
+                )}
+
+                {attribution.campaign && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Campaign:</span>
+                    <span className="text-white text-sm">{attribution.campaign}</span>
+                  </div>
+                )}
+
+                {attribution.adName && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Ad:</span>
+                    <span className="text-white text-sm">{attribution.adName}</span>
+                  </div>
+                )}
+
+                {attribution.metaAdId && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Meta Ad ID:</span>
+                    <code className="text-white text-xs font-mono bg-[#0A0A0A] px-2 py-1 rounded">
+                      {attribution.metaAdId}
+                    </code>
+                  </div>
+                )}
+
+                {attribution.referrer && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Referrer:</span>
+                    <span
+                      className="text-white text-sm truncate max-w-[180px]"
+                      title={attribution.referrer}
+                    >
+                      {attribution.referrer}
+                    </span>
+                  </div>
+                )}
+
+                {attribution.landingPage && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Landing Page:</span>
+                    <span
+                      className="text-white text-sm truncate max-w-[180px]"
+                      title={attribution.landingPage}
+                    >
+                      {attribution.landingPage}
+                    </span>
+                  </div>
+                )}
+
+                {attribution.touchCount != null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">Touches:</span>
+                    <span className="text-white text-sm">{attribution.touchCount}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 text-sm">Clicked Checkout:</span>
+                  <span className="text-white text-sm">{attribution.didCheckout ? 'Yes' : 'No'}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm">Organic / Direct — no ad attribution</div>
+            )}
           </div>
 
           {/* ✅ NEW: Affiliate Information Card */}

@@ -1611,3 +1611,84 @@ export async function getRevenueTruth(): Promise<AdminRevenueTruth | null> {
     return null;
   }
 }
+
+// ============================================
+// 🎯 TRAFFIC ATTRIBUTION — Per-user signup source
+// ============================================
+
+export interface SignupAttribution {
+  userId: string;
+  utmSource: string | null;
+  utmMedium: string | null;
+  campaign: string | null;
+  adName: string | null;
+  metaAdId: string | null;
+  referrer: string | null;
+  landingPage: string | null;
+  touchCount: number | null;
+  didCheckout: boolean;
+  didLogTrade: boolean;
+  signupTs: string;
+}
+
+// Row shape returned by the admin_signup_attribution SECURITY DEFINER RPC.
+interface AdminSignupAttributionRow {
+  user_id: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  campaign: string | null;
+  ad_name: string | null;
+  meta_ad_id: string | null;
+  referrer: string | null;
+  landing_page: string | null;
+  touch_count: number | null;
+  did_checkout: boolean;
+  did_log_trade: boolean;
+  signup_ts: string;
+}
+
+/**
+ * 🎯 Per-user signup traffic attribution (admin-only RPC). Pass userIds to
+ * filter, or omit/undefined for all users. Defensive: returns an empty Map
+ * (never throws) if the RPC is unavailable or errors, so the CRM still
+ * renders — users simply show as "Organic / Direct".
+ */
+export async function getSignupAttribution(
+  userIds?: string[]
+): Promise<Map<string, SignupAttribution>> {
+  try {
+    const { data, error } = await supabase.rpc('admin_signup_attribution', {
+      p_user_ids: userIds ?? null,
+    });
+
+    if (error) {
+      console.warn('⚠️ admin_signup_attribution RPC unavailable:', error.message);
+      return new Map();
+    }
+
+    const rows = (data || []) as AdminSignupAttributionRow[];
+    const map = new Map<string, SignupAttribution>();
+
+    for (const row of rows) {
+      map.set(row.user_id, {
+        userId: row.user_id,
+        utmSource: row.utm_source,
+        utmMedium: row.utm_medium,
+        campaign: row.campaign,
+        adName: row.ad_name,
+        metaAdId: row.meta_ad_id,
+        referrer: row.referrer,
+        landingPage: row.landing_page,
+        touchCount: row.touch_count,
+        didCheckout: Boolean(row.did_checkout),
+        didLogTrade: Boolean(row.did_log_trade),
+        signupTs: row.signup_ts,
+      });
+    }
+
+    return map;
+  } catch (err) {
+    console.warn('⚠️ getSignupAttribution failed:', err);
+    return new Map();
+  }
+}
