@@ -23,6 +23,18 @@
 //      chart with dozens of faint bands that read as noise and drowned the
 //      genuinely significant walls (Elad, 2026-07-20).
 
+/**
+ * Decode log-space q → USD notional. Canonical home of the wire encoding's
+ * decode half (moved here 2026-07-20 from useDepthSlices.ts, which
+ * re-exports it for its existing importers, so depthRasterCore.ts /
+ * depthRaster.worker.ts can use it without pulling a react-hook module into
+ * the worker bundle). MUST stay the exact inverse of useDepthSlices.ts's
+ * private `usdToQ` (Math.round(Math.log1p(usd) * 1000)).
+ */
+export function qToUsd(q: number): number {
+  return Math.expm1(q / 1000);
+}
+
 /** Fraction of a column/side's total notional used as the raw dust threshold before clamping. */
 export const DUST_PCT = 0.0002; // 0.02%
 /** Absolute floor for the dust cutoff — never treats less than this as "dust" even for a tiny column. */

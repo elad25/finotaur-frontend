@@ -31,7 +31,7 @@ import {
   pruneDepthHistory,
   saveDepthHistory,
 } from '@/pages/app/trading-arena/hooks/depthHistoryStore';
-import { dustCutoffUsd } from '@/components/charting/depthSignificance';
+import { dustCutoffUsd, qToUsd } from '@/components/charting/depthSignificance';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -93,10 +93,14 @@ export function computeDepthBinSize(mid: number): number {
   return 10 * mag;
 }
 
-/** Decode log-space q → USD notional */
-export function qToUsd(q: number): number {
-  return Math.expm1(q / 1000);
-}
+/**
+ * Decode log-space q → USD notional. Canonical implementation moved to
+ * depthSignificance.ts (2026-07-20) so the worker-safe raster core can use
+ * it without importing this react-hook module; re-exported here so every
+ * existing importer keeps working unchanged. Stays the exact inverse of
+ * `usdToQ` below.
+ */
+export { qToUsd } from '@/components/charting/depthSignificance';
 
 /** Encode USD notional → log-space q (uint16) */
 function usdToQ(usd: number): number {
