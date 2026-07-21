@@ -21,7 +21,7 @@ import {
   WifiOff,
   Users as UsersIcon,
 } from 'lucide-react';
-import { getAllUsers, getNewJoins24h, invalidateUserCaches, invalidateStatsCaches } from '@/services/adminService';
+import { getAllUsers, getNewJoins24h, getSignupAttribution, invalidateUserCaches, invalidateStatsCaches, SignupAttribution } from '@/services/adminService';
 import { UserWithStats, UserFilters, PaginationParams, ProductFilter } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -101,6 +101,15 @@ export default function AdminUsers() {
   const { data: joins24h } = useQuery({
     queryKey: ['admin', 'new-joins-24h'],
     queryFn: getNewJoins24h,
+    ...CACHE_CONFIG,
+  });
+
+  // 🎯 Signup traffic attribution for the users currently on this page
+  const userIds = useMemo(() => users.map((u) => u.id), [users]);
+  const { data: attributionMap } = useQuery({
+    queryKey: ['admin', 'signup-attribution', userIds],
+    queryFn: () => getSignupAttribution(userIds),
+    enabled: userIds.length > 0,
     ...CACHE_CONFIG,
   });
 
@@ -348,6 +357,7 @@ export default function AdminUsers() {
             <thead className="bg-[#0A0A0A] border-b border-gray-800">
               <tr>
                 <TableHeader>User</TableHeader>
+                <TableHeader>Source</TableHeader>
                 <TableHeader>Products</TableHeader>
                 <TableHeader>Plan</TableHeader>
                 <TableHeader>Status</TableHeader>
@@ -362,7 +372,7 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-800">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center">
+                  <td colSpan={11} className="px-6 py-12 text-center">
                     <div className="text-gray-400">
                       <UsersIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg mb-2">No subscribers found</p>
@@ -379,6 +389,7 @@ export default function AdminUsers() {
                   <UserRow
                     key={user.id}
                     user={user}
+                    attribution={attributionMap?.get(user.id)}
                     onActionComplete={handleUserActionComplete}
                     isRecentlyChanged={recentlyChangedIds.has(user.id)}
                   />
@@ -500,11 +511,12 @@ const TableHeader = React.memo<{ children: React.ReactNode }>(({ children }) => 
 TableHeader.displayName = 'TableHeader';
 
 // 🔥 v2.3.0: Now uses proper UserWithStats type - no more casting needed
-const UserRow = React.memo<{ 
+const UserRow = React.memo<{
   user: UserWithStats;
+  attribution?: SignupAttribution;
   onActionComplete: () => void;
   isRecentlyChanged?: boolean;
-}>(({ user, onActionComplete, isRecentlyChanged = false }) => {
+}>(({ user, attribution, onActionComplete, isRecentlyChanged = false }) => {
   
   // Determine if user is in trial
   const isInTrial = user.is_in_trial && user.account_type === 'basic';
@@ -611,6 +623,30 @@ const UserRow = React.memo<{
             <div className="text-sm text-gray-400">{user.email}</div>
           </div>
         </div>
+      </td>
+
+      {/* Source */}
+      <td className="px-6 py-4 whitespace-nowrap">
+        {attribution && (attribution.campaign || attribution.adName) ? (
+          <div>
+            <div
+              className="text-sm font-medium text-white truncate max-w-[160px]"
+              title={attribution.adName || attribution.utmSource || undefined}
+            >
+              {attribution.adName || attribution.utmSource || 'Ad'}
+            </div>
+            {attribution.campaign && (
+              <div
+                className="text-xs text-gray-400 truncate max-w-[160px]"
+                title={attribution.campaign}
+              >
+                {attribution.campaign}
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-sm text-gray-500">Organic / Direct</span>
+        )}
       </td>
 
       {/* Products */}
