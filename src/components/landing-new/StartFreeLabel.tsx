@@ -1,17 +1,24 @@
 /**
- * Shared label for the primary "Start free" CTA buttons.
- * Keeps the "Start free" wording in the button's own (gold) style and moves the
- * no-card reassurance into a distinct green pill. Used across the landing CTAs
- * (Hero, Navbar, TraderSection) so every button reads the same.
+ * Supporting label placed OUTSIDE the gold "Start free" button.
+ * The gold button holds only "Start free"; the reassurance ("14 days of full
+ * access" + a green "No credit card" pill) lives here, next to / below it.
  *
- * - full (default): "Start free — 14 days of full access"  [ No credit card ]
- * - compact:        "Start free"                            [ No credit card ]
+ * - default:  14 days of full access   [ No credit card ]
+ * - pillOnly: [ No credit card ]        (for the tight navbar)
  */
-export function StartFreeLabel({ compact = false }: { compact?: boolean }) {
+export function StartFreeLabel({
+  pillOnly = false,
+  className = '',
+}: {
+  pillOnly?: boolean;
+  className?: string;
+}) {
   return (
-    <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
-      {compact ? 'Start free' : 'Start free — 14 days of full access'}
-      <span className="inline-flex items-center rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide leading-none text-white shadow-sm">
+    <span
+      className={`inline-flex items-center gap-2 text-sm font-medium text-white/75 whitespace-nowrap ${className}`}
+    >
+      {!pillOnly && <span>14 days of full access</span>}
+      <span className="inline-flex items-center rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide leading-none text-white shadow-sm">
         No credit card
       </span>
     </span>
