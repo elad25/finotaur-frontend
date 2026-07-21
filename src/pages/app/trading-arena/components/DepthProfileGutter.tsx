@@ -27,6 +27,12 @@ const BAR_HEIGHT_PX = 2;
 const GUTTER_MAX_BAR_PX = 64;
 const DEFAULT_MAX_LABELS_PER_SIDE = 8;
 const DEFAULT_AXIS_WIDTH_FALLBACK = 56;
+// Step 2B — off-pane wall pinning (clean mode only, see `pinOffscreen` prop):
+// a thin dashed line spanning the full gutter width, drawn at the pane edge
+// behind the (still USD-proportional) bar, so a wall clipped by Step 2A's
+// price-window clamp still reads as "something's off-screen" instead of
+// vanishing silently.
+const PINNED_LINE_HEIGHT_PX = 1;
 
 export interface DepthProfileGutterProps {
   chart: IChartApi;
@@ -39,6 +45,15 @@ export interface DepthProfileGutterProps {
   binSize: number;
   visible: boolean;
   maxLabelsPerSide?: number;
+  /**
+   * Clean-mode only (see Step 2A's depth-matrix price-window clamp): when
+   * true, a level whose price falls OUTSIDE the pane's visible price range
+   * is pinned to the top/bottom edge with a distinct marker instead of
+   * being clipped away by the container's `overflow-hidden`. Legacy mode
+   * (MarketScanner, futures tab) never sets this — default `false` keeps
+   * their current clip-away behavior unchanged.
+   */
+  pinOffscreen?: boolean;
 }
 
 export function DepthProfileGutter({
@@ -49,6 +64,7 @@ export function DepthProfileGutter({
   binSize,
   visible,
   maxLabelsPerSide = DEFAULT_MAX_LABELS_PER_SIDE,
+  pinOffscreen = false,
 }: DepthProfileGutterProps) {
   // Bumping counter — repositions bars on pan/zoom without re-aggregating
   // the book (aggregation only changes when the caller passes new bids/asks
@@ -78,44 +94,100 @@ export function DepthProfileGutter({
     // priceScale() can throw mid-teardown — fall back to the default.
   }
 
+  // Pane height for off-pane pinning (`pinOffscreen`) — same accessor Step
+  // 2A's price-window clamp already uses (`chart.paneSize().height`, see
+  // FinotaurChart.tsx's visible-price-range derivation) so pinning agrees
+  // with exactly what the depth-matrix raster considers "in view".
+  // `0` (unresolved) means "don't pin this render" — falls through to
+  // ordinary clipped behavior below.
+  let paneH = 0;
+  if (pinOffscreen) {
+    try {
+      const h = chart.paneSize().height;
+      if (typeof h === 'number' && h > 0) paneH = h;
+    } catch {
+      // paneSize() can throw mid-teardown — leave paneH at 0 (pinning off this render).
+    }
+  }
+
   const maxBidUsd = bidLevels.reduce((max, l) => Math.max(max, l.usd), 0) || 1;
   const maxAskUsd = askLevels.reduce((max, l) => Math.max(max, l.usd), 0) || 1;
   const bidLabels = topLevelsBySize(bidLevels, maxLabelsPerSide);
   const askLabels = topLevelsBySize(askLevels, maxLabelsPerSide);
 
   function renderBar(level: RestingLevel, maxUsd: number, color: string, showLabel: boolean, keyPrefix: string) {
-    const y = series.priceToCoordinate(level.price);
-    if (y === null) return null;
+    const rawY = series.priceToCoordinate(level.price);
+    if (rawY === null) return null;
     const barPx = Math.max(1, (level.usd / maxUsd) * GUTTER_MAX_BAR_PX);
 
+    // Off-pane pinning (Step 2B): only when the caller opted in AND the pane
+    // height resolved this render. `rawY` is in pane-pixel space (0 = top of
+    // pane, paneH = bottom) — same space Step 2A's price-window clamp reads
+    // via `series.coordinateToPrice`, so "off-pane here" agrees with
+    // "clamped out of the heatmap raster there".
+    let y = rawY as number;
+    let pinned: 'top' | 'bottom' | null = null;
+    if (paneH > 0) {
+      if (rawY < 0) {
+        y = 0;
+        pinned = 'top';
+      } else if (rawY > paneH) {
+        y = paneH;
+        pinned = 'bottom';
+      }
+    }
+
+    const label = pinned
+      ? `${pinned === 'top' ? '▲' : '▼'} ${formatGutterSize(level.usd)}`
+      : formatGutterSize(level.usd);
+    const shouldShowLabel = showLabel || pinned !== null;
+
     return (
-      <div
-        key={`${keyPrefix}:${level.price}`}
-        style={{
-          position: 'absolute',
-          top: (y as number) - BAR_HEIGHT_PX / 2,
-          right: axisWidth,
-          width: barPx,
-          height: BAR_HEIGHT_PX,
-          background: color,
-          borderRadius: 1,
-        }}
-      >
-        {showLabel && (
-          <span
+      <div key={`${keyPrefix}:${level.price}`}>
+        {/* Distinct off-pane marker: a thin dashed line spanning the full
+            gutter width at the pinned edge, BEHIND the ordinary bar below —
+            signals "a wall lives off-screen in this direction" without
+            claiming an exact on-pane price for it. */}
+        {pinned && (
+          <div
             style={{
               position: 'absolute',
-              right: barPx + 4,
-              top: -6,
-              fontSize: 9,
-              fontWeight: 600,
-              color,
-              whiteSpace: 'nowrap',
+              top: y - PINNED_LINE_HEIGHT_PX / 2,
+              left: 0,
+              right: axisWidth,
+              height: PINNED_LINE_HEIGHT_PX,
+              borderTop: `${PINNED_LINE_HEIGHT_PX}px dashed ${color}`,
+              opacity: 0.55,
             }}
-          >
-            {formatGutterSize(level.usd)}
-          </span>
+          />
         )}
+        <div
+          style={{
+            position: 'absolute',
+            top: y - BAR_HEIGHT_PX / 2,
+            right: axisWidth,
+            width: barPx,
+            height: BAR_HEIGHT_PX,
+            background: color,
+            borderRadius: 1,
+          }}
+        >
+          {shouldShowLabel && (
+            <span
+              style={{
+                position: 'absolute',
+                right: barPx + 4,
+                top: -6,
+                fontSize: 9,
+                fontWeight: 600,
+                color,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {label}
+            </span>
+          )}
+        </div>
       </div>
     );
   }

@@ -202,7 +202,7 @@ const LEGACY_WEAK_CELL_T_CAP = 0.10;
  * cell — this runs O(window-cells) times per rebuild so avoiding per-cell
  * allocation matters.
  */
-export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: number) {
+export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legacyQCut: number, visualModel: 'legacy' | 'clean' = 'legacy') {
   let lastHot = false;
   const colorOf = (q: number, persistMult: number): number => {
     lastHot = false;
@@ -234,7 +234,7 @@ export function makeQToColorFn(vHi: number, vLo: number, lut: Uint32Array, legac
     // visible at full strength in its first column — this is the single
     // funnel both the full repaint and the append fast path go through, so
     // the gate applies consistently everywhere.
-    const alpha = softKneeAlpha(usd, vLo) * sizeGatedPersistenceFactor(persistMult, usd, vLo);
+    const alpha = softKneeAlpha(usd, vLo, undefined, visualModel) * sizeGatedPersistenceFactor(persistMult, usd, vLo);
     const a = Math.min(255, Math.max(0, Math.round(alpha * 255)));
     if (a === 0) {
       // Hide floor (2026-07-20): a fully-transparent cell must be COMPLETELY
@@ -339,12 +339,17 @@ export function paintColumnsRangeToBuffer(
   // contribution was already committed into the caller's persistence base
   // snapshot. Defaults to `rangeStart` (bump everything).
   bumpRangeStart: number = rangeStart,
+  // Opt-in Bookmap-style clean visual model (steeper alpha ramp — see
+  // depthSignificance.ts's softKneeAlpha). Defaults to 'legacy' so every
+  // existing caller (MarketScanner, DepthMatrixLayer's live-append path)
+  // stays byte-identical unless explicitly threaded through.
+  visualModel: 'legacy' | 'clean' = 'legacy',
 ): void {
   const width = rangeEnd - rangeStart;
   if (width <= 0) return;
 
   const hotMask = smoothingEnabled && bloomEnabled ? scratchU8Zeroed(width * numRows) : null;
-  const { colorOf, wasHot } = makeQToColorFn(vHi, vLo, lut, legacyQCut);
+  const { colorOf, wasHot } = makeQToColorFn(vHi, vLo, lut, legacyQCut, visualModel);
 
   for (let ci = rangeStart; ci < rangeEnd; ci++) {
     const col = cols[ci];
@@ -453,6 +458,19 @@ export interface RasterJob {
   rawIntervalMs: number;
   bucketFactor: number;
   paneHeightPxEstimate: number;
+  /** Opt-in Bookmap-style clean visual model — see depthSignificance.ts's softKneeAlpha doc comment. Defaults to 'legacy' (byte-identical to pre-existing behavior) if undefined. */
+  visualModel: 'legacy' | 'clean';
+  /**
+   * Step 2A — the pane's VISIBLE price bounds (from series.coordinateToPrice
+   * at the pane's top/bottom edges), used ONLY in 'clean' mode to paint the
+   * visible window at full row resolution instead of unioning far-away
+   * significant walls into the grid (which forces the whole grid to
+   * downsample). Optional/undefined falls through to the legacy extent path
+   * unchanged — see `cleanWindow` in computeFullRaster below. Far walls
+   * outside this window are surfaced in the gutter, not here (Step 2B).
+   */
+  visPriceLo?: number;
+  visPriceHi?: number;
 }
 
 /** The rebuild's complete output — pixels + every meta field the main thread needs to commit. `pixels` is transferable (postMessage transfer list) for a zero-copy return. */
@@ -534,7 +552,21 @@ export function computeFullRaster(job: RasterJob): RasterResult {
     rawIntervalMs,
     bucketFactor,
     paneHeightPxEstimate,
+    visPriceLo,
+    visPriceHi,
   } = job;
+  const visualModel = job.visualModel ?? 'legacy';
+
+  // Step 2A — clean-mode visible-window raster. When true, the grid extent
+  // is CLAMPED to the visible price window (+ margin) instead of unioning in
+  // far significant walls, so the raster paints the visible window at full
+  // row resolution. Falls through to the legacy extent/row-merge logic
+  // (byte-identical) whenever visPriceLo/Hi are absent/degenerate — a
+  // rebuild dispatched before the pane has resolved a price window, or any
+  // non-'clean' caller (MarketScanner, legacy DepthMatrixLayer instances).
+  const cleanWindow = visualModel === 'clean'
+    && Number.isFinite(visPriceLo) && Number.isFinite(visPriceHi)
+    && (visPriceHi as number) > (visPriceLo as number);
 
   const rawWindowCols = windowRawCols;
   if (rawWindowCols.length === 0) return emptyResult(job);
@@ -586,10 +618,27 @@ export function computeFullRaster(job: RasterJob): RasterResult {
   if (extentPrices.length === 0) return emptyResult(job);
 
   const weighted = weightedPriceExtent(extentPrices, extentUsd);
-  let priceMin = weighted.min;
-  let priceMax = weighted.max + curBinSize; // upper edge of the top bin
-  if (Number.isFinite(sigMinPrice) && sigMinPrice < priceMin) priceMin = sigMinPrice;
-  if (Number.isFinite(sigMaxPrice) && sigMaxPrice + curBinSize > priceMax) priceMax = sigMaxPrice + curBinSize;
+  let priceMin: number;
+  let priceMax: number;
+  if (cleanWindow) {
+    // Step 2A — clean-mode visible-window raster: clamp the grid to the
+    // VISIBLE price window (+ margin) instead of unioning in far significant
+    // walls. `weighted`/`sigMinPrice`/`sigMaxPrice` are still computed above
+    // (weighted.median feeds the untouched MAX_GRID_ROWS backstop below) but
+    // deliberately unused for priceMin/priceMax here — that's the whole
+    // point: a far wall must NOT widen this window (Step 2B surfaces it in
+    // the gutter instead).
+    const PRICE_MARGIN_FRACTION = 0.5; // pan within ±this*span just re-blits; crossing it re-rasters
+    const _span = (visPriceHi as number) - (visPriceLo as number);
+    const _margin = _span * PRICE_MARGIN_FRACTION;
+    priceMin = (visPriceLo as number) - _margin;
+    priceMax = (visPriceHi as number) + _margin;
+  } else {
+    priceMin = weighted.min;
+    priceMax = weighted.max + curBinSize; // upper edge of the top bin
+    if (Number.isFinite(sigMinPrice) && sigMinPrice < priceMin) priceMin = sigMinPrice;
+    if (Number.isFinite(sigMaxPrice) && sigMaxPrice + curBinSize > priceMax) priceMax = sigMaxPrice + curBinSize;
+  }
   if (!isFinite(priceMin) || !isFinite(priceMax)) return emptyResult(job);
 
   // Hard safety cap, MERGE-FIRST (far-wall fix, 2026-07-20): MAX_GRID_ROWS
@@ -611,10 +660,19 @@ export function computeFullRaster(job: RasterJob): RasterResult {
   // hysteresis needed; the same max() lives in drawFrame's rebuild-trigger
   // check so the two never disagree and rebuild-loop).
   const rowPxEstimate = numRows > 0 ? paneHeightPxEstimate / numRows : Infinity;
-  const rowMergeFactor = Math.max(
-    computeRowMergeFactor(rowPxEstimate),
-    requiredRowMergeFactorForCap(numRows, MAX_GRID_ROWS),
-  );
+  // Step 2A — in clean mode the grid is already clamped to the visible
+  // window (+ margin) above, so it can never blow up to the raw-extent sizes
+  // the painted-row cap exists to guard against; dropping the cap term here
+  // lets the visible window paint at its NATURAL row resolution instead of
+  // being merged down to fit a cap that a bounded window doesn't need.
+  // MAX_GRID_ROWS/clampExtentToMaxRows above stays as an untouched safety
+  // backstop regardless of mode.
+  const rowMergeFactor = cleanWindow
+    ? computeRowMergeFactor(rowPxEstimate)
+    : Math.max(
+        computeRowMergeFactor(rowPxEstimate),
+        requiredRowMergeFactorForCap(numRows, MAX_GRID_ROWS),
+      );
   let paintedNumRows = rowMergeFactor > 1 ? Math.ceil(numRows / rowMergeFactor) : numRows;
 
   // Total-cell budget guard (PER-WINDOW, against the PAINTED grid). Clip the
@@ -700,6 +758,8 @@ export function computeFullRaster(job: RasterJob): RasterResult {
     bloomEnabled,
     persistMap,
     rowMergeFactor,
+    0, // bumpRangeStart — full window rebuild always bumps everything
+    visualModel,
   );
 
   // LOD append bookkeeping — track the currently-open LAST painted bucket's

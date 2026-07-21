@@ -769,6 +769,7 @@ function LiquidityBody({ symbol, interval, viewSyncKey }: LiquidityBodyProps) {
               depthMatrixPalette={preferences.palette}
               depthMatrixSmoothing={preferences.smoothing}
               depthMatrixSensitivity={preferences.sensitivity}
+              depthMatrixVisualModel="clean"
               volumeBubbles={{
                 store: flowStoreRef.current,
                 visible: preferences.bubbles,

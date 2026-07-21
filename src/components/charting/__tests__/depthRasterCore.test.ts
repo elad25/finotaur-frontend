@@ -58,7 +58,7 @@ function makeBasicWindowCols(n = 10): DecodedColumn[] {
   return Array.from({ length: n }, (_, i) => makeBasicColumn(i));
 }
 
-/** Default job: 10 basic columns, vLo=100K/vHi=400K, smoothing on, no LOD. */
+/** Default job: 10 basic columns, vLo=100K/vHi=400K, smoothing on, no LOD. Optional visPriceLo/Hi (Step 2A) default to undefined — legacy extent path. */
 function makeBasicJob(overrides: Partial<RasterJob> = {}): RasterJob {
   return {
     jobId: 1,
@@ -73,6 +73,9 @@ function makeBasicJob(overrides: Partial<RasterJob> = {}): RasterJob {
     rawIntervalMs: 5000,
     bucketFactor: 1,
     paneHeightPxEstimate: 800,
+    visualModel: 'legacy',
+    visPriceLo: undefined,
+    visPriceHi: undefined,
     ...overrides,
   };
 }
@@ -162,7 +165,7 @@ describe('computeFullRaster', () => {
     expect(result.lastBucketRawCols.length).toBeGreaterThan(0);
   });
 
-  it('unions a far, significant wall into the extent instead of tail-clipping it out (far-wall fix)', () => {
+  it('(legacy) unions a far, significant wall into the extent instead of tail-clipping it out (far-wall fix)', () => {
     // Dense small (sub-vLo) bins clustered near the anchor, plus one huge
     // ($5M > vLo) bid resting 30% below the anchor. binSize=50 keeps the
     // resulting raw row span (~400 rows) comfortably away from MAX_GRID_ROWS.
@@ -176,14 +179,49 @@ describe('computeFullRaster', () => {
     const bids: Array<[number, number]> = [...denseBids, [wallPrice, 5_000_000]];
     const col = makeColumn(1_000_000, anchor, binSize, bids, []);
 
-    const job = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [] });
+    const job = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'legacy' });
     const result = computeFullRaster(job);
 
     expect(result.empty).toBe(false);
     expect(result.priceMin).toBeLessThanOrEqual(wallPrice);
   });
 
-  it('merges rows instead of clipping when the raw row span exceeds MAX_GRID_ROWS', () => {
+  it('(clean, Step 2A) clamps the extent to the visible price window (+ margin) instead of unioning in the far wall', () => {
+    // Same far-wall setup as the legacy variant above, but 'clean' mode with
+    // a tight visPriceLo/Hi window around the anchor that EXCLUDES the wall
+    // (45,500, 30% below anchor) — the raster must paint only the bounded
+    // visible window, never stretching out to include the far wall.
+    const anchor = 65_000;
+    const binSize = 50;
+    const wallPrice = anchor * 0.7; // 45,500
+    const denseBids: Array<[number, number]> = Array.from({ length: 10 }, (_, i) => [
+      64_500 + i * binSize,
+      20_000,
+    ]);
+    const bids: Array<[number, number]> = [...denseBids, [wallPrice, 5_000_000]];
+    const col = makeColumn(1_000_000, anchor, binSize, bids, []);
+
+    const visPriceLo = 64_900;
+    const visPriceHi = 65_100;
+    const job = makeBasicJob({
+      windowRawCols: [col],
+      curBinSize: binSize,
+      warmupRawCols: [],
+      visualModel: 'clean',
+      visPriceLo,
+      visPriceHi,
+    });
+    const result = computeFullRaster(job);
+
+    expect(result.empty).toBe(false);
+    expect(result.priceMin).toBeGreaterThan(wallPrice); // far wall excluded, NOT unioned in
+    // Painted span = visible window + 2×PRICE_MARGIN_FRACTION(0.5)×span — bounded, not stretched to the wall.
+    const expectedMargin = (visPriceHi - visPriceLo) * 0.5;
+    expect(result.priceMin).toBeCloseTo(visPriceLo - expectedMargin, 5);
+    expect(result.priceMax).toBeCloseTo(visPriceHi + expectedMargin, 5);
+  });
+
+  it('(legacy) merges rows instead of clipping when the raw row span exceeds MAX_GRID_ROWS', () => {
     // binSize=1 with two significant (>= vLo) bins ~9,000 price units apart
     // forces rawNumRows ~9,001 — over MAX_GRID_ROWS (4000) but well under the
     // absolute backstop (MAX_GRID_ROWS * LOD_MAX_ROW_MERGE_FACTOR), so the
@@ -194,12 +232,78 @@ describe('computeFullRaster', () => {
     const asks: Array<[number, number]> = [[69_000, 200_000]];
     const col = makeColumn(1_000_000, anchor, binSize, bids, asks);
 
-    const job = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [] });
+    const job = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'legacy' });
     const result = computeFullRaster(job);
 
     expect(result.empty).toBe(false);
     expect(result.rawNumRows).toBeGreaterThan(MAX_GRID_ROWS);
     expect(result.paintedNumRows).toBeLessThanOrEqual(MAX_GRID_ROWS);
     expect(result.rowMergeFactor).toBeGreaterThanOrEqual(2);
+  });
+
+  it('(clean, Step 2A) paints only the visible price window at full resolution — no merge needed for a narrow window containing one bin', () => {
+    // Same two far-apart (~9,000 apart) significant bins as the legacy
+    // variant above, but a NARROW visPriceLo/Hi window containing only the
+    // $60,000 bid — the raster must paint the small visible span at its
+    // natural resolution, not the ~9,000-row raw span, so no row merging is
+    // needed at all.
+    const anchor = 65_000;
+    const binSize = 1;
+    const bids: Array<[number, number]> = [[60_000, 200_000]];
+    const asks: Array<[number, number]> = [[69_000, 200_000]];
+    const col = makeColumn(1_000_000, anchor, binSize, bids, asks);
+
+    const visPriceLo = 59_990;
+    const visPriceHi = 60_010;
+    const job = makeBasicJob({
+      windowRawCols: [col],
+      curBinSize: binSize,
+      warmupRawCols: [],
+      visualModel: 'clean',
+      visPriceLo,
+      visPriceHi,
+    });
+    const result = computeFullRaster(job);
+
+    expect(result.empty).toBe(false);
+    expect(result.rowMergeFactor).toBeLessThanOrEqual(2);
+    // paintedNumRows reflects the tiny visible span (window + margin), NOT
+    // the ~9,000-row raw span between the two far-apart bins.
+    expect(result.paintedNumRows).toBeLessThan(100);
+  });
+
+  describe('visualModel gating (Step 1 — clean vs legacy alpha)', () => {
+    it('clean mode hides a sub-knee cell that legacy still paints', () => {
+      // usd=10,000 is 0.1x vLo (100,000): above legacy's HIDE_BELOW_KNEE_FRACTION
+      // (0.02 -> $2,000 hide floor, so legacy paints it faint) but below clean's
+      // CLEAN_HIDE_BELOW_KNEE_FRACTION (0.6 -> $60,000 hide floor, so clean hides
+      // it entirely) — see depthSignificance.ts's softKneeAlpha.
+      const anchor = 65_000;
+      const binSize = 10;
+      const price = 64_990;
+      const usd = 10_000;
+      const col = makeColumn(1_000_000, anchor, binSize, [[price, usd]], []);
+
+      const legacyJob = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'legacy' });
+      const cleanJob = makeBasicJob({ windowRawCols: [col], curBinSize: binSize, warmupRawCols: [], visualModel: 'clean' });
+
+      const legacyResult = computeFullRaster(legacyJob);
+      const cleanResult = computeFullRaster(cleanJob);
+
+      expect(legacyResult.empty).toBe(false);
+      expect(hasNonzeroPixel(legacyResult.pixels!)).toBe(true);
+
+      expect(cleanResult.empty).toBe(false);
+      expect(hasNonzeroPixel(cleanResult.pixels!)).toBe(false);
+    });
+
+    it('defaults to legacy when visualModel is omitted from the job (backward compat)', () => {
+      const job = makeBasicJob() as Partial<RasterJob> as RasterJob;
+      // Simulate an older caller that never set visualModel at all.
+      delete (job as { visualModel?: 'legacy' | 'clean' }).visualModel;
+      const result = computeFullRaster(job);
+      expect(result.empty).toBe(false);
+      expect(hasNonzeroPixel(result.pixels!)).toBe(true);
+    });
   });
 });
