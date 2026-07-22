@@ -21,10 +21,10 @@
 // =====================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
 import { authFetch } from '@/utils/authFetch';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import {
   ONBOARDING_SEEN_KEY,
@@ -33,53 +33,66 @@ import {
 
 type Decision = 'pending' | 'welcome' | 'skip';
 
+interface WelcomeScreenLocationState {
+  onboardingCompleted?: boolean;
+  fromRegister?: boolean;
+}
+
 export default function WelcomeScreen() {
   const { user } = useAuth();
-  const [decision, setDecision] = useState<Decision>('pending');
+  const location = useLocation();
+  const routerState = location.state as WelcomeScreenLocationState | null;
+  // Register.tsx already fetched onboarding_completed before navigating here.
+  // When it's present we can decide synchronously — zero network calls, zero
+  // skeleton flash — instead of firing a second, redundant profiles query.
+  const hasRouterDecision = typeof routerState?.onboardingCompleted === 'boolean';
+
+  const [decision, setDecision] = useState<Decision>(
+    hasRouterDecision ? (routerState!.onboardingCompleted ? 'skip' : 'welcome') : 'pending',
+  );
   // Guards the instant day-0 welcome-email POST below so it fires at most
   // once per mount even if this effect re-runs (e.g. StrictMode/user change).
   const welcomeEmailFiredRef = useRef(false);
 
+  // Fallback path only (OAuth / refresh / direct nav to /welcome with no
+  // router state). Disabled entirely once the router state has answered —
+  // no network call at all in the common signup path.
+  const { profile, isLoading: profileLoading, isError: profileError } = useUserProfile({
+    enabled: !hasRouterDecision,
+  });
+
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
 
-    const resolveDecision = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('onboarding_completed')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (cancelled) return;
-
-        const isFreshSignup = data?.onboarding_completed !== true;
-        setDecision(isFreshSignup ? 'welcome' : 'skip');
-
-        // Fresh signup: fire the instant day-0 welcome email. Fire-and-forget
-        // — the daily cron is the backstop, so this must never block or delay
-        // navigation, and any failure here is silently swallowed.
-        if (isFreshSignup && !welcomeEmailFiredRef.current) {
-          welcomeEmailFiredRef.current = true;
-          authFetch('/api/users/me/welcome', { method: 'POST' }).catch(() => {});
-        }
-      } catch {
-        if (cancelled) return;
-        // Query failed (offline/flaky) — fall back to the legacy browser
-        // flag so we never block navigation or re-show the tour forever.
-        const legacySeen = localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true';
-        setDecision(legacySeen ? 'skip' : 'welcome');
+    if (hasRouterDecision) {
+      // Fresh signup per router state: fire the instant day-0 welcome email.
+      // Fire-and-forget — the daily cron is the backstop, so this must never
+      // block or delay navigation, and any failure here is silently swallowed.
+      if (!routerState!.onboardingCompleted && !welcomeEmailFiredRef.current) {
+        welcomeEmailFiredRef.current = true;
+        authFetch('/api/users/me/welcome', { method: 'POST' }).catch(() => {});
       }
-    };
+      return;
+    }
 
-    void resolveDecision();
+    if (profileLoading) return;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
+    if (profileError) {
+      // Query failed (offline/flaky) — fall back to the legacy browser
+      // flag so we never block navigation or re-show the tour forever.
+      const legacySeen = localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true';
+      setDecision(legacySeen ? 'skip' : 'welcome');
+      return;
+    }
+
+    const isFreshSignup = profile?.onboarding_completed !== true;
+    setDecision(isFreshSignup ? 'welcome' : 'skip');
+
+    if (isFreshSignup && !welcomeEmailFiredRef.current) {
+      welcomeEmailFiredRef.current = true;
+      authFetch('/api/users/me/welcome', { method: 'POST' }).catch(() => {});
+    }
+  }, [user, hasRouterDecision, routerState, profile, profileLoading, profileError]);
 
   if (decision === 'pending') {
     return <RouteSkeleton />;
