@@ -665,7 +665,7 @@ export const BillingTab = () => {
                 onClick={() => navigate('/app/upgrade')}
                 className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-semibold transition-colors inline-flex items-center gap-1"
               >
-                Choose a plan <ArrowRight className="w-3.5 h-3.5" />
+                Upgrade now <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
