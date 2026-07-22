@@ -145,6 +145,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // ── Build email content ────────────────────────────────────
     const fromEmail = Deno.env.get('BROKER_ALERT_FROM_EMAIL') ?? 'Finotaur Alerts <alerts@finotaur.com>';
+    // 2026-05-19: ops visibility — every broker state alert also reaches the
+    // platform admin so production issues surface in one inbox without each
+    // user reporting them. Comma-separated; empty = no BCC, preserves prior
+    // behavior.
+    const adminBcc = (Deno.env.get('BROKER_ALERT_ADMIN_BCC') ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean);
     const { subject, text, html } = buildEmail(broker, environment, new_status);
 
     // ── POST to Resend ─────────────────────────────────────────
@@ -157,7 +163,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       body: JSON.stringify({
         from:    fromEmail,
         to:      [toEmail],
-        subject,
+        ...(adminBcc.length > 0 ? { bcc: adminBcc } : {}),
+        subject: `[${new_status.toUpperCase()}] ${subject}`,
         html,
         text,
       }),
