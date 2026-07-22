@@ -181,6 +181,17 @@ export const BillingTab = () => {
   const tierAccent = isFreeTier ? '#3F3F46' : tierConfig.edge;
   const tierGlow = isFreeTier ? '#52525B' : tierConfig.peak;
 
+  // Held à-la-carte products (paid, not the app-granted trial). When BOTH Trader
+  // and Investor are held on their own (and no bundling platform plan), the crest
+  // shows a dual Trader+Investor identity instead of the single resolved tier.
+  const traderHeld = !isAppTrial && !journalIsFree;
+  const investorHeld = investorIsPaid;
+  const platformNorm = (profile?.platform_plan ?? '').replace(/^platform_/, '');
+  const isBundlePlatform = ['finotaur', 'enterprise'].includes(platformNorm);
+  const showDualCrest = traderHeld && investorHeld && !isBundlePlatform;
+  const TraderIcon = TIER_CONFIG.premium.icon;
+  const InvestorIcon = TIER_CONFIG.topsecret.icon;
+
   // Top Secret — flat pricing, no Whop-side trial (cancelled 2026-07 — grandfathered
   // subscribers who are still mid-trial from before the cutoff keep seeing real DB state below)
   const getTopSecretPricingInfo = () => {
@@ -560,9 +571,9 @@ export const BillingTab = () => {
                 <TierIcon className="w-5 h-5" style={{ color: tierConfig.labelColor }} />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-lg">Active Plans</h2>
+                <h2 className="font-semibold text-white text-lg">Membership</h2>
                 <p className="text-xs font-medium" style={{ color: tierConfig.labelColor }}>
-                  {tierConfig.label}{isAppTrial ? ' · 14-day full access' : ' membership'}
+                  {isAppTrial ? '14-day full access' : `${tierConfig.label} · ${tierConfig.tag}`}
                 </p>
               </div>
             </div>
@@ -578,7 +589,60 @@ export const BillingTab = () => {
             )}
           </div>
 
-          {/* Plan rows — inner panel */}
+          {/* Crest & Holdings — tier crest on the left, plan rows on the right */}
+          <div className="grid gap-4 md:grid-cols-[190px_1fr] items-start">
+
+          {/* Left — tier crest panel */}
+          <div
+            className="rounded-xl border p-4 text-center"
+            style={{
+              borderColor: `${tierAccent}59`,
+              background: `linear-gradient(160deg, ${tierAccent}1F, rgba(24,24,27,0.6))`,
+            }}
+          >
+            <div className="flex items-center justify-center mb-3">
+              {showDualCrest ? (
+                <>
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center border shadow-lg relative z-10"
+                    style={{ background: `linear-gradient(135deg, ${TIER_CONFIG.premium.peak}, ${TIER_CONFIG.premium.edge})`, borderColor: TIER_CONFIG.premium.edge }}
+                  >
+                    <TraderIcon className="w-6 h-6" style={{ color: TIER_CONFIG.premium.onColor }} />
+                  </div>
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center border shadow-lg -ml-3.5"
+                    style={{ background: `linear-gradient(135deg, ${TIER_CONFIG.topsecret.edge}, #4C1D95)`, borderColor: TIER_CONFIG.topsecret.edge }}
+                  >
+                    <InvestorIcon className="w-6 h-6" style={{ color: '#ffffff' }} />
+                  </div>
+                </>
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center border shadow-lg"
+                  style={{ background: `linear-gradient(135deg, ${tierAccent}, ${tierAccent}80)`, borderColor: `${tierAccent}CC` }}
+                >
+                  <TierIcon className="w-7 h-7" style={{ color: isFreeTier ? tierConfig.labelColor : tierConfig.onColor }} />
+                </div>
+              )}
+            </div>
+            <div className="text-base font-semibold text-white">
+              {showDualCrest ? 'Trader + Investor' : tierConfig.label}
+            </div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mt-1">
+              {isAppTrial ? '14-day full access' : showDualCrest ? '2 plans active' : tierConfig.tag}
+            </div>
+            <div className="mt-3 text-xs text-zinc-400">
+              {isAppTrial ? (
+                <>Free<span className="text-zinc-600"> · ends {formatDate(profile?.trial_ends_at ?? investorTrialEndsAt)}</span></>
+              ) : isFreeTier ? (
+                'No active plan'
+              ) : (
+                'Active'
+              )}
+            </div>
+          </div>
+
+          {/* Right — plan rows (holdings) */}
           <div className="px-4 py-1 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
 
         {/* Row 1 — Platform */}
@@ -704,7 +768,9 @@ export const BillingTab = () => {
           </>
         )}
           </div>
-          {/* /Plan rows inner panel */}
+          {/* /Plan rows (holdings) */}
+          </div>
+          {/* /Crest & Holdings grid */}
 
         {/* Platform Downgrade Info Dialog — preserved */}
         {showPlatformDowngradeInfoDialog && (
