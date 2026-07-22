@@ -213,6 +213,7 @@ function SimpleAccountRow({
   indent = false,
   connection,
   onReconnect,
+  displayName,
 }: {
   portfolio: Portfolio;
   checked: boolean;
@@ -220,6 +221,7 @@ function SimpleAccountRow({
   indent?: boolean;
   connection?: BrokerConnection;
   onReconnect?: (conn: BrokerConnection) => void;
+  displayName?: string;
 }) {
   const badge = portfolio.source === 'manual'
     ? 'Manual'
@@ -249,7 +251,7 @@ function SimpleAccountRow({
       )}
     >
       <CheckboxMark checked={checked} compact />
-      <span className="min-w-0 flex-1 truncate text-left">{portfolio.name}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{displayName ?? portfolio.name}</span>
       {statusDot && (
         <span
           className="h-2 w-2 shrink-0 rounded-full"
@@ -586,6 +588,14 @@ function PopoverBody({
                 if (!useCollapse) {
                   const portfolio = group.portfolios[0];
                   const conn = connectionForPortfolio(portfolio);
+                  // Connection-backed single-account groups (conn-/broker-) show the
+                  // connection label (e.g. "Take profit", "MFFU", "Interactive Brokers")
+                  // — the same label the group header and every other selector uses —
+                  // instead of the raw account name. Generic/manual rows keep the name.
+                  const rowLabel =
+                    group.key.startsWith('conn-') || group.key.startsWith('broker-')
+                      ? group.label
+                      : undefined;
                   return (
                     <SimpleAccountRow
                       key={group.key}
@@ -594,6 +604,7 @@ function PopoverBody({
                       onToggle={togglePortfolioSelection}
                       connection={conn}
                       onReconnect={requestReconnect}
+                      displayName={rowLabel}
                     />
                   );
                 }
