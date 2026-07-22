@@ -148,7 +148,7 @@ export const TopNav = () => {
               it to the right of the left column (toward the centered search),
               with a margin so it sits a touch left of the omnibox rather than
               flush. */}
-          {(accountType === 'free' || accountType === 'admin') && (
+          {(accountType === 'free' || accountType === 'trial' || accountType === 'admin') && (
             <PromoOfferChip audience="app" className="ml-auto mr-8 lg:mr-20" />
           )}
         </div>
