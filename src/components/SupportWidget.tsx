@@ -22,6 +22,7 @@ import { SkeletonText } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { uuid } from '@/utils/uuid';
 
 // ==================== INTERFACES ====================
 
@@ -185,7 +186,7 @@ export default function SupportWidget() {
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketEmail, setTicketEmail] = useState('');
   const [ticketProblem, setTicketProblem] = useState('');
-  const [chatSessionId, setChatSessionId] = useState<string>(() => crypto.randomUUID());
+  const [chatSessionId, setChatSessionId] = useState<string>(() => uuid());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -569,7 +570,7 @@ async function loadTicketById(ticketId: string) {
     for (const file of files) {
       try {
         const fileExt = file.name.split('.').pop();
-        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const fileName = `${uuid()}.${fileExt}`;
         const filePath = `support-attachments/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -655,7 +656,7 @@ async function loadTicketById(ticketId: string) {
     setGuidedMessages([]);
     setGuidedStep('idle');
     setGuidedTopic('');
-    setChatSessionId(crypto.randomUUID());
+    setChatSessionId(uuid());
   }
 
   async function sendMessageFeedback(chatLogId: string, feedback: 1 | -1) {
@@ -683,7 +684,7 @@ async function loadTicketById(ticketId: string) {
       setGuidedMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: uuid(),
           type: 'admin',
           content,
           timestamp: new Date().toISOString(),
@@ -715,7 +716,7 @@ async function loadTicketById(ticketId: string) {
     if (!message) return;
 
     const customerMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'customer',
       content: message,
       timestamp: new Date().toISOString(),
@@ -747,7 +748,7 @@ async function loadTicketById(ticketId: string) {
     if (!trimmed) return;
 
     const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'customer',
       content: trimmed,
       timestamp: new Date().toISOString(),
@@ -788,7 +789,7 @@ async function loadTicketById(ticketId: string) {
       setGuidedMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: uuid(),
           type: 'admin',
           content: replyText,
           timestamp: new Date().toISOString(),
@@ -804,7 +805,7 @@ async function loadTicketById(ticketId: string) {
             setGuidedMessages((prev) => [
               ...prev,
               {
-                id: crypto.randomUUID(),
+                id: uuid(),
                 type: 'system',
                 content: "✓ I've shared this with our team — they'll follow up by email. You can keep adding details here.",
                 timestamp: new Date().toISOString(),
@@ -821,7 +822,7 @@ async function loadTicketById(ticketId: string) {
       setGuidedMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: uuid(),
           type: 'admin',
           content: "I'm having trouble answering right now. Please leave your details below and our team will get back to you by email.",
           timestamp: new Date().toISOString(),
@@ -839,7 +840,7 @@ async function loadTicketById(ticketId: string) {
     const baseTranscript = guidedMessages.length > 0
       ? guidedMessages
       : [{
-          id: crypto.randomUUID(),
+          id: uuid(),
           type: 'customer' as const,
           content: currentMessage.trim() || 'I would like to talk to a person.',
           timestamp: new Date().toISOString(),
@@ -847,7 +848,7 @@ async function loadTicketById(ticketId: string) {
 
     const transcript = opts?.problemOverride?.trim()
       ? [...baseTranscript, {
-          id: crypto.randomUUID(),
+          id: uuid(),
           type: 'customer' as const,
           content: opts.problemOverride.trim(),
           timestamp: new Date().toISOString(),
@@ -952,7 +953,7 @@ async function loadTicketById(ticketId: string) {
       }
 
       const newMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'customer',
         content: guidedStep === 'ready'
           ? buildSupportRequestMessage(currentMessage.trim())
@@ -1947,7 +1948,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                     onClick={() => {
                                       setHelpfulnessResolved(true);
                                       setGuidedMessages((prev) => [...prev, {
-                                        id: crypto.randomUUID(),
+                                        id: uuid(),
                                         type: 'system' as const,
                                         content: 'Glad I could help! Feel free to ask anything else.',
                                         timestamp: new Date().toISOString(),

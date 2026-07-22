@@ -18,6 +18,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { uuid } from '@/utils/uuid';
 import { toast } from 'sonner';
 import { 
   Shield, Clock, ArrowRight, FileText,
@@ -1613,7 +1614,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
     setIsProcessing(true);
     
     try {
-      const checkoutToken = crypto.randomUUID();
+      const checkoutToken = uuid();
       
       // Save pending checkout
       await supabase.from('pending_checkouts').insert({
@@ -1687,7 +1688,7 @@ const finotaurPlanId = 'plan_AgWVNrqc0eSMK';
     setIsProcessing(true);
     
     try {
-      const checkoutToken = crypto.randomUUID();
+      const checkoutToken = uuid();
       
       // Save pending checkout
       await supabase.from('pending_checkouts').insert({
@@ -1771,7 +1772,7 @@ const finotaurPlanId = 'plan_AgWVNrqc0eSMK';
       const { data: profile } = await supabase.from('profiles').select('newsletter_unsubscribe_token').eq('id', user.id).single();
       if (!profile?.newsletter_unsubscribe_token) {
         await supabase.from('profiles').update({ 
-          newsletter_unsubscribe_token: crypto.randomUUID(), 
+          newsletter_unsubscribe_token: uuid(), 
           updated_at: new Date().toISOString() 
         }).eq('id', user.id);
       }
@@ -1780,7 +1781,7 @@ const finotaurPlanId = 'plan_AgWVNrqc0eSMK';
       const isTopSecretDiscount = billingInterval === 'monthly' && isTopSecretMember;
       
       // Generate unique checkout token
-      const checkoutToken = crypto.randomUUID();
+      const checkoutToken = uuid();
       
       // Save pending checkout BEFORE redirecting to Whop
       await supabase.from('pending_checkouts').insert({

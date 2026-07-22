@@ -158,7 +158,7 @@ const WelcomeScreen = lazy(() => import("@/pages/onboarding/WelcomeScreen"));
 // --- Formerly-eager global widgets (Task 3 & 4) ---
 const SupportWidget = lazy(() => import("@/components/SupportWidget"));
 const FinoChatDrawer = lazy(() => import("@/components/fino/FinoChatDrawer"));
-const AffiliateTracker = lazy(() => import("@/features/affiliate/components/AffiliateTracker").then(m => ({ default: m.AffiliateTracker })));
+const AffiliateTracker = lazy(() => import("@/features/affiliate/components/AffiliateTracker"));
 
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 
@@ -484,7 +484,11 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      {FEATURES.AFFILIATE_TRACKING && <Suspense fallback={null}><AffiliateTracker /></Suspense>}
+      {FEATURES.AFFILIATE_TRACKING && (
+        <ErrorBoundary boundary="affiliate-tracker" fallback={null}>
+          <Suspense fallback={null}><AffiliateTracker /></Suspense>
+        </ErrorBoundary>
+      )}
       {/* IntroOffer DISABLED 2026-07 (full-price-only decision) — unmounted */}
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}

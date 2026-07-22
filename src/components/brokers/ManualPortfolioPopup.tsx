@@ -27,6 +27,7 @@ import {
 import { SkeletonText } from '@/components/ds/Skeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { uuid } from '@/utils/uuid';
 
 // ============================================================================
 // TYPES
@@ -72,7 +73,7 @@ interface Props {
 const OPTION_MULTIPLIER = 100;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const newRow = (): PositionRow => ({
-  key: crypto.randomUUID(),
+  key: uuid(),
   symbol: '',
   quantity: '',
   costBasis: '',
@@ -114,7 +115,7 @@ function parsePositionsCsv(file: File): Promise<{ rows: PositionRow[]; errors: s
           if (!Number.isFinite(costBasis) || costBasis < 0) { errors.push(`Row ${rowNum}: invalid CostBasis.`); return; }
 
           parsedRows.push({
-            key: crypto.randomUUID(),
+            key: uuid(),
             symbol,
             quantity: String(quantity),
             costBasis: String(costBasis),
@@ -205,7 +206,7 @@ export default function ManualPortfolioPopup({ onClose, onSuccess }: Props) {
       if (equityRows.length > 0) {
         setRows(
           equityRows.map((p) => ({
-            key: crypto.randomUUID(),
+            key: uuid(),
             symbol: p.Symbol,
             quantity: p.Quantity,
             costBasis: p.CostBasisPrice,

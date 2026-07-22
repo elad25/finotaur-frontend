@@ -18,6 +18,7 @@ import { SectionSpinner } from '@/components/ds/Spinner';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { uploadChatAttachment } from '@/utils/imageCompression';
+import { uuid } from '@/utils/uuid';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export function MessageList({
       if (accepted.length === 0) return;
 
       const entries = accepted.map((file) => ({
-        id: crypto.randomUUID(),
+        id: uuid(),
         file,
         previewUrl: URL.createObjectURL(file),
       }));
