@@ -9,34 +9,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link2, Trash2, X, RefreshCw } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
-import { BROKER_CONFIGS, type BrokerName, type BrokerConnection } from '@/lib/brokers/types';
-
-// ── Prop-firm display name helper ────────────────────────────────────────────
-// Derives a human-readable firm label from the Tradovate account_name field.
-// Matches the detection logic in useTradovate.ts (isApex, isPropFirm checks).
-// For non-Tradovate brokers, falls back to BROKER_CONFIGS displayName.
-function getConnectionDisplayName(conn: BrokerConnection): string {
-  if (conn.broker === 'tradovate' || conn.broker === 'ninja_trader') {
-    const acct = (conn.account_name ?? '').toUpperCase();
-    if (/^APEX[_-]?\d+/i.test(acct)) return 'Apex';
-    if (/^TST[_-]?\d+/i.test(acct) || /^TOPSTEP/i.test(acct)) return 'Topstep';
-    if (/^MFF[_-]?\d+/i.test(acct) || /^MYFUNDED/i.test(acct)) return 'MyFundedFutures';
-    if (/^EARN[_-]?\d+/i.test(acct)) return 'Earn2Trade';
-    if (/^UPROFIT[_-]?\d+/i.test(acct)) return 'Uprofit';
-    // Named label overrides detection
-    if (conn.connection_name?.trim()) return conn.connection_name.trim();
-    // Plain Tradovate
-    return conn.broker === 'ninja_trader' ? 'NinjaTrader' : 'Tradovate';
-  }
-  // For all other brokers, use the config displayName (or broker key as fallback)
-  const cfg = BROKER_CONFIGS[conn.broker as BrokerName];
-  if (cfg) return cfg.displayName;
-  // Unknown broker — humanise the key
-  return conn.broker
-    .split('_')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
+import type { BrokerConnection } from '@/lib/brokers/types';
+import { resolveConnectionLabel } from '@/lib/brokers/connectionLabel';
 
 // ── Account count helper ──────────────────────────────────────────────────────
 // Counts portfolios that belong to a connection.
@@ -66,7 +40,7 @@ function ConnectionRow({
   onRemove: (id: string) => void;
   isRemoving: boolean;
 }) {
-  const displayName = getConnectionDisplayName(conn);
+  const displayName = resolveConnectionLabel(conn);
   const accountCount = useAccountCount(conn);
   const isConnected = conn.status === 'connected' || conn.status === 'renewing';
   const isExpired   = conn.status === 'error' || conn.status === 'canceled' || conn.status === 'disconnected';
