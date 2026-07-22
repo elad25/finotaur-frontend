@@ -1605,6 +1605,16 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       window.history.replaceState(null, '', window.location.pathname);
       return;
     }
+    if (oauthError === 'no_accounts_found') {
+      toast.error('No trading accounts were found for the login you authorized. Make sure you signed into the correct broker account, then try again.');
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+    if (oauthError === 'different_login') {
+      toast.error('That authorization was for a different account than this connection. Log out of Tradovate, sign in as the original account, and reconnect.');
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
     if (oauthError === 'upgrade_required_for_multiple_brokers' || oauthError === 'upgrade_required') {
       setBrokerUpgradeReason(
         oauthError === 'upgrade_required' ? 'broker-free-locked' : 'broker-limit',

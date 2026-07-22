@@ -311,25 +311,35 @@ export function useTradovate() {
     }
   }, [userId, queryClient]);
 
-  // ── Disconnect — deletes broker_connections row entirely (Tradovate scope)
-  // Post-F1.A: scoped to broker='tradovate' so we don't accidentally delete IBKR rows
-  // when they ship. For soft-disconnect (UI "Disconnect" button → keep row, flip is_active=false),
-  // use useBrokerConnections.disconnect instead.
-  const disconnect = useCallback(async (environment: TradovateEnv, credentialId?: string) => {
+  // ── Disconnect — deletes a SPECIFIC broker_connections row (Tradovate scope).
+  // credentialId is REQUIRED. Previously an id-less call fell back to an env-wide
+  // delete (`.eq('environment', env)`) that wiped EVERY same-env Tradovate
+  // connection at once; because portfolios.credential_id is ON DELETE SET NULL,
+  // all their accounts orphaned and vanished from the journal (data-loss incident
+  // 2026-07-22). We now refuse an id-less delete and deactivate this connection's
+  // portfolios BEFORE deleting so they never linger as active-but-orphaned rows.
+  // Post-F1.A: still scoped to broker='tradovate' so we don't touch IBKR rows.
+  const disconnect = useCallback(async (_environment: TradovateEnv, credentialId: string) => {
     if (!userId) return;
+    if (!credentialId) {
+      console.error('[useTradovate.disconnect] refusing delete without a credentialId (env-wide delete is unsafe)');
+      toast.error('Could not remove connection');
+      return;
+    }
     setIsLoading(true);
     try {
-      let query = supabase
+      // Deactivate this connection's portfolios first so they don't survive as orphans.
+      await supabase
+        .from('portfolios')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('credential_id', credentialId);
+      await supabase
         .from('broker_connections')
         .delete()
         .eq('user_id', userId)
+        .eq('id', credentialId)
         .in('broker', TRADOVATE_AUTH_BROKERS as unknown as string[]);
-      if (credentialId) {
-        query = query.eq('id', credentialId);
-      } else {
-        query = query.eq('environment', environment);
-      }
-      await query;
       await queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
       await queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
