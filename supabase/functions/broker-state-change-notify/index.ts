@@ -43,7 +43,7 @@ function buildEmail(
 
   const subject = newStatus === 'degraded'
     ? 'Your Tradovate connection needs attention'
-    : 'Your Tradovate connection was disconnected — action required';
+    : 'Your Tradovate connection was disconnected: action required';
 
   const bodyLine = newStatus === 'degraded'
     ? `Your ${brokerLabel} (${envLabel}) connection failed multiple sync attempts and needs to be reauthenticated.`

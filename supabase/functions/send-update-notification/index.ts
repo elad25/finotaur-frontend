@@ -232,7 +232,7 @@ function generateEmailHtml(update: SystemUpdate, userName: string): string {
           <!-- Main Content -->
           <tr>
             <td style="padding: 32px;">
-              <h2 style="color: #ffffff; font-size: 20px; margin: 0 0 8px;">Hey ${userName} 👋</h2>
+              <h2 style="color: #ffffff; font-size: 20px; margin: 0 0 8px;">Hey ${userName}</h2>
               <p style="color: #888; font-size: 14px; margin: 0 0 24px;">
                 You have a new notification in your Update Center.
               </p>

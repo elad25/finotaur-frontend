@@ -52,7 +52,7 @@ function buildEmail(productName: string, amountStr: string): {
     ? `We tried to charge ${amountStr} for your ${productName} subscription, but the payment didn't go through.`
     : `We tried to charge your card for your Finotaur subscription, but the payment didn't go through.`;
 
-  const action  = 'Please update your payment method to keep your subscription active. Whop will retry the charge over the next few days — if all retries fail, your subscription will be paused.';
+  const action  = 'Please update your payment method to keep your subscription active. Whop will retry the charge over the next few days. If all retries fail, your subscription will be paused.';
   const cta     = 'Update payment method';
   const footer  = `If you have any questions, reply to this email or contact ${supportEmail}.`;
 
