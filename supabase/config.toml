@@ -36,6 +36,38 @@ enabled = true
 verify_jwt = false  # ← OQ-37+38: dual-auth via _shared/dualAuth.ts
 
 # ============================================
+# 🔗 OAUTH BROKER FUNCTIONS — auth model is per-function (added 2026-07-22)
+# ============================================
+# oauth-callback / oauth-refresh / oauth-revoke are hit WITHOUT a Supabase JWT:
+#   - oauth-callback  ← Tradovate redirects the browser here (no JWT possible).
+#                       Auth = the HMAC-signed `state` token, verified in-function
+#                       by _shared/oauth-state.ts (HMAC + DB row + TTL + single-use).
+#   - oauth-refresh   ← cron / server-side token renewal (sb_secret_*, not JWT).
+#   - oauth-revoke    ← server-side revoke.
+# These MUST be verify_jwt:false or the gateway 401s (UNAUTHORIZED_NO_AUTH_HEADER)
+# before the function body runs. Incident 2026-07-22: a redeploy reset oauth-callback
+# to the true default → every broker connect broke at the callback. Pinned here so a
+# future `supabase functions deploy` can never regress it again.
+# oauth-start keeps verify_jwt:true — it is called from the logged-in frontend and
+# needs the user's JWT to know who is connecting.
+
+[functions.oauth-callback]
+enabled = true
+verify_jwt = false  # ← Tradovate browser redirect carries no JWT; state token is the auth gate
+
+[functions.oauth-refresh]
+enabled = true
+verify_jwt = false  # ← server-side / cron token renewal (sb_secret_*, not JWT)
+
+[functions.oauth-revoke]
+enabled = true
+verify_jwt = false  # ← server-side revoke
+
+[functions.oauth-start]
+enabled = true
+verify_jwt = true   # ← called from the authenticated frontend; needs user JWT
+
+# ============================================
 # 🪙 EXCHANGE FUNCTIONS (crypto brokers) — verify_jwt:false + in-function dual-auth (S2, 2026-05-30)
 # ============================================
 # Same rationale as Tradovate: exchange-sync cron sends sb_secret_* (not JWT) → would 401 with verify_jwt:true.
