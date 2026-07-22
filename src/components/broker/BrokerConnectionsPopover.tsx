@@ -2,9 +2,8 @@
 // Compact broker/account selector anchored to the journal dashboard broker button.
 
 import { useCallback, useMemo, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Lock, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp, Lock, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
-import { resolveConnectionLabel } from '@/lib/brokers/connectionLabel';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -438,18 +437,8 @@ function PopoverBody({
   }, [isFreeJournal]);
 
   const groups = useMemo<PortfolioGroup[]>(
-    () =>
-      buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios).map(g => {
-        // Label a per-connection tradovate group by the connection's OWN name
-        // (e.g. "APEX") — the name set at creation — not the firm-detected
-        // fallback derived from the first account's spec.
-        if (g.key.startsWith('conn-')) {
-          const conn = allConnections.find(c => c.id === g.key.slice(5));
-          if (conn) return { ...g, label: resolveConnectionLabel(conn) };
-        }
-        return g;
-      }),
-    [tradovatePortfolios, brokerPortfolios, manualPortfolios, allConnections],
+    () => buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios),
+    [tradovatePortfolios, brokerPortfolios, manualPortfolios],
   );
 
   /**
@@ -645,9 +634,29 @@ function PopoverBody({
                         {someChecked && <Minus className="h-2.5 w-2.5 text-[#C9A646]" strokeWidth={3} />}
                       </button>
 
-                      {/* Group label */}
-                      <span className="flex-1 truncate text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
-                        {group.label}
+                      {/* Group label — account-derived firm identity, plus the user's
+                          custom name as a secondary alias (flagged if it implies a
+                          different firm than the accounts actually show). */}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                          {group.label}
+                        </span>
+                        {group.userLabel && (
+                          <span
+                            className={cn(
+                              'mt-0.5 flex items-center gap-1 truncate text-[8px] font-normal normal-case tracking-normal',
+                              group.mismatch ? 'text-yellow-400' : 'text-zinc-600',
+                            )}
+                            title={
+                              group.mismatch
+                                ? `These accounts look like ${group.label}, not "${group.userLabel}"`
+                                : undefined
+                            }
+                          >
+                            {group.mismatch && <AlertTriangle className="h-2.5 w-2.5 shrink-0" />}
+                            "{group.userLabel}"
+                          </span>
+                        )}
                       </span>
 
                       {/* Connection status dot — shown for any non-ok state */}
