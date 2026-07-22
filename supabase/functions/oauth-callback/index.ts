@@ -157,13 +157,23 @@ Deno.serve(async (req: Request) => {
 
   const isPropFirm = userInfo.accounts.some((a) => a.isPropFirm);
 
+  // Auto-detect the true environment from the token/adapter instead of trusting
+  // the user's live/demo choice — the Tradovate OAuth portal is env-agnostic and
+  // prop-firm logins (Take Profit / Apex) are demo, so the toggle is unreliable.
+  const effectiveEnv: BrokerEnvironment =
+    tokens.detectedEnvironment ?? userInfo.detectedEnvironment ?? environment;
+
+  // Stable per-login identity (Tradovate JWT sub). Used to match/create the
+  // connection so two distinct logins that share (broker, env) never overwrite
+  // each other.
+  const resolvedProviderUserId = tokens.providerUserId ?? userInfo.providerUserId;
+
   // Trial anti-abuse: block a broker account already claimed by a different
   // journal trial. Claims the resolved providerUserId AND every account id
   // returned for this login. Fails open on RPC error/timeout — a transient
   // lookup hiccup must not lock out a legitimate connect. No-ops for
   // non-trial users (RPC returns {allowed:true, reason:'not_trial'}).
   {
-    const resolvedProviderUserId = tokens.providerUserId ?? userInfo.providerUserId;
     const fingerprintTargets = [resolvedProviderUserId, ...userInfo.accounts.map((a) => a.id)]
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
@@ -197,23 +207,28 @@ Deno.serve(async (req: Request) => {
     provider_user_id: tokens.providerUserId ?? userInfo.providerUserId,
   });
 
-  const secretName = `oauth_${broker}_${userId}_${environment}`;
+  const secretName = `oauth_${broker}_${userId}_${effectiveEnv}`;
 
   // Resolve which broker_connection to update.
   // Priority 1: connectionId encoded in the state token (set when user reconnects
   //             a specific existing connection — avoids the multi-connection ambiguity
   //             where order-by-created_at would pick the wrong row).
-  // Priority 2: fall back to newest OAuth connection for this broker+environment,
-  //             for first-connect flows where no connectionId was known up-front.
+  // Priority 2: match by the LOGIN identity (oauth_provider_user_id) so a demo
+  //             prop-firm login never overwrites a live personal connection that
+  //             happens to share (broker, environment). Falls back to matching on
+  //             effectiveEnv only for legacy rows that predate provider-id tracking.
   let connectionId: string | null = stateConnectionId ?? null;
   if (!connectionId) {
-    const { data: existingConn } = await supabaseAdmin
+    let lookup = supabaseAdmin
       .from('broker_connections')
       .select('id, connection_name')
       .eq('user_id', userId)
       .eq('broker', broker)
-      .eq('environment', environment)
-      .eq('auth_method', 'oauth')
+      .eq('auth_method', 'oauth');
+    lookup = resolvedProviderUserId
+      ? lookup.eq('oauth_provider_user_id', resolvedProviderUserId)
+      : lookup.eq('environment', effectiveEnv);
+    const { data: existingConn } = await lookup
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -229,17 +244,17 @@ Deno.serve(async (req: Request) => {
       p_connection_id: connectionId,
       p_user_id: userId,
       p_broker: broker,
-      p_environment: environment,
+      p_environment: effectiveEnv,
       p_secret_name: secretName,
       p_secret_payload: secretPayload,
       p_token_expires_at: tokens.expiresAt,
       p_oauth_scope: tokens.scope ?? null,
-      p_oauth_provider_user_id: tokens.providerUserId ?? userInfo.providerUserId,
+      p_oauth_provider_user_id: resolvedProviderUserId,
       p_account_id: primaryAccount?.id ?? null,
       p_account_name: primaryAccount?.name ?? null,
       // When updating an existing connection, pass null so COALESCE in the RPC
       // preserves the existing name. Only set the name on first connect.
-      p_connection_name: connectionId ? null : defaultConnectionName(broker, environment, primaryAccount?.name),
+      p_connection_name: connectionId ? null : defaultConnectionName(broker, effectiveEnv, primaryAccount?.name),
       p_is_prop_firm: isPropFirm,
     });
 
