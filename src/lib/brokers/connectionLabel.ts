@@ -22,6 +22,7 @@ export function detectPropFirmLabel(name: string | null | undefined): string | n
   if (n.includes('BULENOX')) return 'Bulenox';
   if (n.includes('TRADEDAY')) return 'TradeDay';
   if (n.includes('UPROFIT')) return 'Uprofit';
+  if (n.includes('TAKEPROFIT') || n.includes('TAKE PROFIT')) return 'Take Profit';
   return null;
 }
 

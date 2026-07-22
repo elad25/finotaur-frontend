@@ -24,7 +24,7 @@ import {
 import { BROKER_CONFIGS, BrokerName } from '@/lib/brokers/types';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
-import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
+import { useTradovate } from '@/hooks/useTradovate';
 import BinanceConnectionPopup from '@/components/brokers/BinanceConnectionPopup';
 import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 
@@ -158,34 +158,6 @@ function SecurityCard({
   );
 }
 
-function EnvironmentToggle({
-  value,
-  onChange,
-}: {
-  value: TradovateEnv;
-  onChange: (value: TradovateEnv) => void;
-}) {
-  return (
-    <div className="grid w-full grid-cols-2 rounded-[9px] border border-[#C9A646]/15 bg-[#070707] p-0.5 sm:w-[180px]">
-      {(['live', 'demo'] as TradovateEnv[]).map((env) => (
-        <button
-          key={env}
-          type="button"
-          onClick={() => onChange(env)}
-          className={[
-            'rounded-[7px] px-4 py-1 text-xs font-medium capitalize transition-all duration-200',
-            value === env
-              ? 'bg-[#C9A646]/20 text-[#E8C766] shadow-[inset_0_0_0_1px_rgba(201,166,70,0.45)]'
-              : 'text-ink-secondary hover:text-ink-primary',
-          ].join(' ')}
-        >
-          {env}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgradeRequired }: Props) {
   const { user } = useAuth();
   const { isLoading } = useTradovate();
@@ -197,7 +169,6 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgrade
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>('tradovate');
   const [connectionName, setConnectionName] = useState('');
-  const [env, setEnv] = useState<TradovateEnv>('live');
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [showBinancePopup, setShowBinancePopup] = useState(false);
@@ -209,7 +180,6 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgrade
     if (!open) {
       setSelectedBroker('tradovate');
       setConnectionName('');
-      setEnv('live');
       setError('');
       setRiskAcknowledged(false);
       setShowBinancePopup(false);
@@ -275,7 +245,10 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgrade
         if (returnTo) {
           sessionStorage.setItem('finotaur_oauth_return_to', returnTo);
         }
-        window.location.href = await getTradovateAuthorizationUrl(env);
+        // The chosen env is now cosmetic — the OAuth callback auto-detects the
+        // real live/demo environment from the token, so the authorize URL just
+        // needs a valid starting point for Tradovate's single shared portal.
+        window.location.href = await getTradovateAuthorizationUrl('live');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Tradovate OAuth failed. Try again or contact support.');
       }
@@ -413,9 +386,6 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgrade
               <h3 className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-secondary">
                 {`${config.displayName} Credentials`}
               </h3>
-              {usesTradovateAuth && (
-                <EnvironmentToggle value={env} onChange={setEnv} />
-              )}
             </div>
 
             {selectedBroker === 'interactive_brokers' && (

@@ -28,6 +28,7 @@ export function detectFirmGroup(name: string): { key: string; label: string } {
   if (n.includes('BULENOX'))                                 return { key: 'pf_bulenox', label: 'Bulenox' };
   if (n.includes('TRADEDAY'))                                return { key: 'pf_tradeday',label: 'TradeDay' };
   if (n.includes('UPROFIT'))                                 return { key: 'pf_uprofit', label: 'Uprofit' };
+  if (n.includes('TAKEPROFIT'))                              return { key: 'pf_takeprofit', label: 'Take Profit' };
   // Personal / individual Tradovate account
   return { key: 'tradovate', label: 'Tradovate' };
 }

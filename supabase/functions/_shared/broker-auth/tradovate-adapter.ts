@@ -72,6 +72,7 @@ const PROP_FIRM_KEYWORDS = [
   'EARN2TRADE',
   'BULENOX',
   'TRADEDAY',
+  'TAKEPROFIT',
 ] as const;
 
 function detectPropFirm(accountName: string): boolean {
