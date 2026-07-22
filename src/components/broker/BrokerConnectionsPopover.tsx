@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { AlertCircle, Check, ChevronDown, ChevronUp, Lock, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
+import { resolveConnectionLabel } from '@/lib/brokers/connectionLabel';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -442,8 +443,7 @@ function PopoverBody({
         // fallback derived from the first account's spec.
         if (g.key.startsWith('conn-')) {
           const conn = allConnections.find(c => c.id === g.key.slice(5));
-          const nm = conn?.connection_name?.trim();
-          if (nm) return { ...g, label: nm };
+          if (conn) return { ...g, label: resolveConnectionLabel(conn) };
         }
         return g;
       }),

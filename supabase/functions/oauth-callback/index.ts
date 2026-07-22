@@ -46,6 +46,24 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Default label for a NEW connection. Prefers the detected prop-firm name so a
+// fresh connection reads e.g. "Apex (demo)" rather than a raw account spec.
+// The user can rename it later in Manage Connections. connection_name is the
+// single source of truth the frontend renders everywhere.
+function defaultConnectionName(brokerName: string, env: string, primaryAccountName?: string | null): string {
+  const n = (primaryAccountName ?? '').toUpperCase();
+  let firm: string | null = null;
+  if (n.includes('APEX')) firm = 'Apex';
+  else if (n.includes('MFFU') || n.includes('MYFUNDEDFUTURES') || n.startsWith('MFF')) firm = 'MyFundedFutures';
+  else if (n.startsWith('TST') || n.includes('TOPSTEP')) firm = 'Topstep';
+  else if (n.includes('EARN2TRADE') || n.startsWith('E2T')) firm = 'Earn2Trade';
+  else if (n.includes('BULENOX')) firm = 'Bulenox';
+  else if (n.includes('TRADEDAY')) firm = 'TradeDay';
+  else if (n.includes('UPROFIT')) firm = 'Uprofit';
+  const base = firm ?? (brokerName === 'ninja_trader' ? 'NinjaTrader' : (primaryAccountName?.trim() || 'Tradovate'));
+  return `${base} (${env})`;
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -221,7 +239,7 @@ Deno.serve(async (req: Request) => {
       p_account_name: primaryAccount?.name ?? null,
       // When updating an existing connection, pass null so COALESCE in the RPC
       // preserves the existing name. Only set the name on first connect.
-      p_connection_name: connectionId ? null : `${environment} – ${primaryAccount?.name ?? broker}`,
+      p_connection_name: connectionId ? null : defaultConnectionName(broker, environment, primaryAccount?.name),
       p_is_prop_firm: isPropFirm,
     });
 
