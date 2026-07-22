@@ -1,6 +1,7 @@
 // src/components/TradovateConnectModal.tsx
 import { useState, useCallback } from 'react';
 import { X, Link2, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff, Zap, Shield, Pencil, Trash2, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
 
 interface Props {
@@ -42,8 +43,12 @@ export default function TradovateConnectModal({ onClose, onAddConnection, initia
     }
   }, [connect, selectedEnv, username, password, connectionLabel]);
 
-  const handleDisconnect = useCallback(async (env: TradovateEnv) => {
-    await disconnect(env);
+  const handleDisconnect = useCallback(async (env: TradovateEnv, credentialId?: string) => {
+    if (!credentialId) {
+      toast.error('Could not identify the connection to remove');
+      return;
+    }
+    await disconnect(env, credentialId);
   }, [disconnect]);
 
   const handleAddConnection = useCallback(() => {
@@ -149,7 +154,7 @@ export default function TradovateConnectModal({ onClose, onAddConnection, initia
                   Sync Now
                 </button>
                 <button
-                  onClick={() => handleDisconnect(selectedEnv)}
+                  onClick={() => handleDisconnect(selectedEnv, credential?.id)}
                   disabled={isLoading}
                   className="flex-1 py-2.5 rounded-xl bg-red-500/5 border border-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >

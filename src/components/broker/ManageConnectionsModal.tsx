@@ -102,7 +102,7 @@ function ConnectionRow({
           <div className="text-[11px] text-zinc-500 mt-0.5 truncate">
             {accountCount > 0
               ? `${accountCount} account${accountCount !== 1 ? 's' : ''}`
-              : conn.account_name || conn.account_id || '1 account'}
+              : 'No accounts — reconnect'}
           </div>
         </div>
         <button

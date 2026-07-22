@@ -168,6 +168,41 @@ Deno.serve(async (req: Request) => {
   // each other.
   const resolvedProviderUserId = tokens.providerUserId ?? userInfo.providerUserId;
 
+  // ── P0 guard: reject a connect that discovered ZERO accounts ──────────────
+  // A login whose /account/list returns nothing (the user authorized the wrong
+  // Tradovate login, or the account was reset/blown) must NOT create a phantom
+  // "connected" broker_connections row, and must NOT overwrite an existing
+  // connection with an empty login on reconnect. Surface it so the user can
+  // re-authorize the correct account.
+  if (userInfo.accounts.length === 0) {
+    console.warn('[oauth-callback] zero accounts discovered — rejecting connect', {
+      userId, broker, provider: resolvedProviderUserId, env: effectiveEnv,
+    });
+    return redirectTo('?oauth_error=no_accounts_found');
+  }
+
+  // ── P1 guard: on an explicit reconnect, refuse to rebind the connection to a
+  // DIFFERENT login than it was created with. Tradovate OAuth returns whichever
+  // login the browser session is signed into; without this, reconnecting
+  // connection A while signed in as login B silently retargets A onto B's
+  // identity/tokens/accounts. Only applies to the reconnect path (stateConnectionId);
+  // fresh connects match by provider id and are inherently same-login.
+  if (stateConnectionId && resolvedProviderUserId) {
+    const { data: existingForGuard } = await supabaseAdmin
+      .from('broker_connections')
+      .select('oauth_provider_user_id')
+      .eq('id', stateConnectionId)
+      .maybeSingle();
+    const priorProvider = existingForGuard?.oauth_provider_user_id;
+    if (priorProvider && priorProvider !== resolvedProviderUserId) {
+      console.warn('[oauth-callback] reconnect login mismatch — rejecting', {
+        userId, broker, connectionId: stateConnectionId,
+        priorProvider, newProvider: resolvedProviderUserId,
+      });
+      return redirectTo('?oauth_error=different_login');
+    }
+  }
+
   // Trial anti-abuse: block a broker account already claimed by a different
   // journal trial. Claims the resolved providerUserId AND every account id
   // returned for this login. Fails open on RPC error/timeout — a transient
