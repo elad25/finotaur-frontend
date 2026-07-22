@@ -49,6 +49,8 @@ export interface UserProfile {
   platform_plan?: string | null;
   platform_subscription_status?: string | null;
   platform_bundle_journal_granted?: boolean;
+  // Onboarding gate — has this account finished the guided tour/welcome flow?
+  onboarding_completed?: boolean | null;
 }
 
 // ============================================
@@ -73,7 +75,8 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       platform_subscription_status,
       platform_bundle_journal_granted,
       is_in_trial,
-      trial_ends_at
+      trial_ends_at,
+      onboarding_completed
     `)
     .eq('id', userId)
     .maybeSingle();
@@ -103,16 +106,17 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
 // ============================================
 // Hook עם React Query
 // ============================================
-export function useUserProfile() {
+export function useUserProfile(options?: { enabled?: boolean }) {
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
-  
+
   const effectiveUserId = user?.id || null;
+  const optionEnabled = options?.enabled ?? true;
 
   const query = useQuery({
     queryKey: queryKeys.profile(effectiveUserId || undefined),
     queryFn: () => fetchUserProfile(effectiveUserId!),
-    enabled: !!effectiveUserId && !authLoading,
+    enabled: !!effectiveUserId && !authLoading && optionEnabled,
     staleTime: 30 * 60 * 1000, // 30 minutes
     gcTime: 60 * 60 * 1000,
     retry: 2,

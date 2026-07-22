@@ -127,7 +127,13 @@ export default function Register() {
         // NOT gate on localStorage here: every fresh signup deserves the
         // welcome screen, even if a previous signup in the same browser
         // already marked the local flag.
-        navigate(POST_REGISTER_NEW_USER_DEST, { replace: true });
+        // Forward the already-fetched onboarding_completed value via router
+        // state so WelcomeScreen can decide synchronously without firing a
+        // redundant profiles query behind its own loading skeleton.
+        navigate(POST_REGISTER_NEW_USER_DEST, {
+          replace: true,
+          state: { onboardingCompleted: data?.onboarding_completed === true, fromRegister: true },
+        });
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
