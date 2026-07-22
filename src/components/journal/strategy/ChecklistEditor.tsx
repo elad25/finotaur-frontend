@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { Plus, X } from "lucide-react";
+import { uuid } from "@/utils/uuid";
 
 export interface ChecklistItem {
   id: string;
@@ -18,7 +19,7 @@ interface ChecklistEditorProps {
  */
 export default function ChecklistEditor({ items, onChange }: ChecklistEditorProps) {
   const handleAdd = useCallback(() => {
-    const newItem: ChecklistItem = { id: crypto.randomUUID(), label: "" };
+    const newItem: ChecklistItem = { id: uuid(), label: "" };
     onChange([...items, newItem]);
   }, [items, onChange]);
 

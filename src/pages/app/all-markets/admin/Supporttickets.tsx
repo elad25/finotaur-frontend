@@ -45,6 +45,7 @@ import {
   Bot,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { uuid } from '@/utils/uuid';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -480,7 +481,7 @@ const [groupCounts, setGroupCounts] = useState<Record<string, number>>({
       console.log('Sending response...');
 
       const newMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'admin',
         content: response.trim(),
         timestamp: new Date().toISOString(),

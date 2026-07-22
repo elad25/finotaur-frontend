@@ -40,6 +40,25 @@ export function initSentry(): void {
       /window\.webkit\.messageHandlers/,
     ],
     beforeSend(event) {
+      // Injected-script DOM serialization (extensions/webview): a browser
+      // extension or in-app-browser walks our DOM and JSON.stringify()s a
+      // node, which throws on React's circular __reactFiber$ back-pointer.
+      // Not our code (we never serialize DOM nodes) and not actionable, but
+      // we only drop it when BOTH signatures are present so a genuine
+      // first-party circular-JSON bug (which won't mention __reactFiber)
+      // still reaches Sentry. Mirrors isNonActionableInjectedError in
+      // src/components/ErrorBoundary.tsx.
+      const exceptionText = (event.exception?.values ?? [])
+        .map((exc) => `${exc.type ?? ''} ${exc.value ?? ''}`)
+        .join(' ');
+      const fullText = `${event.message ?? ''} ${exceptionText}`;
+      if (
+        fullText.includes('Converting circular structure to JSON') &&
+        fullText.includes('__reactFiber')
+      ) {
+        return null;
+      }
+
       if (event.user) {
         event.user.email = undefined;
       }

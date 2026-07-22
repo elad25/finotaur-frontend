@@ -13,6 +13,8 @@
  * No React imports — this file is pure TS and safe to use in any context.
  */
 
+import { uuid } from './uuid';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -63,15 +65,16 @@ export interface StrategyComponent {
 
 /**
  * Returns a new random UUID.
- * Uses `crypto.randomUUID()` which is available in all supported browsers
- * (Chromium 92+, Firefox 95+, Safari 15.4+) and Node 14.17+.
+ * Delegates to the shared `uuid()` helper (src/utils/uuid.ts), which falls
+ * back to a Math.random()-based generator when `crypto.randomUUID` is
+ * unavailable (old Safari, non-secure/http contexts).
  *
- * The codebase uses `crypto.randomUUID()` directly in several places
- * (ChecklistEditor, idempotencyKey, etc.). We wrap it here to give
- * callers a single import point that is easy to stub in tests.
+ * The codebase uses this wrapper in several places (ChecklistEditor,
+ * idempotencyKey, etc.) to give callers a single import point that is
+ * easy to stub in tests.
  */
 export function newComponentId(): string {
-  return crypto.randomUUID();
+  return uuid();
 }
 
 /**

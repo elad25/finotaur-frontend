@@ -2,8 +2,10 @@
 // Format namespace per source: manual::, tradovate::, csv:: (CSV lives in importUtils).
 // See migrations/phase-2e-b3-idempotency-key.sql for the original spec.
 
+import { uuid } from '@/utils/uuid';
+
 export function buildManualIdempotencyKey(): string {
-  return `manual::none::${crypto.randomUUID()}`;
+  return `manual::none::${uuid()}`;
 }
 
 export function buildTradovateIdempotencyKey(

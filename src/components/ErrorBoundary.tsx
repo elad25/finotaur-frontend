@@ -127,23 +127,29 @@ export class ErrorBoundary extends Component<Props, State> {
     const route =
       typeof window !== 'undefined' && window.location ? window.location.pathname : 'unknown';
 
-    captureException(error, {
-      extra: {
-        componentStack: errorInfo.componentStack,
-        errorName: error.name,
-        errorMessage: error.message,
-        failingComponent,
-        route,
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      },
-      tags: {
-        boundary: this.props.boundary ?? 'journal',
-        // Tag values must be <200 chars per Sentry — truncate defensively.
-        failingComponent: failingComponent.slice(0, 80),
-        route: route.slice(0, 80),
-        errorName: (error.name || 'Error').slice(0, 40),
-      },
-    });
+    // Skip the Sentry send for non-actionable injected-script errors (browser
+    // extensions / in-app-browser WebViews) — see isNonActionableInjectedError
+    // above. We still render the fallback UI below; we just don't alert on
+    // noise that isn't our code and isn't fixable.
+    if (!isNonActionableInjectedError(error)) {
+      captureException(error, {
+        extra: {
+          componentStack: errorInfo.componentStack,
+          errorName: error.name,
+          errorMessage: error.message,
+          failingComponent,
+          route,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        },
+        tags: {
+          boundary: this.props.boundary ?? 'journal',
+          // Tag values must be <200 chars per Sentry — truncate defensively.
+          failingComponent: failingComponent.slice(0, 80),
+          route: route.slice(0, 80),
+          errorName: (error.name || 'Error').slice(0, 40),
+        },
+      });
+    }
 
     // 2026-05-20: send a parallel fire-and-forget POST to the server's
     // error-report endpoint so the admin alerter gets the event too. Sentry

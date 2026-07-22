@@ -16,6 +16,7 @@
 import { useCallback, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { uuid } from '@/utils/uuid';
 import {
   buildWhopCheckoutUrl,
   getPlanId,
@@ -290,7 +291,7 @@ const createCheckoutSession = useCallback(async (params: {
 
       // 🔥 Save pending checkout BEFORE redirecting to Whop
       if (user?.id) {
-        const checkoutToken = crypto.randomUUID();
+        const checkoutToken = uuid();
         
         try {
           await supabase.from('pending_checkouts').insert({
