@@ -11,10 +11,10 @@ import type { Portfolio } from '@/hooks/usePortfolios';
 // ── Types ──────────────────────────────────────────────────────
 export interface PortfolioGroup {
   key: string;
-  label: string;          // account-DERIVED firm identity (primary, unspoofable)
+  label: string;          // user-given connection name (falls back to account name)
   portfolios: Portfolio[];
-  userLabel?: string;     // user's connection_name, shown as secondary alias when set
-  mismatch?: boolean;     // true when userLabel implies a DIFFERENT firm than the accounts
+  userLabel?: string;     // kept for backward compat; no longer set
+  mismatch?: boolean;     // kept for backward compat; no longer set
 }
 
 // ── Prop-firm detection ────────────────────────────────────────
@@ -34,42 +34,6 @@ export function detectFirmGroup(name: string): { key: string; label: string } {
   if (/^\d+$/.test(name.trim()))                             return { key: 'personal',  label: 'Personal' };
   // Personal / individual Tradovate account
   return { key: 'tradovate', label: 'Tradovate' };
-}
-
-// ── Canonical account-derived firm identity ─────────────────────
-// Distinct from detectFirmGroup: this is the unspoofable identity derived
-// from ACCOUNT NAMES (never from user-entered connection_name), used to
-// compute a group's display label AND to detect when a user-given name
-// (connection_name) lies about which firm the accounts actually belong to.
-export type FirmKey = 'apex'|'mffu'|'topstep'|'e2t'|'bulenox'|'tradeday'|'uprofit'|'takeprofit'|'personal'|'tradovate';
-export const FIRM_LABEL: Record<FirmKey, string> = {
-  apex:'APEX', mffu:'MFFU', topstep:'Topstep', e2t:'Earn2Trade', bulenox:'Bulenox',
-  tradeday:'TradeDay', uprofit:'Uprofit', takeprofit:'Take Profit', personal:'Personal', tradovate:'Tradovate',
-};
-// Canonical firm detection used for BOTH account names and user-entered names.
-export function firmKey(name: string | null | undefined): FirmKey {
-  const n = (name ?? '').toUpperCase();
-  if (!n.trim()) return 'tradovate';
-  if (n.includes('APEX')) return 'apex';
-  if (n.includes('MFFU') || n.includes('MYFUNDEDFUTURES') || n.startsWith('MFF')) return 'mffu';
-  if (n.startsWith('TST') || n.includes('TOPSTEP')) return 'topstep';
-  if (n.includes('EARN2TRADE') || n.startsWith('E2T')) return 'e2t';
-  if (n.includes('BULENOX')) return 'bulenox';
-  if (n.includes('TRADEDAY')) return 'tradeday';
-  if (n.includes('UPROFIT')) return 'uprofit';
-  if (n.includes('TAKEPROFIT') || n.includes('TAKE PROFIT')) return 'takeprofit';
-  if (/^\d+$/.test(n.trim())) return 'personal';
-  return 'tradovate';
-}
-// Dominant firm key across a group's accounts (prefers any specific firm over
-// generic 'tradovate'). Accepts anything with a `name` field so callers that
-// only have account names (not full Portfolio rows) can reuse it too.
-export function deriveFirmKey(accounts: { name: string }[]): FirmKey {
-  const counts = new Map<FirmKey, number>();
-  for (const a of accounts) { const k = firmKey(a.name); counts.set(k, (counts.get(k) ?? 0) + 1); }
-  let best: FirmKey = 'tradovate'; let bestCount = -1;
-  for (const [k, c] of counts) { if (k === 'tradovate') continue; if (c > bestCount) { best = k; bestCount = c; } }
-  return bestCount >= 0 ? best : 'tradovate';
 }
 
 // ── Group builder ──────────────────────────────────────────────
@@ -94,20 +58,18 @@ export function buildAccountGroups(
       groupMap.get(key)!.push(p);
     }
 
-    // Builds a PortfolioGroup whose label is the account-DERIVED firm identity
-    // (unspoofable), carrying the user's connection_name as a secondary alias
-    // and flagging a mismatch when that alias implies a different firm.
     const toGroup = (key: string, portfolios: Portfolio[]): PortfolioGroup => {
-      const dk = deriveFirmKey(portfolios);
-      const label = FIRM_LABEL[dk];
-      let userLabel: string | undefined;
+      // Label = the user-given connection name. connection_label mirrors the
+      // connection's connection_name for every credentialed portfolio (see
+      // usePortfolios). No firm detection, no mismatch warning — the user
+      // controls the name (Elad, 2026-07-22; reverts the #1624 firm layer).
+      let label = '';
       for (const p of portfolios) {
         const l = p.connection_label?.trim();
-        if (l) { userLabel = l; break; }
+        if (l) { label = l; break; }
       }
-      const nameKey = firmKey(userLabel);
-      const mismatch = !!userLabel && nameKey !== 'tradovate' && nameKey !== dk;
-      return { key, label, portfolios, userLabel, mismatch: mismatch || undefined };
+      if (!label) label = portfolios[0]?.name?.trim() || 'Tradovate';
+      return { key, label, portfolios };
     };
 
     // Emit prop-firm groups (all except the generic 'tradovate' bucket) sorted by label

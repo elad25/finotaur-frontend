@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link2, Trash2, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Link2, Trash2, X, RefreshCw } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
@@ -106,21 +106,6 @@ function ConnectionRow({
               ? `${accountCount} account${accountCount !== 1 ? 's' : ''}`
               : 'No accounts — reconnect'}
           </div>
-          {identity.alias && (
-            <div
-              className={`flex items-center gap-1 text-[10px] mt-0.5 truncate ${
-                identity.mismatch ? 'text-yellow-400' : 'text-zinc-600'
-              }`}
-              title={
-                identity.mismatch
-                  ? `These accounts look like ${identity.label}, not "${identity.alias}"`
-                  : undefined
-              }
-            >
-              {identity.mismatch && <AlertTriangle className="w-2.5 h-2.5 shrink-0" />}
-              "{identity.alias}"
-            </div>
-          )}
         </div>
         <button
           onClick={handleRemove}

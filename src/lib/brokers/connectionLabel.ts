@@ -8,7 +8,6 @@
 //           broker config displayName → humanised broker key.
 // ──────────────────────────────────────────────────────────────
 import { BROKER_CONFIGS, type BrokerName, type BrokerConnection } from '@/lib/brokers/types';
-import { firmKey, deriveFirmKey, FIRM_LABEL } from '@/components/journal/accountGrouping';
 
 // Unified prop-firm detector. Returns a display label for a Tradovate
 // account/portfolio name, or null when no known firm keyword matches.
@@ -41,28 +40,20 @@ export function resolveConnectionLabel(conn: BrokerConnection): string {
   return conn.broker.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-// ── Account-derived connection identity ─────────────────────────────────────
-// The account-derived firm (from actual account names) is the truth; the
-// user-given connection_name is a secondary alias, surfaced with a mismatch
-// warning when it implies a different firm than the accounts.
+// ── Connection identity ───────────────────────────────────────────────────
+// label = the user-given connection name (resolveConnectionLabel). alias and
+// mismatch are kept on the shape for backward compat but no longer computed
+// from account-derived firm detection (Elad 2026-07-22 — reverts #1624).
 export interface ConnectionIdentity {
   label: string;
   alias?: string;
   mismatch: boolean;
 }
 
-// accountNames = the names of the portfolios linked to this connection.
-export function resolveConnectionIdentity(conn: BrokerConnection, accountNames: string[]): ConnectionIdentity {
-  // Non-tradovate brokers keep their existing name-first label — no accounts
-  // to derive a firm from.
-  if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
-    return { label: resolveConnectionLabel(conn), mismatch: false };
-  }
-  const dk = accountNames.length ? deriveFirmKey(accountNames.map(name => ({ name }))) : 'tradovate';
-  const label = FIRM_LABEL[dk];
-  const name = conn.connection_name?.trim();
-  const nameKey = firmKey(name);
-  const mismatch = !!name && nameKey !== 'tradovate' && nameKey !== dk;
-  const alias = name && name.toUpperCase() !== label.toUpperCase() ? name : undefined;
-  return { label, alias, mismatch };
+// accountNames param kept for call-site compat; no longer used to derive a firm.
+export function resolveConnectionIdentity(conn: BrokerConnection, _accountNames: string[]): ConnectionIdentity {
+  // Firm-detection removed (Elad 2026-07-22): label every connection by its
+  // user-given connection_name via resolveConnectionLabel (connection_name-first),
+  // tradovate/ninja included. No account-derived firm, no mismatch warning.
+  return { label: resolveConnectionLabel(conn), mismatch: false };
 }
