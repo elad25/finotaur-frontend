@@ -645,6 +645,32 @@ export const BillingTab = () => {
           {/* Right — plan rows (holdings) */}
           <div className="px-4 py-1 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
 
+        {isAppTrial ? (
+          <div className="py-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 px-1 pt-2 pb-1">Unlocked in your trial</p>
+            <div className="flex items-center gap-2.5 py-2 text-sm text-zinc-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Full <span className="text-white font-medium">Trader</span> — journal, copier &amp; analytics</span>
+            </div>
+            <div className="flex items-center gap-2.5 py-2 text-sm text-zinc-300 border-t border-zinc-800/60">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Full <span className="text-white font-medium">Investor</span> — intel, research &amp; AI</span>
+            </div>
+            <div className="flex items-center gap-2.5 py-2 text-sm text-zinc-500 border-t border-zinc-800/60">
+              <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
+              <span>No card on file · nothing to cancel</span>
+            </div>
+            <div className="pt-2 pb-2.5 border-t border-zinc-800/60">
+              <button
+                onClick={() => navigate('/app/upgrade')}
+                className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-semibold transition-colors inline-flex items-center gap-1"
+              >
+                Choose a plan <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Row 1 — Platform */}
         <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
           <Zap className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -765,6 +791,8 @@ export const BillingTab = () => {
               : 'None'}
           </span>
         </div>
+          </>
+        )}
           </>
         )}
           </div>
