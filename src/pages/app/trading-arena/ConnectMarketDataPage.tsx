@@ -79,6 +79,42 @@ function LiveDataTeaserCard({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// ── teaser card for the upcoming Rithmic (R|Protocol) market-data feed ──────
+// Attribution: the "Trading Platform by Rithmic" and "Powered by OMNE" logos
+// are displayed here per Rithmic's conformance/attribution requirements.
+function RithmicTeaserCard({ compact = false }: { compact?: boolean }) {
+  return (
+    <Card
+      padding={compact ? 'compact' : 'default'}
+      className="opacity-70 border-dashed space-y-2"
+    >
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-zinc-500 shrink-0" aria-hidden="true" />
+        <h3 className="text-sm font-semibold text-zinc-300">Rithmic (R|Protocol)</h3>
+        <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-zinc-700/50 text-zinc-500">
+          Coming soon
+        </span>
+      </div>
+      <p className="text-xs text-zinc-500 leading-relaxed">
+        Stream your own real-time CME futures data by connecting with your Rithmic credentials.
+      </p>
+      <div className="flex items-center gap-3 pt-1">
+        <img
+          src="/brokers/rithmic-trading-platform.png"
+          alt="Trading Platform by Rithmic"
+          className="h-3.5 w-auto object-contain opacity-70"
+        />
+        <span className="text-zinc-700" aria-hidden="true">·</span>
+        <img
+          src="/brokers/powered-by-omne.png"
+          alt="Powered by OMNE"
+          className="h-3.5 w-auto object-contain opacity-70"
+        />
+      </div>
+    </Card>
+  );
+}
+
 export default function ConnectMarketDataPage() {
   const navigate = useNavigate();
   const { devices, isLoading } = useAgentDevices();
@@ -216,6 +252,7 @@ export default function ConnectMarketDataPage() {
 
               {/* Secondary/teaser option */}
               <LiveDataTeaserCard />
+              <RithmicTeaserCard />
             </>
           )}
 
@@ -264,6 +301,7 @@ export default function ConnectMarketDataPage() {
               </Card>
 
               <LiveDataTeaserCard compact />
+              <RithmicTeaserCard compact />
             </>
           )}
 
@@ -291,6 +329,7 @@ export default function ConnectMarketDataPage() {
               </Card>
 
               <LiveDataTeaserCard compact />
+              <RithmicTeaserCard compact />
             </>
           )}
         </div>

@@ -51,6 +51,18 @@ const Copyright = () => {
             </a>
             .
           </p>
+          <p className="mt-6">
+            The R | Protocol API™ software is Copyright © 2026 by Rithmic, LLC. All rights reserved.
+          </p>
+          <p className="mt-4">
+            Trading Platform by Rithmic™ is a trademark of Rithmic, LLC. All rights reserved.
+          </p>
+          <p className="mt-4">
+            The OMNE™ software is Copyright © 2026 by Omnesys, LLC and Omnesys Technologies, Inc. All rights reserved.
+          </p>
+          <p className="mt-4">
+            Powered by OMNE™ is a trademark of Omnesys, LLC and Omnesys Technologies, Inc. All rights reserved.
+          </p>
 
           <p className="mt-16 text-muted-foreground">
             © 2025 Finotaur. All Rights Reserved.
