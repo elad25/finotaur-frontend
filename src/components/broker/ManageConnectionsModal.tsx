@@ -6,28 +6,29 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link2, Trash2, X, RefreshCw } from 'lucide-react';
+import { Link2, Trash2, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
+import type { Portfolio } from '@/hooks/usePortfolios';
 import type { BrokerConnection } from '@/lib/brokers/types';
-import { resolveConnectionLabel } from '@/lib/brokers/connectionLabel';
+import { resolveConnectionIdentity } from '@/lib/brokers/connectionLabel';
 
-// ── Account count helper ──────────────────────────────────────────────────────
-// Counts portfolios that belong to a connection.
+// ── Account matching helper ────────────────────────────────────────────────────
+// Portfolios that belong to a connection.
 // For tradovate/ninja_trader: prefer credential_id match (post-PR-#868 rows);
 // fall back to environment match for legacy rows where credential_id is null.
 // For other brokers: matches on broker_connection_id.
-function useAccountCount(conn: BrokerConnection): number {
+function useConnectionPortfolios(conn: BrokerConnection): Portfolio[] {
   const { portfolios } = usePortfolioContext();
   if (conn.broker === 'tradovate' || conn.broker === 'ninja_trader') {
     return portfolios.filter(p => {
       if (p.source !== 'tradovate') return false;
       if (p.credential_id != null) return p.credential_id === conn.id;
       return p.environment === conn.environment; // legacy fallback
-    }).length;
+    });
   }
   // broker_connection_id is set for source='broker' portfolios
-  return portfolios.filter(p => p.broker_connection_id === conn.id).length;
+  return portfolios.filter(p => p.broker_connection_id === conn.id);
 }
 
 // ── Row component ─────────────────────────────────────────────────────────────
@@ -40,8 +41,9 @@ function ConnectionRow({
   onRemove: (id: string) => void;
   isRemoving: boolean;
 }) {
-  const displayName = resolveConnectionLabel(conn);
-  const accountCount = useAccountCount(conn);
+  const connectionPortfolios = useConnectionPortfolios(conn);
+  const accountCount = connectionPortfolios.length;
+  const identity = resolveConnectionIdentity(conn, connectionPortfolios.map(p => p.name));
   const isConnected = conn.status === 'connected' || conn.status === 'renewing';
   const isExpired   = conn.status === 'error' || conn.status === 'canceled' || conn.status === 'disconnected';
 
@@ -77,7 +79,7 @@ function ConnectionRow({
               }`}
             />
             <span className="text-sm font-semibold text-white truncate">
-              {displayName}
+              {identity.label}
             </span>
             {conn.environment && (
               <span
@@ -104,6 +106,21 @@ function ConnectionRow({
               ? `${accountCount} account${accountCount !== 1 ? 's' : ''}`
               : 'No accounts — reconnect'}
           </div>
+          {identity.alias && (
+            <div
+              className={`flex items-center gap-1 text-[10px] mt-0.5 truncate ${
+                identity.mismatch ? 'text-yellow-400' : 'text-zinc-600'
+              }`}
+              title={
+                identity.mismatch
+                  ? `These accounts look like ${identity.label}, not "${identity.alias}"`
+                  : undefined
+              }
+            >
+              {identity.mismatch && <AlertTriangle className="w-2.5 h-2.5 shrink-0" />}
+              "{identity.alias}"
+            </div>
+          )}
         </div>
         <button
           onClick={handleRemove}

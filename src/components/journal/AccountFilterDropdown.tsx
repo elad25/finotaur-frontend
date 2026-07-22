@@ -9,7 +9,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, Settings, Check, Minus, Layers } from 'lucide-react';
+import { Wallet, ChevronDown, Settings, Check, Minus, Layers, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_SCOPE_ID } from '@/contexts/PortfolioContext';
 import { useTraderMode } from '@/hooks/useTraderMode';
@@ -292,9 +292,29 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
                     {someChecked && <Minus className="w-2.5 h-2.5 text-[#C9A646]" strokeWidth={3} />}
                   </button>
 
-                  {/* Group label */}
-                  <span className="flex-1 text-[9px] text-zinc-500 font-semibold uppercase tracking-widest truncate">
-                    {group.label}
+                  {/* Group label — account-derived firm identity, plus the user's
+                      custom name as a secondary alias (flagged if it implies a
+                      different firm than the accounts actually show). */}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[9px] text-zinc-500 font-semibold uppercase tracking-widest truncate">
+                      {group.label}
+                    </span>
+                    {group.userLabel && (
+                      <span
+                        className={cn(
+                          'mt-0.5 flex items-center gap-1 truncate text-[8px] font-normal normal-case tracking-normal',
+                          group.mismatch ? 'text-yellow-400' : 'text-zinc-600',
+                        )}
+                        title={
+                          group.mismatch
+                            ? `These accounts look like ${group.label}, not "${group.userLabel}"`
+                            : undefined
+                        }
+                      >
+                        {group.mismatch && <AlertTriangle className="h-2.5 w-2.5 shrink-0" />}
+                        "{group.userLabel}"
+                      </span>
+                    )}
                   </span>
 
                   {/* Selected / total count */}
