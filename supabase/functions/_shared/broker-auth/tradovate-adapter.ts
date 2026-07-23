@@ -61,6 +61,10 @@ interface TradovateConfig {
   clientSecret: string;
   authorizeUrl: string;
   defaultScope: string;
+  /** OAuth `prompt` param for the authorize URL. Default 'login' forces Tradovate
+   *  to re-prompt for credentials (enables connecting multiple distinct logins).
+   *  Empty string omits it. Overridable via env `oauth_tradovate_prompt`. */
+  authorizePrompt: string;
   /** Initial env guess. Overridden automatically if Tradovate signals a mismatch. */
   defaultEnv: TradovateEnv;
 }
@@ -163,6 +167,17 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
         state,
         scope: config.defaultScope,
       });
+      // Force re-authentication so Tradovate does NOT silently reuse an existing
+      // browser session. This lets a user connect MULTIPLE distinct logins
+      // simultaneously (e.g. a MyFundedFutures login AND a Take Profit login,
+      // each with its own username/password → separate provider_user_id →
+      // separate connection). Without this, a second connect reuses the first
+      // login's session and binds to the same account set. `prompt=login` is the
+      // OAuth/OIDC standard for this; env-overridable (set oauth_tradovate_prompt=''
+      // to disable without a redeploy) in case Tradovate ever rejects it.
+      if (config.authorizePrompt) {
+        params.set('prompt', config.authorizePrompt);
+      }
       return `${config.authorizeUrl}?${params.toString()}`;
     },
 
@@ -629,6 +644,10 @@ export function buildTradovateConfigFromEnv(): TradovateConfig {
       'https://trader.tradovate.com/oauth',
     defaultScope:
       Deno.env.get('oauth_tradovate_default_scope') ?? 'trading_read',
+    // Default 'login' forces Tradovate to re-prompt for credentials on every
+    // connect so users can add multiple distinct logins. Set the env var to an
+    // empty string to disable (kill-switch, no redeploy needed).
+    authorizePrompt: Deno.env.get('oauth_tradovate_prompt') ?? 'login',
     defaultEnv,
   };
 }
