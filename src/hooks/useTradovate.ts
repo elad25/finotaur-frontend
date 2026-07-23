@@ -19,6 +19,7 @@ export interface TradovateCredential {
   last_sync_at: string | null;
   sync_error_message: string | null;
   sync_error_count: number;
+  created_at: string | null;
 }
 
 // ── Query keys
@@ -115,7 +116,7 @@ async function fetchCredentials(userId: string): Promise<TradovateCredential[]> 
   // The legacy TradovateCredential shape is preserved so existing callers don't change.
   const { data, error } = await supabase
     .from('broker_connections')
-    .select('id,connection_name,environment,account_id,account_name,connection_data,status,token_expires_at,last_sync_at,last_error,error_count')
+    .select('id,connection_name,environment,account_id,account_name,connection_data,status,token_expires_at,last_sync_at,last_error,error_count,created_at')
     .eq('user_id', userId)
     .in('broker', TRADOVATE_AUTH_BROKERS as unknown as string[])
     .order('created_at', { ascending: true });
@@ -133,6 +134,7 @@ async function fetchCredentials(userId: string): Promise<TradovateCredential[]> 
     last_sync_at: string | null;
     last_error: string | null;
     error_count: number | null;
+    created_at: string | null;
   };
   return (data ?? []).map((r: Row): TradovateCredential => ({
     id: r.id,
@@ -146,6 +148,7 @@ async function fetchCredentials(userId: string): Promise<TradovateCredential[]> 
     last_sync_at: r.last_sync_at,
     sync_error_message: r.last_error,
     sync_error_count: r.error_count ?? 0,
+    created_at: r.created_at,
   }));
 }
 
@@ -474,9 +477,27 @@ export function useTradovate() {
     pendingNameApplied.current = true;
     localStorage.removeItem('pending_tradovate_connection_name');
 
-    // credentials is ordered by created_at ASC — the newest connection is last.
-    const target = credentials[credentials.length - 1];
-    updateLabel(target.id, parsed.name).catch(() => {
+    // credentials is ordered by created_at ASC, so the newest by created_at
+    // is normally last — but with multiple simultaneous connections we can't
+    // just blindly trust array position (a race between two OAuth flows, or
+    // a stale fetch, could reorder things). Find the credential with the
+    // greatest created_at explicitly.
+    const newest = credentials.reduce<TradovateCredential | undefined>((latest, c) => {
+      if (!c.created_at) return latest;
+      if (!latest || !latest.created_at) return c;
+      return new Date(c.created_at).getTime() > new Date(latest.created_at).getTime() ? c : latest;
+    }, undefined);
+
+    // Only rename it if it was actually created around/after the user stored
+    // the pending name. A reconnect can UPDATE an existing older row instead
+    // of INSERTing a new one — in that case no row qualifies as "just
+    // connected" and we must not rename an unrelated older connection.
+    const CREATED_AT_BUFFER_MS = 60000;
+    if (!newest?.created_at || new Date(newest.created_at).getTime() < parsed.ts - CREATED_AT_BUFFER_MS) {
+      return;
+    }
+
+    updateLabel(newest.id, parsed.name).catch(() => {
       // If the rename fails, log silently. The user can rename manually via
       // ManageConnectionsModal. Do not re-store the pending key (avoid loops).
     });
@@ -491,15 +512,27 @@ export function useTradovate() {
   const hasLiveActive     = liveCredential?.status === 'connected';
   const hasDemoActive     = demoCredential?.status === 'connected';
 
-  // SyncStatusBadge data
+  // SyncStatusBadge data — aggregated across ALL connections (both
+  // environments), not just one, so a second connection's error/pending
+  // state is never hidden behind a healthy first connection.
   const syncStatus = (() => {
-    if (!hasAnyConnection) return { type: 'disconnected' as const, label: 'Not connected' };
-    const active = liveCredential ?? demoCredential;
-    if (active?.sync_error_count && active.sync_error_count > 0)
-      return { type: 'error' as const, label: active.sync_error_message || 'Sync error' };
-    if (!active?.last_sync_at)
+    if (credentials.length === 0) return { type: 'disconnected' as const, label: 'Not connected' };
+
+    const errored = credentials.find(c => c.sync_error_count && c.sync_error_count > 0);
+    if (errored)
+      return { type: 'error' as const, label: errored.sync_error_message || 'Sync error' };
+
+    const stillPending = credentials.some(c => !c.last_sync_at);
+    if (stillPending)
       return { type: 'pending' as const, label: 'Waiting for first sync...' };
-    const mins = Math.floor((Date.now() - new Date(active.last_sync_at).getTime()) / 60000);
+
+    // Every credential has synced at least once — reflect the WORST-case
+    // (most stale) freshness across all of them.
+    const oldestSync = credentials.reduce((oldest, c) => {
+      const t = new Date(c.last_sync_at as string).getTime();
+      return t < oldest ? t : oldest;
+    }, Infinity);
+    const mins = Math.floor((Date.now() - oldestSync) / 60000);
     const label = mins < 1 ? 'Just synced' : mins < 60 ? `Synced ${mins}m ago` : `Synced ${Math.floor(mins/60)}h ago`;
     return { type: 'connected' as const, label };
   })();

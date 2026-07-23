@@ -156,6 +156,11 @@ class BrokerConnectionService {
     const broker = await this.getBrokerBySlug(brokerSlug);
     if (!broker) return null;
 
+    // .maybeSingle() (not .single()) — with multiple active connections in the
+    // same environment, .single() throws PGRST116 ("multiple/no rows") and the
+    // caller silently gets null, starving the legacy V2 sync. Ordering by
+    // created_at DESC + limit(1) makes this deterministic: always the newest
+    // matching connection, never an error.
     const { data, error } = await supabase
       .from('broker_connections')
       .select('*')
@@ -163,9 +168,11 @@ class BrokerConnectionService {
       .eq('broker_id', broker.id)
       .eq('environment', environment)
       .eq('is_active', true)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching broker connection:', error);
       throw error;
     }
