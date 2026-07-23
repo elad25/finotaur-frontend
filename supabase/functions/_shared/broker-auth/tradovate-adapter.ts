@@ -378,7 +378,7 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
 
     async getUserInfo(
       accessToken: string,
-      _environment: BrokerEnvironment,
+      hintedEnvironment: BrokerEnvironment,
     ): Promise<OAuthUserInfo> {
       const authHeaders = {
         Authorization: `Bearer ${accessToken}`,
@@ -468,7 +468,12 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
       const mergedUserId = userId !== null ? String(userId) : null;
 
       // STEP 2: Fetch /account/list?userId={providerUserId}.
-      // Use detectedEnv from /auth/me — no need to re-detect on this call.
+      // Use the CALLER's hinted env (from token-exchange's detectedEnvironment) as
+      // the authoritative env for this lookup — NOT detectedEnv from /auth/me above.
+      // /auth/me is cross-env tolerant (a demo token can return 200 on the live
+      // host's /auth/me), so detectedEnv is unreliable for choosing which host
+      // actually holds the accounts. Fall back to detectedEnv only if the caller
+      // didn't supply a usable live/demo hint.
       // CRITICAL: empirically verified 2026-05-24 — OAuth Vendor tokens (CID 13543,
       // scope=trading_read) return [] from /v1/account/list WITHOUT the userId query
       // param, but DO return prop firm (APEX/TOPSTEP/MFFU/etc) accounts WITH it.
@@ -476,10 +481,22 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
       // (sponsored by the prop firm, owned by a different master user).
       // Without this param the journal never sees Apex accounts via OAuth — see
       // memory file: tradovate-ecosystem-oauth-pending.md.
-      let rawAccounts: TradovateRawAccount[] = [];
-      if (mergedUserId !== null && mergedUserId !== '') {
+      const primaryAccountEnv: TradovateEnv =
+        hintedEnvironment === 'live' || hintedEnvironment === 'demo'
+          ? hintedEnvironment
+          : detectedEnv;
+
+      // Fetch /account/list for a given env, with the retry policy + second-pass
+      // plain-list union below. Extracted so it can be tried against both the
+      // primary env and (opportunistically) the opposite env.
+      async function fetchAccountsForEnv(env: TradovateEnv): Promise<TradovateRawAccount[]> {
+        let accounts: TradovateRawAccount[] = [];
+        if (mergedUserId === null || mergedUserId === '') {
+          console.warn('[tradovate-adapter] no userId from JWT or /auth/me — skipping /account/list lookup');
+          return accounts;
+        }
         const userIdStr = mergedUserId;
-        const accountListBase = TRADOVATE_API_URLS[detectedEnv].accountList;
+        const accountListBase = TRADOVATE_API_URLS[env].accountList;
         const accountsUrl = `${accountListBase}?userId=${encodeURIComponent(userIdStr)}`;
 
         // Retry policy: 3 attempts, backoff 0ms / 500ms / 2000ms.
@@ -511,7 +528,7 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
           if (accountsResp.ok) {
             const accountsData = await accountsResp.json();
             if (Array.isArray(accountsData)) {
-              rawAccounts = (accountsData as TradovateRawAccount[]).filter(
+              accounts = (accountsData as TradovateRawAccount[]).filter(
                 (acc) => acc.active !== false,
               );
             }
@@ -542,7 +559,7 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
         // also try the plain /account/list (no query param) once with no retry.
         // Some Tradovate session configs expose accounts only without the userId
         // filter. Deduplicate by account id. On any non-200 — silently ignore.
-        if (rawAccounts.length === 0) {
+        if (accounts.length === 0) {
           try {
             const plainResp = await fetchWithTimeout(accountListBase, {
               method: 'GET',
@@ -554,11 +571,11 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
                 const plainAccounts = (plainData as TradovateRawAccount[]).filter(
                   (acc) => acc.active !== false,
                 );
-                // Union: deduplicate by id (rawAccounts is [] here, so just assign).
-                const seenIds = new Set(rawAccounts.map((a) => String(a.id)));
+                // Union: deduplicate by id (accounts is [] here, so just assign).
+                const seenIds = new Set(accounts.map((a) => String(a.id)));
                 for (const acc of plainAccounts) {
                   if (!seenIds.has(String(acc.id))) {
-                    rawAccounts.push(acc);
+                    accounts.push(acc);
                     seenIds.add(String(acc.id));
                   }
                 }
@@ -569,8 +586,30 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
             // Network error on second pass: silently ignore.
           }
         }
-      } else {
-        console.warn('[tradovate-adapter] no userId from JWT or /auth/me — skipping /account/list lookup');
+
+        return accounts;
+      }
+
+      let rawAccounts = await fetchAccountsForEnv(primaryAccountEnv);
+      let accountsEnv: TradovateEnv = primaryAccountEnv;
+      if (rawAccounts.length === 0 && mergedUserId !== null && mergedUserId !== '') {
+        // Opportunistic: the token may only be valid on the opposite host from
+        // what the caller's hint (or /auth/me) indicated — see comment above.
+        // Swallow any error here; this is a best-effort second attempt, not a
+        // required path, and must never cause getUserInfo to throw.
+        const alt = oppositeEnv(primaryAccountEnv);
+        try {
+          const altAccounts = await fetchAccountsForEnv(alt);
+          if (altAccounts.length > 0) {
+            rawAccounts = altAccounts;
+            accountsEnv = alt;
+          }
+        } catch (altErr) {
+          console.warn(
+            `[tradovate-adapter] opposite-env (${alt}) account lookup failed — ignoring:`,
+            String(altErr).slice(0, 300),
+          );
+        }
       }
 
       return {
@@ -589,7 +628,7 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
             isPropFirm: detectPropFirm(name),
           };
         }),
-        detectedEnvironment: detectedEnv,
+        detectedEnvironment: rawAccounts.length > 0 ? accountsEnv : detectedEnv,
         _debugMe: {
           status: meStatus,
           keys: meKeys,
@@ -597,6 +636,8 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
           jwtUserId,
           mergedUserId,
           detectedEnv,
+          primaryAccountEnv,
+          accountsEnv,
         },
       };
     },

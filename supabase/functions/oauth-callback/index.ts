@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
   // Fetch user info and accounts (needed for account_id, prop firm detection)
   let userInfo;
   try {
-    userInfo = await adapter.getUserInfo(tokens.accessToken, environment);
+    userInfo = await adapter.getUserInfo(tokens.accessToken, tokens.detectedEnvironment ?? environment);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[oauth-callback] user info fetch failed:', msg);
