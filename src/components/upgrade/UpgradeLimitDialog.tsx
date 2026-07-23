@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
 // Types
 // ---------------------------------------------------------------------------
 
-export type UpgradeLimitReason = 'broker-limit' | 'broker-free-locked' | 'free-trade-limit';
+export type UpgradeLimitReason = 'broker-limit' | 'broker-free-locked' | 'free-trade-limit' | 'broker-trial-used';
 
 export interface UpgradeLimitDialogProps {
   open: boolean;
@@ -73,6 +73,16 @@ const PRESETS: Record<UpgradeLimitReason, Preset> = {
       'Automatic trade sync from your broker',
       'Live positions & fills in your journal',
       'No manual trade entry',
+    ],
+  },
+  'broker-trial-used': {
+    title: 'Keep journaling this account',
+    description: () =>
+      'This broker account already used its free FINOTAUR trial. Upgrade to a paid plan to keep syncing it into your journal.',
+    bullets: [
+      'Keep all your broker accounts synced',
+      'Unlimited trades & full analytics',
+      'Pick up right where you left off',
     ],
   },
   'free-trade-limit': {

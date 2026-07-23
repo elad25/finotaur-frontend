@@ -1399,7 +1399,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // Which UpgradeLimitDialog preset to show: the 1-broker cap on free/basic
   // ('broker-limit') vs. free-plan broker sync being fully locked
   // ('broker-free-locked'). Defaults to 'broker-limit' for back-compat.
-  const [brokerUpgradeReason, setBrokerUpgradeReason] = useState<'broker-limit' | 'broker-free-locked'>('broker-limit');
+  const [brokerUpgradeReason, setBrokerUpgradeReason] = useState<'broker-limit' | 'broker-free-locked' | 'broker-trial-used'>('broker-limit');
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
@@ -1601,7 +1601,11 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('oauth_error');
     if (oauthError === 'trial_broker_limit') {
-      toast.error('This broker account was already used in another FINOTAUR trial. Upgrade to a paid plan to connect it.');
+      // High-intent moment: the user has real broker accounts and already saw
+      // the product's value in trial #1. Convert with the upgrade dialog rather
+      // than a punitive toast.
+      setBrokerUpgradeReason('broker-trial-used');
+      setShowBrokerUpgrade(true);
       window.history.replaceState(null, '', window.location.pathname);
       return;
     }
