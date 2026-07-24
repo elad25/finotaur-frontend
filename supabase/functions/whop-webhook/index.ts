@@ -2599,6 +2599,25 @@ const { error: updateError } = await supabase
         }
       }
 
+      // 🔥 BETA100 cohort tagging — mark Founding-Beta redemptions once activation
+      // succeeds. Mirrors the intro_offer_state block above (own try/catch, never
+      // rethrows). Coupon code = BETA100 (the checkout code; comment keyword is BETA).
+      if (promoCode && promoCode.toUpperCase() === 'BETA100' && resolvedJournalUserId) {
+        try {
+          await supabase
+            .from('beta_cohort')
+            .upsert({
+              user_id: resolvedJournalUserId,
+              redeemed_at: new Date().toISOString(),
+              coupon_code: 'BETA100',
+              plan: 'journal_trader',
+              whop_membership_id: membershipId,
+            }, { onConflict: 'user_id' });
+        } catch (e) {
+          console.error("beta cohort upsert failed", e);
+        }
+      }
+
       return {
         success: true,
         message: `Subscription activated: ${result?.plan} (${result?.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}${emailMismatch ? ' [email mismatch resolved]' : ''}`
